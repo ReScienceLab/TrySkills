@@ -154,7 +154,7 @@ function HomeConfigPanel({
   const handleLaunch = () => {
     const parsed = parseSkillUrl(skillUrl);
     if (!parsed) return;
-    window.location.href = `/${parsed}`;
+    window.location.href = parsed;
   };
 
   return (
