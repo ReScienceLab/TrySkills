@@ -92,4 +92,39 @@ describe("parseSkillUrl", () => {
         .toBe("/obra/superpowers/brainstorming");
     });
   });
+
+  describe("security validation", () => {
+    it("rejects path traversal attempts", () => {
+      expect(parseSkillUrl("owner/../etc/passwd")).toBeNull();
+      expect(parseSkillUrl("https://github.com/owner/repo/tree/main/../../etc")).toBeNull();
+    });
+
+    it("rejects XSS payloads", () => {
+      expect(parseSkillUrl("<script>alert(1)</script>")).toBeNull();
+      expect(parseSkillUrl("javascript:alert(1)")).toBeNull();
+    });
+
+    it("rejects paths with only owner/repo (no skill)", () => {
+      expect(parseSkillUrl("https://skills.sh/owner/repo")).toBeNull();
+    });
+
+    it("rejects random text", () => {
+      expect(parseSkillUrl("hello world")).toBeNull();
+      expect(parseSkillUrl("https://example.com/something")).toBeNull();
+    });
+
+    it("rejects paths with special characters", () => {
+      expect(parseSkillUrl("owner/repo/skill name with spaces")).toBeNull();
+      expect(parseSkillUrl("owner/repo/<script>")).toBeNull();
+    });
+
+    it("allows valid characters in skill names", () => {
+      expect(parseSkillUrl("google-labs-code/stitch-skills/react:components"))
+        .toBe("/google-labs-code/stitch-skills/react:components");
+      expect(parseSkillUrl("owner/repo/skill.v2"))
+        .toBe("/owner/repo/skill.v2");
+      expect(parseSkillUrl("owner/repo/my_skill"))
+        .toBe("/owner/repo/my_skill");
+    });
+  });
 });

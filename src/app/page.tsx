@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { parseSkillUrl } from "@/lib/skill/url-parser";
+import { fetchSkillTree, type TreeNode } from "@/lib/skill/tree";
+import { SkillTree } from "@/components/skill-tree";
 
 const PROVIDERS = [
   {
@@ -419,6 +421,7 @@ function ConfigPanel({
       }),
     );
     const parsed = parseSkillUrl(skillUrl);
+    if (!parsed) return;
     if (parsed) window.location.href = parsed;
   };
 
@@ -592,13 +595,54 @@ function ConfigPanel({
 
 export default function Home() {
   const [url, setUrl] = useState("");
-  const [phase, setPhase] = useState<"input" | "config">("input");
+  const [phase, setPhase] = useState<"input" | "tree" | "config">("input");
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const [parsedPath, setParsedPath] = useState<string | null>(null);
+  const [treeData, setTreeData] = useState<TreeNode[] | null>(null);
+  const [treeResolvedPath, setTreeResolvedPath] = useState("");
+  const [treeLoading, setTreeLoading] = useState(false);
+  const [treeError, setTreeError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url.trim()) return;
-    setPhase("config");
+    setUrlError(null);
+
+    const parsed = parseSkillUrl(url);
+    if (!parsed) {
+      setUrlError(
+        "Invalid URL. Supported formats: skills.sh/owner/repo/skill, GitHub tree URL, or owner/repo/skill",
+      );
+      return;
+    }
+    setParsedPath(parsed);
+
+    const segments = parsed.split("/").filter(Boolean);
+    const owner = segments[0];
+    const repo = segments[1];
+    const skillName = segments.slice(2).join("/");
+
+    setPhase("tree");
+    setTreeLoading(true);
+    setTreeError(null);
+    setTreeData(null);
+
+    try {
+      const result = await fetchSkillTree(owner, repo, skillName);
+      if (result) {
+        setTreeData(result.tree);
+        setTreeResolvedPath(result.resolvedPath);
+      } else {
+        setTreeError("Could not find skill directory in repository. The skill may still work — proceed to configure.");
+      }
+    } catch {
+      setTreeError("Failed to fetch skill structure. The skill may still work — proceed to configure.");
+    } finally {
+      setTreeLoading(false);
+    }
   };
+
+  const skillName = parsedPath?.split("/").filter(Boolean).slice(2).join("/") || "";
 
   return (
     <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
@@ -655,9 +699,56 @@ export default function Home() {
                 Configure
               </button>
             </div>
+            {urlError && (
+              <div className="mt-3 px-4 py-2.5 bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-mono">
+                {urlError}
+              </div>
+            )}
           </form>
+        ) : phase === "tree" ? (
+          <div className="w-full max-w-[640px] animate-fade-in-up space-y-4">
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => { setPhase("input"); setTreeData(null); setTreeError(null); }}
+                className="flex items-center gap-2 text-sm text-white/40 hover:text-white/70 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                </svg>
+                Change URL
+              </button>
+              <span className="font-mono text-xs text-white/30 truncate ml-4">
+                {url}
+              </span>
+            </div>
+
+            {treeLoading ? (
+              <div className="border border-white/10 bg-white/[0.02] px-6 py-10 flex flex-col items-center">
+                <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin mb-4" />
+                <span className="text-sm text-white/40">Fetching skill structure...</span>
+              </div>
+            ) : treeData ? (
+              <SkillTree tree={treeData} skillName={skillName} resolvedPath={treeResolvedPath} />
+            ) : treeError ? (
+              <div className="border border-yellow-500/20 bg-yellow-500/5 px-4 py-3">
+                <span className="text-xs text-yellow-400/80 font-mono">{treeError}</span>
+              </div>
+            ) : null}
+
+            <button
+              onClick={() => setPhase("config")}
+              disabled={treeLoading}
+              className={`w-full py-3 text-sm font-medium transition-all ${
+                treeLoading
+                  ? "bg-white/10 text-white/30 cursor-not-allowed"
+                  : "bg-white text-black hover:bg-white/90"
+              }`}
+            >
+              Configure & Launch
+            </button>
+          </div>
         ) : (
-          <ConfigPanel skillUrl={url} onBack={() => setPhase("input")} />
+          <ConfigPanel skillUrl={url} onBack={() => setPhase("tree")} />
         )}
       </div>
 

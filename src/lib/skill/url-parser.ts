@@ -12,16 +12,21 @@ export function parseSkillUrl(input: string): string | null {
   const url = input.trim();
   if (!url) return null;
 
+  // Reject obviously malicious input
+  if (url.includes("..") || url.includes("<") || url.includes(">") || url.includes("javascript:")) {
+    return null;
+  }
+
   // skills.sh URL: https://skills.sh/owner/repo/skill-name
   if (url.includes("skills.sh/")) {
     const match = url.match(/skills\.sh\/(.+)/);
-    return match ? `/${match[1]}` : null;
+    return match ? validatePath(`/${match[1]}`) : null;
   }
 
   // tryskills.sh URL: already in correct format
   if (url.includes("tryskills.sh/")) {
     const match = url.match(/tryskills\.sh\/(.+)/);
-    return match ? `/${match[1]}` : null;
+    return match ? validatePath(`/${match[1]}`) : null;
   }
 
   // GitHub URL: https://github.com/owner/repo/tree/branch/path/to/skill
@@ -69,13 +74,27 @@ export function parseSkillUrl(input: string): string | null {
 
     if (!skillName) return null;
 
-    return `/${owner}/${repo}/${skillName}`;
+    return validatePath(`/${owner}/${repo}/${skillName}`);
   }
 
   // Plain path: owner/repo/skill-name (no protocol)
   if (url.match(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.:-]+/)) {
-    return `/${url}`;
+    return validatePath(`/${url}`);
   }
 
   return null;
+}
+
+function validatePath(path: string): string | null {
+  // Must have at least 3 segments: /owner/repo/skill
+  const segments = path.split("/").filter(Boolean);
+  if (segments.length < 3) return null;
+
+  // Each segment must be safe (no path traversal, no special chars)
+  const safeSegment = /^[a-zA-Z0-9_.:@-]+$/;
+  for (const seg of segments) {
+    if (!safeSegment.test(seg)) return null;
+  }
+
+  return `/${segments.join("/")}`;
 }
