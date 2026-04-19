@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useConvexAuth } from "convex/react";
+import { useAuth } from "@clerk/nextjs";
 import { useUser } from "@clerk/nextjs";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -16,6 +17,7 @@ export interface StoredConfig {
 
 export function useKeyStore() {
   const { isAuthenticated } = useConvexAuth();
+  const { isSignedIn, isLoaded: authLoaded } = useAuth();
   const { user } = useUser();
   const [config, setConfig] = useState<StoredConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,13 +72,13 @@ export function useKeyStore() {
     void loadFromConvex();
   }, [isAuthenticated, user, storedKeys]);
 
-  // For unauthenticated users, mark loading as done immediately
+  // For unauthenticated users, mark loading as done once Clerk confirms not signed in
   useEffect(() => {
-    if (!isAuthenticated && !initialLoadDone.current) {
+    if (authLoaded && !isSignedIn && !initialLoadDone.current) {
       initialLoadDone.current = true;
       setLoading(false);
     }
-  }, [isAuthenticated]);
+  }, [authLoaded, isSignedIn]);
 
   const save = useCallback(
     async (newConfig: StoredConfig) => {
