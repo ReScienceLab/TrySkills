@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Image from "next/image";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
@@ -10,44 +10,6 @@ import { SkillTree } from "@/components/skill-tree";
 import { GlowMesh } from "@/components/glow-mesh";
 import { SiteHeader } from "@/components/site-header";
 import { GitHubRateLimitError } from "@/lib/github-fetch";
-import { useKeyStore } from "@/hooks/use-key-store";
-
-const PROVIDERS = [
-  {
-    id: "openrouter",
-    name: "OpenRouter",
-    keyPrefix: "sk-or-",
-    keyUrl: "https://openrouter.ai/keys",
-    models: [
-      "anthropic/claude-sonnet-4",
-      "anthropic/claude-haiku-4",
-      "openai/gpt-4o",
-      "google/gemini-2.0-flash",
-      "meta-llama/llama-3.3-70b",
-    ],
-  },
-  {
-    id: "anthropic",
-    name: "Anthropic",
-    keyPrefix: "sk-ant-",
-    keyUrl: "https://console.anthropic.com/settings/keys",
-    models: ["claude-sonnet-4-20250514", "claude-haiku-4-20250414"],
-  },
-  {
-    id: "openai",
-    name: "OpenAI",
-    keyPrefix: "sk-",
-    keyUrl: "https://platform.openai.com/api-keys",
-    models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
-  },
-  {
-    id: "google",
-    name: "Google AI",
-    keyPrefix: "AI",
-    keyUrl: "https://aistudio.google.com/apikey",
-    models: ["gemini-2.0-flash", "gemini-2.0-pro", "gemini-1.5-flash"],
-  },
-];
 
 function Footer() {
   return (
@@ -115,220 +77,10 @@ function Footer() {
   );
 }
 
-function HomeConfigPanel({
-  skillUrl,
-  onBack,
-}: {
-  skillUrl: string;
-  onBack: () => void;
-}) {
-  const { config: savedConfig, loading } = useKeyStore();
-
-  const [provider, setProvider] = useState(PROVIDERS[0]);
-  const [model, setModel] = useState(PROVIDERS[0].models[0]);
-  const [llmKey, setLlmKey] = useState("");
-  const [sandboxKey, setSandboxKey] = useState("");
-  const [showLlmKey, setShowLlmKey] = useState(false);
-  const [showSandboxKey, setShowSandboxKey] = useState(false);
-
-  // Hydrate from saved config
-  useEffect(() => {
-    if (!savedConfig) return;
-    const p = PROVIDERS.find((p) => p.id === savedConfig.providerId) || PROVIDERS[0];
-    setProvider(p);
-    setModel(savedConfig.model || p.models[0]);
-    setLlmKey(savedConfig.llmKey || "");
-    setSandboxKey(savedConfig.sandboxKey || "");
-  }, [savedConfig]);
-
-  const handleProviderChange = (id: string) => {
-    const p = PROVIDERS.find((p) => p.id === id);
-    if (p) {
-      setProvider(p);
-      setModel(p.models[0]);
-    }
-  };
-
-  const isReady = llmKey.length > 5 && sandboxKey.length > 5;
-
-  const handleLaunch = () => {
-    const parsed = parseSkillUrl(skillUrl);
-    if (!parsed) return;
-    window.location.href = parsed;
-  };
-
-  return (
-    <div className="w-full max-w-[640px] animate-fade-in-up">
-      <div className="border border-white/20 bg-black/40 backdrop-blur-sm">
-        <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
-          <div className="font-mono text-sm text-white/80 truncate flex-1 mr-4">
-            {skillUrl}
-          </div>
-          <button
-            onClick={onBack}
-            className="text-xs text-white/40 hover:text-white/70 transition-colors shrink-0"
-          >
-            Change
-          </button>
-        </div>
-
-        <div className="px-5 py-5 space-y-5">
-          <div>
-            <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
-              Provider
-            </label>
-            <div className="grid grid-cols-4 gap-1">
-              {PROVIDERS.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => handleProviderChange(p.id)}
-                  className={`px-3 py-2 text-xs font-medium transition-all ${
-                    provider.id === p.id
-                      ? "bg-white text-black"
-                      : "bg-white/5 text-white/60 hover:bg-white/10"
-                  }`}
-                >
-                  {p.name}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
-              Model
-            </label>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="w-full px-4 py-2.5 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors appearance-none cursor-pointer"
-            >
-              {provider.models.map((m) => (
-                <option key={m} value={m} className="bg-[#111] text-white">
-                  {m}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
-              LLM API Key
-            </label>
-            <div className="relative">
-              <input
-                type={showLlmKey ? "text" : "password"}
-                value={llmKey}
-                onChange={(e) => setLlmKey(e.target.value)}
-                placeholder={`${provider.keyPrefix}...`}
-                className="w-full px-4 py-2.5 pr-10 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors placeholder:text-white/20"
-              />
-              <button
-                onClick={() => setShowLlmKey(!showLlmKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors text-xs"
-              >
-                {showLlmKey ? "Hide" : "Show"}
-              </button>
-            </div>
-            {!llmKey && (
-              <a
-                href={provider.keyUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 mt-2 px-3 py-2 bg-white/5 border border-dashed border-white/15 text-xs text-white/50 hover:text-white/80 hover:border-white/30 transition-all"
-              >
-                <svg
-                  className="w-3.5 h-3.5 shrink-0"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={1.5}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
-                  />
-                </svg>
-                Don&apos;t have one? Get your {provider.name} API key at{" "}
-                <span className="text-white/70 underline underline-offset-2">
-                  {provider.keyUrl.replace("https://", "")}
-                </span>
-              </a>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
-              Daytona Sandbox Key
-            </label>
-            <div className="relative">
-              <input
-                type={showSandboxKey ? "text" : "password"}
-                value={sandboxKey}
-                onChange={(e) => setSandboxKey(e.target.value)}
-                placeholder="daytona-..."
-                className="w-full px-4 py-2.5 pr-10 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors placeholder:text-white/20"
-              />
-              <button
-                onClick={() => setShowSandboxKey(!showSandboxKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors text-xs"
-              >
-                {showSandboxKey ? "Hide" : "Show"}
-              </button>
-            </div>
-            {!sandboxKey && (
-              <a
-                href="https://app.daytona.io/dashboard/keys"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 mt-2 px-3 py-2 bg-white/5 border border-dashed border-white/15 text-xs text-white/50 hover:text-white/80 hover:border-white/30 transition-all"
-              >
-                <svg
-                  className="w-3.5 h-3.5 shrink-0"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={1.5}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
-                  />
-                </svg>
-                Don&apos;t have one? Get a free Daytona API key at{" "}
-                <span className="text-white/70 underline underline-offset-2">
-                  app.daytona.io/dashboard/keys
-                </span>
-                <span className="ml-auto text-white/30">$200 free credits</span>
-              </a>
-            )}
-          </div>
-        </div>
-
-        <div className="px-5 py-4 border-t border-white/10">
-          <button
-            onClick={handleLaunch}
-            disabled={!isReady}
-            className={`w-full py-3 text-sm font-medium transition-all ${
-              isReady
-                ? "bg-white text-black hover:bg-white/90"
-                : "bg-white/10 text-white/30 cursor-not-allowed"
-            }`}
-          >
-            {isReady ? "Launch Agent" : "Enter API keys to launch"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function Home() {
   const { isSignedIn, isLoaded: authLoaded } = useAuth();
   const [url, setUrl] = useState("");
-  const [phase, setPhase] = useState<"input" | "tree" | "config">("input");
+  const [phase, setPhase] = useState<"input" | "tree">("input");
   const [urlError, setUrlError] = useState<string | null>(null);
   const [parsedPath, setParsedPath] = useState<string | null>(null);
   const [treeData, setTreeData] = useState<TreeNode[] | null>(null);
@@ -500,10 +252,12 @@ export default function Home() {
               </button>
             ) : isSignedIn ? (
               <button
-                onClick={() => setPhase("config")}
-                disabled={treeLoading}
+                onClick={() => {
+                  if (parsedPath) window.location.href = parsedPath;
+                }}
+                disabled={treeLoading || !parsedPath}
                 className={`w-full py-3 text-sm font-medium transition-all ${
-                  treeLoading
+                  treeLoading || !parsedPath
                     ? "bg-white/10 text-white/30 cursor-not-allowed"
                     : "bg-white text-black hover:bg-white/90"
                 }`}
@@ -525,9 +279,7 @@ export default function Home() {
               </SignInButton>
             )}
           </div>
-        ) : (
-          <HomeConfigPanel skillUrl={url} onBack={() => setPhase("tree")} />
-        )}
+        ) : null}
       </div>
 
       <Footer />

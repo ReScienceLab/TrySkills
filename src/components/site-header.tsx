@@ -61,6 +61,12 @@ export function SiteHeader({ breadcrumb }: { breadcrumb?: string }) {
               </SignInButton>
             </Show>
             <Show when="signed-in">
+              <Link
+                href="/settings"
+                className="text-sm text-white/60 hover:text-white transition-colors"
+              >
+                Settings
+              </Link>
               <UserButton
                 appearance={{
                   elements: {

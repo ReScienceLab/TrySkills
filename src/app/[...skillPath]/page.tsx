@@ -11,6 +11,8 @@ import { GlowMesh } from "@/components/glow-mesh";
 import { SiteHeader } from "@/components/site-header";
 import { resolveSkillPath, fetchSkillDirectory } from "@/lib/skill/resolver";
 import { createHermesSandbox, destroySandbox } from "@/lib/sandbox/daytona";
+import { useKeyStore } from "@/hooks/use-key-store";
+import { getProvider } from "@/lib/providers/registry";
 import type { SandboxState, SandboxSession } from "@/lib/sandbox/types";
 
 type AppPhase = "config" | "launching" | "running";
@@ -23,6 +25,7 @@ export default function SkillPage({
   const resolvedParams = use(params);
   const { skillPath } = resolvedParams;
   const { isSignedIn, isLoaded: authLoaded } = useAuth();
+  const { config: savedConfig, loading: keysLoading, save } = useKeyStore();
 
   const resolved = useMemo(() => resolveSkillPath(skillPath), [skillPath]);
   const { owner, repo, skillName } = resolved;
@@ -34,12 +37,21 @@ export default function SkillPage({
   const [session, setSession] = useState<SandboxSession | null>(null);
   const launchConfigRef = useRef<LaunchConfig | null>(null);
   const sessionRef = useRef<SandboxSession | null>(null);
+  const autoLaunchFired = useRef(false);
 
   const handleLaunch = async (config: LaunchConfig) => {
     launchConfigRef.current = config;
     setPhase("launching");
     setSandboxState("creating");
     setSandboxError(undefined);
+
+    // Save config on launch
+    await save({
+      providerId: config.provider.id,
+      model: config.model,
+      llmKey: config.llmKey,
+      sandboxKey: config.sandboxKey,
+    });
 
     try {
       const skillFiles = await fetchSkillDirectory(resolved);
@@ -68,6 +80,23 @@ export default function SkillPage({
     }
   };
 
+  // Auto-launch if keys are already saved
+  useEffect(() => {
+    if (autoLaunchFired.current || !isSignedIn || keysLoading || !savedConfig) return;
+    if (!savedConfig.llmKey || !savedConfig.sandboxKey) return;
+    const provider = getProvider(savedConfig.providerId);
+    if (!provider) return;
+
+    autoLaunchFired.current = true;
+    void handleLaunch({
+      provider,
+      model: savedConfig.model,
+      llmKey: savedConfig.llmKey,
+      sandboxKey: savedConfig.sandboxKey,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSignedIn, keysLoading, savedConfig]);
+
   useEffect(() => {
     const cleanup = () => {
       if (sessionRef.current && launchConfigRef.current) {
@@ -93,6 +122,7 @@ export default function SkillPage({
     sessionRef.current = null;
     setSandboxState("idle");
     setPhase("config");
+    autoLaunchFired.current = false;
   };
 
   const handleRetryLaunch = () => {
@@ -128,7 +158,13 @@ export default function SkillPage({
 
       <div className="flex-1 flex items-center justify-center relative z-10 px-6">
         <div className="w-full max-w-[640px]">
-          {phase === "config" && !isSignedIn && authLoaded && (
+          {phase === "config" && !authLoaded && (
+            <div className="flex items-center justify-center py-20">
+              <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
+            </div>
+          )}
+
+          {phase === "config" && authLoaded && !isSignedIn && (
             <div className="animate-fade-in">
               <div className="border border-white/20 bg-black/40 backdrop-blur-sm p-8 text-center">
                 <svg className="w-10 h-10 mx-auto mb-4 text-white/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -136,7 +172,7 @@ export default function SkillPage({
                 </svg>
                 <h2 className="text-lg font-semibold text-white/90 mb-2">Sign in to continue</h2>
                 <p className="text-sm text-white/50 mb-6">
-                  Sign in with GitHub to configure and launch your agent session. Your API keys will be encrypted and saved for next time.
+                  Sign in with GitHub to configure and launch your agent session.
                 </p>
                 <SignInButton mode="modal">
                   <button className="px-6 py-3 bg-white text-black text-sm font-medium hover:bg-white/90 transition-all">
@@ -147,13 +183,13 @@ export default function SkillPage({
             </div>
           )}
 
-          {phase === "config" && !authLoaded && (
+          {phase === "config" && isSignedIn && keysLoading && (
             <div className="flex items-center justify-center py-20">
               <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
             </div>
           )}
 
-          {phase === "config" && isSignedIn && (
+          {phase === "config" && isSignedIn && !keysLoading && !savedConfig?.llmKey && (
             <ConfigPanel
               onLaunch={handleLaunch}
               onBack={() => { window.location.href = "/"; }}
