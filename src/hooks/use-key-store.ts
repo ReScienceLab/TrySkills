@@ -74,6 +74,18 @@ export function useKeyStore() {
     }
   }, [authLoaded, isSignedIn, isAuthenticated, user, storedKeys]);
 
+  // Fallback: if signed in but Convex never syncs (e.g. stale session), stop loading after 5s
+  useEffect(() => {
+    if (!authLoaded || !isSignedIn || loadedRef.current) return;
+    const timer = setTimeout(() => {
+      if (!loadedRef.current) {
+        loadedRef.current = true;
+        setLoading(false);
+      }
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [authLoaded, isSignedIn]);
+
   const save = useCallback(
     async (newConfig: StoredConfig) => {
       setConfig(newConfig);
