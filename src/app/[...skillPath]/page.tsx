@@ -3,42 +3,14 @@
 import { useState, useEffect, useMemo, useRef, use } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { SkillPreview } from "@/components/skill-preview";
 import { ConfigPanel, type LaunchConfig } from "@/components/config-panel";
 import { LaunchProgress } from "@/components/launch-progress";
 import { SessionControl } from "@/components/session-control";
-import { resolveSkillPath, fetchSkillContent, fetchSkillDirectory } from "@/lib/skill/resolver";
-import { parseSkillFrontmatter } from "@/lib/skill/parser";
+import { resolveSkillPath, fetchSkillDirectory } from "@/lib/skill/resolver";
 import { createHermesSandbox, destroySandbox } from "@/lib/sandbox/daytona";
 import type { SandboxState, SandboxSession } from "@/lib/sandbox/types";
 
-type AppPhase = "preview" | "config" | "launching" | "running";
-
-const DEMO_SKILLS: Record<string, string> = {
-  "anthropics/skills/frontend-design": `---
-name: frontend-design
-description: Guidelines for creating beautiful, modern web interfaces with attention to design principles, accessibility, and responsive layouts.
-author: Anthropic
-icon: "\uD83C\uDFA8"
-version: "2.1.0"
----
-
-# frontend-design
-
-A comprehensive skill for creating production-quality web interfaces. This skill provides:
-
-- **Design System Integration**: Apply consistent colors, typography, spacing, and component patterns
-- **Responsive Layouts**: Mobile-first designs that adapt beautifully to any screen size
-- **Accessibility (a11y)**: WCAG 2.1 AA compliance built into every component
-- **Modern CSS**: Tailwind CSS, CSS Grid, Flexbox, and custom properties
-- **Component Architecture**: Reusable, composable UI components
-
-## Usage
-
-Ask the agent to build any frontend — landing pages, dashboards, forms, data visualizations.
-The skill automatically applies best practices for visual hierarchy, whitespace, and color theory.
-`,
-};
+type AppPhase = "config" | "launching" | "running";
 
 function Header({ owner, repo, skillName }: { owner: string; repo: string; skillName: string }) {
   return (
@@ -58,32 +30,6 @@ function Header({ owner, repo, skillName }: { owner: string; repo: string; skill
   );
 }
 
-function LoadingState({ message }: { message: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
-      <div className="w-12 h-12 rounded-full border-2 border-[var(--border)] border-t-[var(--accent)] animate-spin mb-6" />
-      <div className="text-[var(--text-secondary)] text-sm">{message}</div>
-    </div>
-  );
-}
-
-function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
-      <div className="w-16 h-16 rounded-full bg-[var(--error)]/10 flex items-center justify-center mb-6">
-        <svg className="w-8 h-8 text-[var(--error)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-        </svg>
-      </div>
-      <div className="text-[var(--text-primary)] font-semibold mb-2">Failed to load skill</div>
-      <div className="text-[var(--text-secondary)] text-sm mb-6 text-center max-w-md">{message}</div>
-      <button onClick={onRetry} className="px-6 py-3 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-sm font-medium transition-all">
-        Try again
-      </button>
-    </div>
-  );
-}
-
 export default function SkillPage({
   params,
 }: {
@@ -96,60 +42,12 @@ export default function SkillPage({
   const { owner, repo, skillName } = resolved;
   const isValidPath = !!(owner && repo && skillName);
 
-  const [phase, setPhase] = useState<AppPhase>("preview");
-  const [loading, setLoading] = useState(isValidPath);
-  const [fetchError, setFetchError] = useState<string | null>(
-    isValidPath ? null : "Invalid skill path. Expected: /owner/repo/skill-name",
-  );
-  const [skillContent, setSkillContent] = useState<string | null>(null);
+  const [phase, setPhase] = useState<AppPhase>("config");
   const [sandboxState, setSandboxState] = useState<SandboxState>("idle");
   const [sandboxError, setSandboxError] = useState<string | undefined>();
   const [session, setSession] = useState<SandboxSession | null>(null);
   const launchConfigRef = useRef<LaunchConfig | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
 
-  useEffect(() => {
-    if (!isValidPath) return;
-
-    let cancelled = false;
-
-    async function doFetch() {
-      setLoading(true);
-      setFetchError(null);
-      try {
-        const content = await fetchSkillContent(resolved);
-        if (cancelled) return;
-        if (content) {
-          setSkillContent(content);
-        } else {
-          const skillKey = `${owner}/${repo}/${skillName}`;
-          const demo = DEMO_SKILLS[skillKey];
-          if (demo) {
-            setSkillContent(demo);
-          } else {
-            throw new Error(`SKILL.md not found at ${owner}/${repo}/${skillName}`);
-          }
-        }
-      } catch (err) {
-        if (cancelled) return;
-        const skillKey = `${owner}/${repo}/${skillName}`;
-        const demo = DEMO_SKILLS[skillKey];
-        if (demo) {
-          setSkillContent(demo);
-        } else {
-          setFetchError(err instanceof Error ? err.message : "Failed to fetch SKILL.md");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    doFetch();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isValidPath, owner, repo, skillName, retryCount]);
-
-  // Cleanup sandbox on page unload
   useEffect(() => {
     const cleanup = () => {
       if (session && launchConfigRef.current) {
@@ -188,7 +86,6 @@ export default function SkillPage({
       setSandboxState("running");
       setPhase("running");
 
-      // Auto-open webui in new window
       window.open(result.webuiUrl, "_blank", "noopener,noreferrer");
     } catch (err) {
       setSandboxState("error");
@@ -207,7 +104,7 @@ export default function SkillPage({
     }
     setSession(null);
     setSandboxState("idle");
-    setPhase("preview");
+    setPhase("config");
   };
 
   const handleRetryLaunch = () => {
@@ -216,34 +113,34 @@ export default function SkillPage({
     }
   };
 
-  const parsed = skillContent
-    ? parseSkillFrontmatter(skillContent)
-    : { meta: { name: skillName, description: "" }, body: "" };
+  if (!isValidPath) {
+    return (
+      <main className="min-h-screen bg-[var(--bg-primary)]">
+        <Header owner="" repo="" skillName="" />
+        <div className="relative z-10 pt-24 pb-12 max-w-3xl mx-auto px-6">
+          <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
+            <div className="text-[var(--text-primary)] font-semibold mb-2">Invalid skill path</div>
+            <div className="text-[var(--text-secondary)] text-sm mb-6">
+              Expected format: /owner/repo/skill-name
+            </div>
+            <Link href="/" className="px-6 py-3 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-sm font-medium transition-all">
+              Go home
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[var(--bg-primary)]">
       <Header owner={owner} repo={repo} skillName={skillName} />
 
       <div className="relative z-10 pt-24 pb-12 max-w-3xl mx-auto px-6">
-        {loading && <LoadingState message="Fetching SKILL.md from GitHub..." />}
-
-        {fetchError && <ErrorState message={fetchError} onRetry={() => setRetryCount((c) => c + 1)} />}
-
-        {!loading && !fetchError && skillContent && phase === "preview" && (
-          <SkillPreview
-            meta={parsed.meta}
-            body={parsed.body}
-            owner={owner}
-            repo={repo}
-            skillName={skillName}
-            onLaunch={() => setPhase("config")}
-          />
-        )}
-
-        {!loading && !fetchError && phase === "config" && (
+        {phase === "config" && (
           <ConfigPanel
             onLaunch={handleLaunch}
-            onBack={() => setPhase("preview")}
+            onBack={() => { window.location.href = "/"; }}
           />
         )}
 
