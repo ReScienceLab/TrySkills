@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
+import Link from "next/link";
 
 const PROVIDERS = [
   {
@@ -250,7 +251,7 @@ function Header() {
   return (
     <header className="fixed top-0 left-0 right-0 z-50">
       <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-        <a href="/" className="flex items-center gap-2.5">
+        <Link href="/" className="flex items-center gap-2.5">
           <Image src="/logo.svg" alt="TrySkills.sh" width={28} height={28} />
           <span
             className="text-white/90 text-lg"
@@ -258,7 +259,7 @@ function Header() {
           >
             TrySkills.sh
           </span>
-        </a>
+        </Link>
 
         <nav className="flex items-center gap-6">
           <a
@@ -360,6 +361,17 @@ function Footer() {
   );
 }
 
+function getHomepageInitialConfig() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem("tryskills-config");
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 function ConfigPanel({
   skillUrl,
   onBack,
@@ -367,30 +379,23 @@ function ConfigPanel({
   skillUrl: string;
   onBack: () => void;
 }) {
-  const [provider, setProvider] = useState(PROVIDERS[0]);
-  const [model, setModel] = useState(PROVIDERS[0].models[0]);
-  const [llmKey, setLlmKey] = useState("");
-  const [sandboxKey, setSandboxKey] = useState("");
+  const [provider, setProvider] = useState(() => {
+    const saved = getHomepageInitialConfig();
+    if (saved?.providerId) {
+      const p = PROVIDERS.find((p) => p.id === saved.providerId);
+      if (p) return p;
+    }
+    return PROVIDERS[0];
+  });
+  const [model, setModel] = useState(() => {
+    const saved = getHomepageInitialConfig();
+    if (saved?.model) return saved.model;
+    return PROVIDERS[0].models[0];
+  });
+  const [llmKey, setLlmKey] = useState(() => getHomepageInitialConfig()?.llmKey || "");
+  const [sandboxKey, setSandboxKey] = useState(() => getHomepageInitialConfig()?.sandboxKey || "");
   const [showLlmKey, setShowLlmKey] = useState(false);
   const [showSandboxKey, setShowSandboxKey] = useState(false);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("tryskills-config");
-    if (saved) {
-      try {
-        const config = JSON.parse(saved);
-        if (config.providerId) {
-          const p = PROVIDERS.find((p) => p.id === config.providerId);
-          if (p) {
-            setProvider(p);
-            setModel(config.model || p.models[0]);
-          }
-        }
-        if (config.llmKey) setLlmKey(config.llmKey);
-        if (config.sandboxKey) setSandboxKey(config.sandboxKey);
-      } catch {}
-    }
-  }, []);
 
   const handleProviderChange = (id: string) => {
     const p = PROVIDERS.find((p) => p.id === id);
