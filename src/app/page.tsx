@@ -79,14 +79,14 @@ function GlowMesh() {
         y,
         originX: x,
         originY: y,
-        vx: (Math.random() - 0.5) * 0.6,
-        vy: (Math.random() - 0.5) * 0.6,
+        vx: (Math.random() - 0.5) * 1.8,
+        vy: (Math.random() - 0.5) * 1.8,
         brightness: 0,
         targetBrightness: 0,
         phase: Math.random() * Math.PI * 2,
-        speed: 0.001 + Math.random() * 0.003,
+        speed: 0.003 + Math.random() * 0.006,
         radius: 200 + Math.random() * 300,
-        drift: 150 + Math.random() * 200,
+        drift: 200 + Math.random() * 250,
       });
     }
     nodesRef.current = nodes;
@@ -143,15 +143,15 @@ function GlowMesh() {
         const dyO = node.y - node.originY;
         const distO = Math.sqrt(dxO * dxO + dyO * dyO);
         if (distO > node.drift) {
-          node.vx -= (dxO / distO) * 0.05;
-          node.vy -= (dyO / distO) * 0.05;
+          node.vx -= (dxO / distO) * 0.1;
+          node.vy -= (dyO / distO) * 0.1;
         }
-        node.vx += (Math.random() - 0.5) * 0.02;
-        node.vy += (Math.random() - 0.5) * 0.02;
+        node.vx += (Math.random() - 0.5) * 0.06;
+        node.vy += (Math.random() - 0.5) * 0.06;
         const spd = Math.sqrt(node.vx * node.vx + node.vy * node.vy);
-        if (spd > 0.8) {
-          node.vx *= 0.8 / spd;
-          node.vy *= 0.8 / spd;
+        if (spd > 2.2) {
+          node.vx *= 2.2 / spd;
+          node.vy *= 2.2 / spd;
         }
 
         node.targetBrightness =
