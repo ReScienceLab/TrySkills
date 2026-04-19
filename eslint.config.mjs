@@ -16,17 +16,17 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     "convex/_generated/**",
   ]),
-  // Convex best-practice rules for files in convex/
+  // Convex recommended rules (includes no-old-registered-function-syntax,
+  // require-args-validator, explicit-table-ids, no-filter-in-query,
+  // import-wrong-runtime) plus no-collect-in-query as a warning.
+  ...convexPlugin.configs.recommended,
   {
     files: ["convex/**/*.ts"],
     plugins: {
       "@convex-dev": convexPlugin,
     },
     rules: {
-      "@convex-dev/no-filter-in-query": "error",
       "@convex-dev/no-collect-in-query": "warn",
-      "@convex-dev/require-args-validator": "error",
-      "@convex-dev/explicit-table-ids": "error",
     },
   },
   // no-floating-promises for all TypeScript files
