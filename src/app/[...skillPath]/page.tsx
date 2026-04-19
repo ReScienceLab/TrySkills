@@ -3,11 +3,14 @@
 import { useState, useEffect, useMemo, useRef, use } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ConfigPanel, type LaunchConfig } from "@/components/config-panel";
 import { LaunchProgress } from "@/components/launch-progress";
 import { SessionControl } from "@/components/session-control";
 import { resolveSkillPath, fetchSkillDirectory } from "@/lib/skill/resolver";
 import { createHermesSandbox, destroySandbox } from "@/lib/sandbox/daytona";
+import { loadConfig } from "@/lib/key-store";
+import { getProvider } from "@/lib/providers/registry";
 import type { SandboxState, SandboxSession } from "@/lib/sandbox/types";
 
 type AppPhase = "config" | "launching" | "running";
@@ -37,29 +40,28 @@ export default function SkillPage({
 }) {
   const resolvedParams = use(params);
   const { skillPath } = resolvedParams;
+  const searchParams = useSearchParams();
+  const autoLaunch = searchParams.get("launch") === "1";
 
   const resolved = useMemo(() => resolveSkillPath(skillPath), [skillPath]);
   const { owner, repo, skillName } = resolved;
   const isValidPath = !!(owner && repo && skillName);
 
-  const [phase, setPhase] = useState<AppPhase>("config");
-  const [sandboxState, setSandboxState] = useState<SandboxState>("idle");
+  // Check if we can auto-launch (keys available from homepage)
+  const canAutoLaunch = useMemo(() => {
+    if (!autoLaunch || !isValidPath) return false;
+    if (typeof window === "undefined") return false;
+    const saved = loadConfig();
+    if (!saved || !saved.llmKey || !saved.sandboxKey) return false;
+    return !!getProvider(saved.providerId);
+  }, [autoLaunch, isValidPath]);
+
+  const [phase, setPhase] = useState<AppPhase>(canAutoLaunch ? "launching" : "config");
+  const [sandboxState, setSandboxState] = useState<SandboxState>(canAutoLaunch ? "creating" : "idle");
   const [sandboxError, setSandboxError] = useState<string | undefined>();
   const [session, setSession] = useState<SandboxSession | null>(null);
   const launchConfigRef = useRef<LaunchConfig | null>(null);
-
-  useEffect(() => {
-    const cleanup = () => {
-      if (session && launchConfigRef.current) {
-        destroySandbox(launchConfigRef.current.sandboxKey, session.sandboxId).catch(() => {});
-      }
-    };
-    window.addEventListener("beforeunload", cleanup);
-    return () => {
-      window.removeEventListener("beforeunload", cleanup);
-      cleanup();
-    };
-  }, [session]);
+  const autoLaunchFired = useRef(false);
 
   const handleLaunch = async (config: LaunchConfig) => {
     launchConfigRef.current = config;
@@ -92,6 +94,36 @@ export default function SkillPage({
       setSandboxError(err instanceof Error ? err.message : "Launch failed");
     }
   };
+
+  // Auto-launch when coming from homepage with ?launch=1
+  useEffect(() => {
+    if (!canAutoLaunch || autoLaunchFired.current) return;
+    autoLaunchFired.current = true;
+
+    const saved = loadConfig()!;
+    const provider = getProvider(saved.providerId)!;
+
+    handleLaunch({
+      provider,
+      model: saved.model,
+      llmKey: saved.llmKey,
+      sandboxKey: saved.sandboxKey,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canAutoLaunch]);
+
+  useEffect(() => {
+    const cleanup = () => {
+      if (session && launchConfigRef.current) {
+        destroySandbox(launchConfigRef.current.sandboxKey, session.sandboxId).catch(() => {});
+      }
+    };
+    window.addEventListener("beforeunload", cleanup);
+    return () => {
+      window.removeEventListener("beforeunload", cleanup);
+      cleanup();
+    };
+  }, [session]);
 
   const handleStop = async () => {
     if (session && launchConfigRef.current) {

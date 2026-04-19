@@ -422,7 +422,7 @@ function ConfigPanel({
     );
     const parsed = parseSkillUrl(skillUrl);
     if (!parsed) return;
-    if (parsed) window.location.href = parsed;
+    window.location.href = `${parsed}?launch=1`;
   };
 
   return (
