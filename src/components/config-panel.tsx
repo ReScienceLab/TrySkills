@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { PROVIDERS, type Provider } from "@/lib/providers/registry";
 import { loadConfig, saveConfig, clearConfig } from "@/lib/key-store";
 
@@ -11,24 +11,6 @@ export interface LaunchConfig {
   sandboxKey: string;
 }
 
-function getInitialConfig() {
-  if (typeof window === "undefined") {
-    return { provider: PROVIDERS[0], model: PROVIDERS[0].models[0], llmKey: "", sandboxKey: "", remember: false };
-  }
-  const saved = loadConfig();
-  if (!saved) {
-    return { provider: PROVIDERS[0], model: PROVIDERS[0].models[0], llmKey: "", sandboxKey: "", remember: false };
-  }
-  const p = PROVIDERS.find((p) => p.id === saved.providerId) || PROVIDERS[0];
-  return {
-    provider: p,
-    model: saved.model || p.models[0],
-    llmKey: saved.llmKey || "",
-    sandboxKey: saved.sandboxKey || "",
-    remember: true,
-  };
-}
-
 export function ConfigPanel({
   onLaunch,
   onBack,
@@ -36,13 +18,27 @@ export function ConfigPanel({
   onLaunch: (config: LaunchConfig) => void;
   onBack: () => void;
 }) {
-  const [provider, setProvider] = useState<Provider>(() => getInitialConfig().provider);
-  const [model, setModel] = useState(() => getInitialConfig().model);
-  const [llmKey, setLlmKey] = useState(() => getInitialConfig().llmKey);
-  const [sandboxKey, setSandboxKey] = useState(() => getInitialConfig().sandboxKey);
+  const [provider, setProvider] = useState<Provider>(PROVIDERS[0]);
+  const [model, setModel] = useState(PROVIDERS[0].models[0]);
+  const [llmKey, setLlmKey] = useState("");
+  const [sandboxKey, setSandboxKey] = useState("");
   const [showLlmKey, setShowLlmKey] = useState(false);
   const [showSandboxKey, setShowSandboxKey] = useState(false);
-  const [rememberKeys, setRememberKeys] = useState(() => getInitialConfig().remember);
+  const [rememberKeys, setRememberKeys] = useState(false);
+  const hydrated = useRef(false);
+
+  useEffect(() => {
+    if (hydrated.current) return;
+    hydrated.current = true;
+    const saved = loadConfig();
+    if (!saved) return;
+    const p = PROVIDERS.find((p) => p.id === saved.providerId) || PROVIDERS[0];
+    setProvider(p);
+    setModel(saved.model || p.models[0]);
+    setLlmKey(saved.llmKey || "");
+    setSandboxKey(saved.sandboxKey || "");
+    setRememberKeys(true);
+  }, []);
 
   const handleProviderChange = (id: string) => {
     const p = PROVIDERS.find((p) => p.id === id);
