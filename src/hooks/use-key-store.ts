@@ -14,6 +14,8 @@ export interface StoredConfig {
   sandboxKey: string;
 }
 
+const LS_KEY = "tryskills-config";
+
 export function useKeyStore() {
   const { isAuthenticated } = useConvexAuth();
   const { isSignedIn, isLoaded: authLoaded } = useAuth();
@@ -32,8 +34,6 @@ export function useKeyStore() {
 
   useEffect(() => {
     if (loadedRef.current) return;
-
-    // Wait for Clerk to load
     if (!authLoaded) return;
 
     // Not signed in -> done
@@ -43,58 +43,68 @@ export function useKeyStore() {
       return;
     }
 
-    // Signed in, wait for Convex auth to sync
-    if (!isAuthenticated || !user) return;
+    // Signed in + Convex synced + query resolved
+    if (isAuthenticated && user && storedKeys !== undefined) {
+      loadedRef.current = true;
 
-    // Convex query still loading
-    if (storedKeys === undefined) return;
+      if (storedKeys) {
+        deriveKey(user.id)
+          .then((key) => decrypt(storedKeys.encryptedData, storedKeys.iv, key))
+          .then((plaintext) => {
+            const parsed = JSON.parse(plaintext) as StoredConfig;
+            setConfig(parsed);
+            // Sync to localStorage as offline cache
+            localStorage.setItem(LS_KEY, JSON.stringify(parsed));
+          })
+          .catch(() => {})
+          .finally(() => setLoading(false));
+      } else {
+        // No keys in Convex -- check localStorage for migration
+        try {
+          const raw = localStorage.getItem(LS_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw) as StoredConfig;
+            if (parsed.llmKey || parsed.sandboxKey) {
+              setConfig(parsed);
+              setMigrationPending(true);
+            }
+          }
+        } catch {}
+        setLoading(false);
+      }
+      return;
+    }
 
-    // Now we have the result
-    loadedRef.current = true;
-
-    if (storedKeys) {
-      deriveKey(user.id)
-        .then((key) => decrypt(storedKeys.encryptedData, storedKeys.iv, key))
-        .then((plaintext) => setConfig(JSON.parse(plaintext) as StoredConfig))
-        .catch(() => {})
-        .finally(() => setLoading(false));
-    } else {
-      // Check localStorage for migration
+    // Signed in but Convex not yet synced -- use localStorage as cache while waiting
+    // This avoids showing onboarding for users who have keys but Convex is slow
+    if (isSignedIn && !isAuthenticated) {
       try {
-        const raw = localStorage.getItem("tryskills-config");
+        const raw = localStorage.getItem(LS_KEY);
         if (raw) {
           const parsed = JSON.parse(raw) as StoredConfig;
-          if (parsed.llmKey || parsed.sandboxKey) {
+          if (parsed.llmKey && parsed.sandboxKey) {
             setConfig(parsed);
-            setMigrationPending(true);
+            loadedRef.current = true;
+            setLoading(false);
+            return;
           }
         }
       } catch {}
-      setLoading(false);
+      // No cache -- keep waiting for Convex (spinner shows)
     }
   }, [authLoaded, isSignedIn, isAuthenticated, user, storedKeys]);
-
-  // Fallback: if signed in but Convex never syncs (e.g. stale session), stop loading after 5s
-  useEffect(() => {
-    if (!authLoaded || !isSignedIn || loadedRef.current) return;
-    const timer = setTimeout(() => {
-      if (!loadedRef.current) {
-        loadedRef.current = true;
-        setLoading(false);
-      }
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [authLoaded, isSignedIn]);
 
   const save = useCallback(
     async (newConfig: StoredConfig) => {
       setConfig(newConfig);
+      // Always cache to localStorage as fallback
+      localStorage.setItem(LS_KEY, JSON.stringify(newConfig));
+
       if (isAuthenticated && user) {
         const key = await deriveKey(user.id);
         const { ciphertext, iv } = await encrypt(JSON.stringify(newConfig), key);
         await saveToConvex({ encryptedData: ciphertext, iv });
         if (migrationPending) {
-          localStorage.removeItem("tryskills-config");
           setMigrationPending(false);
         }
       }
@@ -104,10 +114,10 @@ export function useKeyStore() {
 
   const clear = useCallback(async () => {
     setConfig(null);
+    localStorage.removeItem(LS_KEY);
     if (isAuthenticated) {
       await removeFromConvex({});
     }
-    localStorage.removeItem("tryskills-config");
   }, [isAuthenticated, removeFromConvex]);
 
   return { config, loading, isAuthenticated, migrationPending, save, clear };

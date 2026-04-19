@@ -14,6 +14,7 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
   const [showLlmKey, setShowLlmKey] = useState(false);
   const [showSandboxKey, setShowSandboxKey] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleProviderChange = (id: string) => {
     const p = PROVIDERS.find((p) => p.id === id);
@@ -25,9 +26,15 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
 
   const handleFinish = async () => {
     setSaving(true);
-    await save({ providerId: provider.id, model, llmKey, sandboxKey });
-    setSaving(false);
-    onComplete();
+    setSaveError(null);
+    try {
+      await save({ providerId: provider.id, model, llmKey, sandboxKey });
+      setStep(3);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save keys. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -191,6 +198,12 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
                   </button>
                 </div>
               </div>
+
+              {saveError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+                  {saveError}
+                </div>
+              )}
             </div>
           )}
 
@@ -240,10 +253,7 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
 
           {step === 2 && (
             <button
-              onClick={async () => {
-                await handleFinish();
-                setStep(3);
-              }}
+              onClick={handleFinish}
               disabled={llmKey.length < 5 || saving}
               className={`px-6 py-2 text-sm font-medium transition-all ${
                 llmKey.length >= 5 && !saving
