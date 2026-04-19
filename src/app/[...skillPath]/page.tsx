@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, use } from "react";
+import { useState, useEffect, useMemo, useRef, use } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { SkillPreview } from "@/components/skill-preview";
@@ -92,7 +92,7 @@ export default function SkillPage({
   const resolvedParams = use(params);
   const { skillPath } = resolvedParams;
 
-  const resolved = resolveSkillPath(skillPath);
+  const resolved = useMemo(() => resolveSkillPath(skillPath), [skillPath]);
   const { owner, repo, skillName } = resolved;
   const isValidPath = !!(owner && repo && skillName);
 
@@ -146,7 +146,8 @@ export default function SkillPage({
 
     doFetch();
     return () => { cancelled = true; };
-  }, [isValidPath, owner, repo, skillName, resolved, retryCount]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isValidPath, owner, repo, skillName, retryCount]);
 
   // Cleanup sandbox on page unload
   useEffect(() => {

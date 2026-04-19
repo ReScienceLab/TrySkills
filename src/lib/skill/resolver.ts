@@ -76,7 +76,12 @@ function buildCandidatePaths(owner: string, repo: string, skillName: string, bra
   return candidates;
 }
 
+const contentCache = new Map<string, string | null>();
+
 export async function fetchSkillContent(resolved: ResolvedSkill): Promise<string | null> {
+  const cacheKey = `${resolved.owner}/${resolved.repo}/${resolved.skillName}`;
+  if (contentCache.has(cacheKey)) return contentCache.get(cacheKey)!;
+
   const { owner, repo, skillName } = resolved;
 
   // Try main branch first, then master
@@ -85,7 +90,11 @@ export async function fetchSkillContent(resolved: ResolvedSkill): Promise<string
     for (const url of candidates) {
       try {
         const res = await fetch(url);
-        if (res.ok) return res.text();
+        if (res.ok) {
+          const text = await res.text();
+          contentCache.set(cacheKey, text);
+          return text;
+        }
       } catch {
         continue;
       }
@@ -94,9 +103,8 @@ export async function fetchSkillContent(resolved: ResolvedSkill): Promise<string
 
   // Last resort: use GitHub tree API to search for SKILL.md matching the skill name
   const found = await searchSkillInRepo(owner, repo, skillName);
-  if (found) return found;
-
-  return null;
+  contentCache.set(cacheKey, found);
+  return found;
 }
 
 async function searchSkillInRepo(
