@@ -30,16 +30,8 @@ export default function SkillPage({
   const { owner, repo, skillName } = resolved;
   const isValidPath = !!(owner && repo && skillName);
 
-  const canAutoLaunch = useMemo(() => {
-    if (!autoLaunch || !isValidPath) return false;
-    if (typeof window === "undefined") return false;
-    const saved = loadConfig();
-    if (!saved || !saved.llmKey || !saved.sandboxKey) return false;
-    return !!getProvider(saved.providerId);
-  }, [autoLaunch, isValidPath]);
-
-  const [phase, setPhase] = useState<AppPhase>(canAutoLaunch ? "launching" : "config");
-  const [sandboxState, setSandboxState] = useState<SandboxState>(canAutoLaunch ? "creating" : "idle");
+  const [phase, setPhase] = useState<AppPhase>("config");
+  const [sandboxState, setSandboxState] = useState<SandboxState>("idle");
   const [sandboxError, setSandboxError] = useState<string | undefined>();
   const [session, setSession] = useState<SandboxSession | null>(null);
   const launchConfigRef = useRef<LaunchConfig | null>(null);
@@ -78,11 +70,13 @@ export default function SkillPage({
   };
 
   useEffect(() => {
-    if (!canAutoLaunch || autoLaunchFired.current) return;
+    if (!autoLaunch || !isValidPath || autoLaunchFired.current) return;
     autoLaunchFired.current = true;
 
-    const saved = loadConfig()!;
-    const provider = getProvider(saved.providerId)!;
+    const saved = loadConfig();
+    if (!saved || !saved.llmKey || !saved.sandboxKey) return;
+    const provider = getProvider(saved.providerId);
+    if (!provider) return;
 
     handleLaunch({
       provider,
@@ -91,7 +85,7 @@ export default function SkillPage({
       sandboxKey: saved.sandboxKey,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canAutoLaunch]);
+  }, [autoLaunch, isValidPath]);
 
   useEffect(() => {
     const cleanup = () => {

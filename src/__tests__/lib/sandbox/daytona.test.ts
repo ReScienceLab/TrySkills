@@ -62,14 +62,12 @@ describe("sandbox/daytona", () => {
 
     expect(mockCreate).toHaveBeenCalledWith(
       expect.objectContaining({
-        image: "resciencelab/tryskills-hermes:0.1.0",
+        image: "nousresearch/hermes-agent:latest",
         ephemeral: true,
         autoStopInterval: 60,
         public: true,
         envVars: expect.objectContaining({
-          LLM_PROVIDER: "OPENROUTER",
-          LLM_API_KEY: "sk-or-test-key",
-          LLM_MODEL: "anthropic/claude-sonnet-4",
+          OPENROUTER_API_KEY: "sk-or-test-key",
         }),
       }),
       expect.objectContaining({ timeout: 300 }),
@@ -95,7 +93,7 @@ describe("sandbox/daytona", () => {
     expect(progress).toContain("starting");
   });
 
-  it("uploads skill files to the correct path", async () => {
+  it("uploads skill files and config to the correct paths", async () => {
     await createHermesSandbox(
       testConfig,
       "my-skill",
@@ -106,26 +104,34 @@ describe("sandbox/daytona", () => {
       () => {},
     );
 
-    expect(mockUploadFile).toHaveBeenCalledTimes(2);
+    // config.yaml + .env + 2 skill files = 4 uploads
     expect(mockUploadFile).toHaveBeenCalledWith(
       expect.any(Buffer),
-      "/root/.hermes/skills/my-skill/SKILL.md",
+      "/opt/data/config.yaml",
     );
     expect(mockUploadFile).toHaveBeenCalledWith(
       expect.any(Buffer),
-      "/root/.hermes/skills/my-skill/scripts/setup.sh",
+      "/opt/data/.env",
+    );
+    expect(mockUploadFile).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      "/opt/data/skills/my-skill/SKILL.md",
+    );
+    expect(mockUploadFile).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      "/opt/data/skills/my-skill/scripts/setup.sh",
     );
   });
 
-  it("maps provider IDs to correct env var prefixes", async () => {
-    for (const [providerId, expectedEnv] of [
-      ["anthropic", "ANTHROPIC"],
-      ["openai", "OPENAI"],
-      ["google", "GOOGLE"],
+  it("maps provider IDs to correct env var names", async () => {
+    for (const [providerId, expectedEnvVar] of [
+      ["anthropic", "ANTHROPIC_API_KEY"],
+      ["openai", "OPENAI_API_KEY"],
+      ["google", "GOOGLE_API_KEY"],
     ] as const) {
       mockCreate.mockResolvedValue(mockSandbox);
       await createHermesSandbox(
-        { ...testConfig, llmProvider: providerId },
+        { ...testConfig, llmProvider: providerId, llmApiKey: "test-key" },
         "test",
         testSkillFiles,
         () => {},
@@ -134,7 +140,7 @@ describe("sandbox/daytona", () => {
       expect(mockCreate).toHaveBeenLastCalledWith(
         expect.objectContaining({
           envVars: expect.objectContaining({
-            LLM_PROVIDER: expectedEnv,
+            [expectedEnvVar]: "test-key",
           }),
         }),
         expect.anything(),
@@ -187,11 +193,9 @@ describe("sandbox/daytona", () => {
     it("falls back to get+delete for unknown sandbox", async () => {
       mockGet.mockResolvedValue(mockSandbox);
 
-      // Reset active state by destroying first
       await createHermesSandbox(testConfig, "test", testSkillFiles, () => {});
       await destroySandbox("test-daytona-key", "sb-test-123");
 
-      // Now try with unknown ID
       await destroySandbox("test-key", "sb-unknown-456");
       expect(mockGet).toHaveBeenCalledWith("sb-unknown-456");
     });
