@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { parseSkillUrl } from "@/lib/skill/url-parser";
 
 const PROVIDERS = [
   {
@@ -417,16 +418,8 @@ function ConfigPanel({
         sandboxKey,
       }),
     );
-    let path = skillUrl;
-    if (path.startsWith("https://skills.sh/"))
-      path = path.replace("https://skills.sh/", "");
-    else if (path.startsWith("skills.sh/"))
-      path = path.replace("skills.sh/", "");
-    else if (path.startsWith("https://github.com/"))
-      path = path
-        .replace("https://github.com/", "")
-        .replace("/tree/main/", "/");
-    if (path) window.location.href = `/${path}`;
+    const parsed = parseSkillUrl(skillUrl);
+    if (parsed) window.location.href = parsed;
   };
 
   return (
