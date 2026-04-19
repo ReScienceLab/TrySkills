@@ -70,7 +70,6 @@ describe("sandbox/daytona", () => {
           API_SERVER_ENABLED: "true",
           GATEWAY_ALLOW_ALL_USERS: "true",
         }),
-        resources: { cpu: 4, memory: 8, disk: 30 },
       }),
       expect.objectContaining({ timeout: 300 }),
     );

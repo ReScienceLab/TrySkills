@@ -83,7 +83,6 @@ export async function createHermesSandbox(
   onProgress("creating");
   const sandbox = await daytona.create(
     {
-      image: "ubuntu:latest",
       ephemeral: true,
       autoStopInterval: AUTO_STOP_MINUTES,
       public: true,
@@ -93,8 +92,7 @@ export async function createHermesSandbox(
         API_SERVER_CORS_ORIGINS: "*",
         GATEWAY_ALLOW_ALL_USERS: "true",
       },
-      resources: { cpu: 4, memory: 8, disk: 30 },
-    },
+    } as unknown as Parameters<typeof daytona.create>[0],
     { timeout: 300 },
   );
   activeSandbox = sandbox;
