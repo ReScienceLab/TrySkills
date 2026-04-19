@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, useRef, use } from "react";
 import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
-import { useConvexAuth } from "convex/react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { ConfigPanel, type LaunchConfig } from "@/components/config-panel";
@@ -30,7 +29,6 @@ export default function SkillPage({
   const { skillPath } = resolvedParams;
   const { isSignedIn, isLoaded: authLoaded } = useAuth();
   const { config: savedConfig, loading: keysLoading, save } = useKeyStore();
-  const { isAuthenticated } = useConvexAuth();
   const createSandboxRecord = useMutation(api.sandboxes.create);
   const removeSandboxRecord = useMutation(api.sandboxes.remove);
   const updateSandboxState = useMutation(api.sandboxes.updateState);
@@ -72,14 +70,13 @@ export default function SkillPage({
     const placeholderId = `pending-${Date.now()}`;
     placeholderIdRef.current = placeholderId;
 
-    if (isAuthenticated) {
-      await createSandboxRecord({
-        sandboxId: placeholderId,
-        skillPath: skillPathStr,
-        webuiUrl: "",
-        state: "creating",
-      }).catch(() => {});
-    }
+    // Always try to save -- mutation will fail silently if not auth'd yet
+    await createSandboxRecord({
+      sandboxId: placeholderId,
+      skillPath: skillPathStr,
+      webuiUrl: "",
+      state: "creating",
+    }).catch(() => {});
 
     try {
       if (abort.signal.aborted) return;
@@ -99,18 +96,13 @@ export default function SkillPage({
         (step) => {
           if (abort.signal.aborted) return;
           setSandboxState(step as SandboxState);
-          if (isAuthenticated) {
-            updateSandboxState({ sandboxId: placeholderId, state: step }).catch(() => {});
-          }
+          updateSandboxState({ sandboxId: placeholderId, state: step }).catch(() => {});
         },
       );
 
       if (abort.signal.aborted) {
-        // Launch completed but user cancelled -- destroy the sandbox
         destroySandbox(config.sandboxKey, result.sandboxId).catch(() => {});
-        if (isAuthenticated) {
-          removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
-        }
+        removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
         return;
       }
 
@@ -120,24 +112,20 @@ export default function SkillPage({
       setPhase("running");
       placeholderIdRef.current = null;
 
-      if (isAuthenticated) {
-        await removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
-        await createSandboxRecord({
-          sandboxId: result.sandboxId,
-          skillPath: skillPathStr,
-          webuiUrl: result.webuiUrl,
-          state: "running",
-        }).catch(() => {});
-      }
+      await removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
+      await createSandboxRecord({
+        sandboxId: result.sandboxId,
+        skillPath: skillPathStr,
+        webuiUrl: result.webuiUrl,
+        state: "running",
+      }).catch(() => {});
 
       window.open(result.webuiUrl, "_blank", "noopener,noreferrer");
     } catch (err) {
       if (abort.signal.aborted) return;
       setSandboxState("error");
       setSandboxError(err instanceof Error ? err.message : "Launch failed");
-      if (isAuthenticated) {
-        await removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
-      }
+      await removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
       placeholderIdRef.current = null;
     }
   };
@@ -148,7 +136,7 @@ export default function SkillPage({
     launchAbortRef.current = null;
 
     // Clean up placeholder dashboard record
-    if (isAuthenticated && placeholderIdRef.current) {
+    if (placeholderIdRef.current) {
       removeSandboxRecord({ sandboxId: placeholderIdRef.current }).catch(() => {});
       placeholderIdRef.current = null;
     }
@@ -203,9 +191,7 @@ export default function SkillPage({
       } catch {
         // best effort
       }
-      if (isAuthenticated) {
-        await removeSandboxRecord({ sandboxId: session.sandboxId }).catch(() => {});
-      }
+      await removeSandboxRecord({ sandboxId: session.sandboxId }).catch(() => {});
     }
     setSession(null);
     sessionRef.current = null;
