@@ -81,17 +81,18 @@ export function useKeyStore() {
     }
   }, [authLoaded, isSignedIn, isAuthenticated, user, storedKeys]);
 
-  // Timeout fallback: stop loading if Convex never syncs
+  // Timeout fallback: stop loading if Convex never syncs but Clerk user is ready
   useEffect(() => {
-    if (!authLoaded || !isSignedIn || loadedRef.current) return;
+    if (!authLoaded || !isSignedIn || !user || loadedRef.current) return;
     const timer = setTimeout(() => {
       if (!loadedRef.current) {
         loadedRef.current = true;
         setLoading(false);
+        // config stays null -> onboarding will show, and save() will work because user exists
       }
     }, CONVEX_SYNC_TIMEOUT_MS);
     return () => clearTimeout(timer);
-  }, [authLoaded, isSignedIn]);
+  }, [authLoaded, isSignedIn, user]);
 
   const save = useCallback(
     async (newConfig: StoredConfig) => {

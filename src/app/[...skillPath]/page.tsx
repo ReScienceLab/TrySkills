@@ -20,8 +20,9 @@ import type { SandboxState, SandboxSession } from "@/lib/sandbox/types";
 
 type AppPhase = "config" | "launching" | "running";
 
-// Module-level flag survives React Strict Mode double-mount
-let globalAutoLaunchFired = false;
+// Per-skill-path lock to prevent double-launch from React Strict Mode
+// Map<skillPath, boolean> -- scoped so different skills can each auto-launch
+const autoLaunchLock = new Map<string, boolean>();
 
 export default function SkillPage({
   params,
@@ -39,6 +40,7 @@ export default function SkillPage({
   const resolved = useMemo(() => resolveSkillPath(skillPath), [skillPath]);
   const { owner, repo, skillName } = resolved;
   const isValidPath = !!(owner && repo && skillName);
+  const skillKey = `${owner}/${repo}/${skillName}`;
 
   const [phase, setPhase] = useState<AppPhase>("config");
   const [sandboxState, setSandboxState] = useState<SandboxState>("idle");
@@ -152,7 +154,7 @@ export default function SkillPage({
   const hasCompleteConfig = !!(savedConfig?.llmKey && savedConfig?.sandboxKey);
 
   useEffect(() => {
-    if (globalAutoLaunchFired || autoLaunchFired.current || userCancelled.current) return;
+    if (autoLaunchLock.get(skillKey) || autoLaunchFired.current || userCancelled.current) return;
     if (phase !== "config") return;
     if (!isSignedIn || keysLoading || !savedConfig) return;
     if (!savedConfig.llmKey || !savedConfig.sandboxKey) return;
@@ -160,7 +162,7 @@ export default function SkillPage({
     if (!provider) return;
 
     autoLaunchFired.current = true;
-    globalAutoLaunchFired = true;
+    autoLaunchLock.set(skillKey, true);
     void handleLaunch({
       provider,
       model: savedConfig.model,
@@ -173,7 +175,7 @@ export default function SkillPage({
   useEffect(() => {
     const cleanup = () => {
       launchAbortRef.current?.abort();
-      globalAutoLaunchFired = false;
+      autoLaunchLock.delete(skillKey);
       if (sessionRef.current && launchConfigRef.current) {
         destroySandbox(launchConfigRef.current.sandboxKey, sessionRef.current.sandboxId).catch(() => {});
       }
@@ -181,11 +183,12 @@ export default function SkillPage({
     window.addEventListener("beforeunload", cleanup);
     return () => {
       window.removeEventListener("beforeunload", cleanup);
-      // Abort in-flight launch on unmount (route change)
       launchAbortRef.current?.abort();
-      // Do NOT reset globalAutoLaunchFired here -- prevents re-launch on Strict Mode remount
+      // Clear the lock for this skill so a fresh visit can auto-launch
+      autoLaunchLock.delete(skillKey);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skillKey]);
 
   const handleStop = async () => {
     if (session && launchConfigRef.current) {
@@ -227,7 +230,7 @@ export default function SkillPage({
   }
 
   const needsOnboarding = isSignedIn && !keysLoading && !hasCompleteConfig && !userCancelled.current;
-  const readyToAutoLaunch = isSignedIn && !keysLoading && hasCompleteConfig && !userCancelled.current && !autoLaunchFired.current;
+  const readyToAutoLaunch = isSignedIn && !keysLoading && hasCompleteConfig && !userCancelled.current && !autoLaunchLock.get(skillKey);
 
   return (
     <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
