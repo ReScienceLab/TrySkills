@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Bilbo } from "next/font/google";
 import { ConvexClientProvider } from "@/components/convex-client-provider";
+import { ConvexErrorBoundary } from "@/components/convex-error-boundary";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -41,7 +42,9 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${bilbo.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <ConvexClientProvider>{children}</ConvexClientProvider>
+        <ConvexClientProvider>
+          <ConvexErrorBoundary>{children}</ConvexErrorBoundary>
+        </ConvexClientProvider>
       </body>
     </html>
   );

@@ -19,7 +19,7 @@ export const save = mutation({
       .unique();
 
     if (existing) {
-      await ctx.db.patch(existing._id, {
+      await ctx.db.patch("apiKeys", existing._id, {
         encryptedData: args.encryptedData,
         iv: args.iv,
         updatedAt: Date.now(),
@@ -38,6 +38,17 @@ export const save = mutation({
 
 export const load = query({
   args: {},
+  returns: v.union(
+    v.object({
+      _id: v.id("apiKeys"),
+      _creationTime: v.number(),
+      tokenIdentifier: v.string(),
+      encryptedData: v.string(),
+      iv: v.string(),
+      updatedAt: v.number(),
+    }),
+    v.null(),
+  ),
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
@@ -66,7 +77,7 @@ export const remove = mutation({
       .unique();
 
     if (existing) {
-      await ctx.db.delete(existing._id);
+      await ctx.db.delete("apiKeys", existing._id);
     }
     return null;
   },

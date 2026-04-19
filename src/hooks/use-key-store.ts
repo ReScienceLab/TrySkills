@@ -67,7 +67,7 @@ export function useKeyStore() {
       }
     };
 
-    loadFromConvex();
+    void loadFromConvex();
   }, [isAuthenticated, user, storedKeys]);
 
   // For unauthenticated users, mark loading as done immediately

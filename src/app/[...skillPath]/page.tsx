@@ -97,7 +97,7 @@ export default function SkillPage({
 
   const handleRetryLaunch = () => {
     if (launchConfigRef.current) {
-      handleLaunch(launchConfigRef.current);
+      void handleLaunch(launchConfigRef.current);
     }
   };
 
@@ -166,7 +166,7 @@ export default function SkillPage({
               error={sandboxError}
               onRetry={handleRetryLaunch}
               onCancel={() => {
-                handleStop();
+                void handleStop();
                 setPhase("config");
               }}
             />
