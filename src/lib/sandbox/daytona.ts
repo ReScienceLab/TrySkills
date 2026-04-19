@@ -69,6 +69,9 @@ export async function createHermesSandbox(
       public: true,
       envVars: {
         [providerMapping.envVar]: config.llmApiKey,
+        API_SERVER_ENABLED: "true",
+        API_SERVER_CORS_ORIGINS: "*",
+        GATEWAY_ALLOW_ALL_USERS: "true",
       },
       resources: { cpu: 2, memory: 4, disk: 8 },
     },
@@ -84,7 +87,13 @@ export async function createHermesSandbox(
     "/opt/data/config.yaml",
   );
 
-  const envContent = `${providerMapping.envVar}=${config.llmApiKey}\n`;
+  const envContent = [
+    `${providerMapping.envVar}=${config.llmApiKey}`,
+    "API_SERVER_ENABLED=true",
+    "API_SERVER_CORS_ORIGINS=*",
+    "GATEWAY_ALLOW_ALL_USERS=true",
+    "",
+  ].join("\n");
   await sandbox.fs.uploadFile(
     Buffer.from(envContent),
     "/opt/data/.env",
@@ -95,10 +104,18 @@ export async function createHermesSandbox(
     await sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
   }
 
+  await sandbox.process.executeCommand(
+    "chown -R hermes:hermes /opt/data/skills /opt/data/config.yaml /opt/data/.env 2>/dev/null || true",
+  ).catch(() => {});
+
   onProgress("starting");
 
   await sandbox.process.executeCommand(
-    "cd /opt/hermes && nohup /opt/hermes/docker/entrypoint.sh gateway run > /tmp/hermes.log 2>&1 &",
+    "cd /opt/hermes && nohup /opt/hermes/docker/entrypoint.sh gateway run > /tmp/hermes-gateway.log 2>&1 &",
+  ).catch(() => {});
+
+  await sandbox.process.executeCommand(
+    "HERMES_HOME=/opt/data nohup /opt/hermes/.venv/bin/hermes dashboard --host 0.0.0.0 --no-open --insecure > /tmp/hermes-dashboard.log 2>&1 &",
   ).catch(() => {});
 
   await waitForHealth(sandbox);
@@ -117,11 +134,10 @@ export async function createHermesSandbox(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function waitForHealth(sandbox: any): Promise<void> {
   const start = Date.now();
+  const healthCmd = `python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:${GATEWAY_PORT}/health')"`;
   while (Date.now() - start < HEALTH_TIMEOUT_MS) {
     try {
-      const result = await sandbox.process.executeCommand(
-        `curl -sf http://localhost:${GATEWAY_PORT}/health`,
-      );
+      const result = await sandbox.process.executeCommand(healthCmd);
       if (result.exitCode === 0) return;
     } catch {
       // not ready yet
