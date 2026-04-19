@@ -22,6 +22,9 @@ export default function DashboardPage() {
   const removeSandbox = useMutation(api.sandboxes.remove);
   const updateState = useMutation(api.sandboxes.updateState);
 
+  // Treat as loaded with empty list if Clerk says signed in but Convex hasn't synced yet
+  const sandboxList = sandboxes ?? (isSignedIn && !isAuthenticated ? [] : undefined);
+
   const handleStop = async (sandboxId: string) => {
     if (!config?.sandboxKey) return;
     await updateState({ sandboxId, state: "stopping" });
@@ -88,15 +91,15 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-2xl font-semibold text-white/90">Dashboard</h1>
             <span className="text-sm text-white/40">
-              {sandboxes?.length ?? 0} sandbox{(sandboxes?.length ?? 0) !== 1 ? "es" : ""}
+              {sandboxList?.length ?? 0} sandbox{(sandboxList?.length ?? 0) !== 1 ? "es" : ""}
             </span>
           </div>
 
-          {sandboxes === undefined ? (
+          {sandboxList === undefined ? (
             <div className="flex items-center justify-center py-20">
               <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
             </div>
-          ) : sandboxes.length === 0 ? (
+          ) : sandboxList.length === 0 ? (
             <div className="border border-white/10 bg-black/40 backdrop-blur-sm p-12 text-center">
               <svg className="w-12 h-12 mx-auto mb-4 text-white/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
@@ -114,7 +117,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {sandboxes.map((sb) => (
+              {sandboxList.map((sb) => (
                 <div
                   key={sb._id}
                   className="border border-white/10 bg-black/40 backdrop-blur-sm px-6 py-4"
