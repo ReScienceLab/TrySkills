@@ -194,7 +194,7 @@ export default function SkillPage({
                 <p className="text-sm text-white/50 mb-6">
                   Sign in with GitHub to configure and launch your agent session.
                 </p>
-                <SignInButton mode="modal">
+                <SignInButton mode="modal" forceRedirectUrl={`/${skillPath.join("/")}`}>
                   <button className="px-6 py-3 bg-white text-black text-sm font-medium hover:bg-white/90 transition-all">
                     Sign in with GitHub
                   </button>

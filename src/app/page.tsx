@@ -265,7 +265,7 @@ export default function Home() {
                 Configure & Launch
               </button>
             ) : (
-              <SignInButton mode="modal">
+              <SignInButton mode="modal" forceRedirectUrl={parsedPath || "/"}>
                 <button
                   disabled={treeLoading}
                   className={`w-full py-3 text-sm font-medium transition-all ${
