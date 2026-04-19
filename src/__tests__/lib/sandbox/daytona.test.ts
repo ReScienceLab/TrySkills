@@ -100,7 +100,8 @@ describe("sandbox/daytona", () => {
     const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
     const installCmd = allCmds.find((c: string) => c.includes("hermes-agent/main/scripts/install.sh"));
     expect(installCmd).toBeDefined();
-    expect(installCmd).toContain("hermes-webui");
+    const webuiCmd = allCmds.find((c: string) => c.includes("hermes-webui"));
+    expect(webuiCmd).toBeDefined();
   });
 
   it("uploads skill files to ~/.hermes/skills/", async () => {

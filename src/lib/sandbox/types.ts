@@ -1,6 +1,7 @@
 export type SandboxState =
   | "idle"
   | "creating"
+  | "installing"
   | "uploading"
   | "starting"
   | "running"

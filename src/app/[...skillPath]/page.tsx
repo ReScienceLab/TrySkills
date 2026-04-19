@@ -173,6 +173,7 @@ export default function SkillPage({
   useEffect(() => {
     const cleanup = () => {
       launchAbortRef.current?.abort();
+      globalAutoLaunchFired = false;
       if (sessionRef.current && launchConfigRef.current) {
         destroySandbox(launchConfigRef.current.sandboxKey, sessionRef.current.sandboxId).catch(() => {});
       }
@@ -180,7 +181,9 @@ export default function SkillPage({
     window.addEventListener("beforeunload", cleanup);
     return () => {
       window.removeEventListener("beforeunload", cleanup);
-      globalAutoLaunchFired = false;
+      // Abort in-flight launch on unmount (route change)
+      launchAbortRef.current?.abort();
+      // Do NOT reset globalAutoLaunchFired here -- prevents re-launch on Strict Mode remount
     };
   }, []);
 

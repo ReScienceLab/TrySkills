@@ -8,7 +8,8 @@ describe("LaunchProgress", () => {
       <LaunchProgress state="creating" onRetry={() => {}} onCancel={() => {}} />,
     );
     expect(screen.getByText("Creating sandbox")).toBeInTheDocument();
-    expect(screen.getByText("Installing skill")).toBeInTheDocument();
+    expect(screen.getByText("Installing Hermes Agent")).toBeInTheDocument();
+    expect(screen.getByText("Uploading skill")).toBeInTheDocument();
     expect(screen.getByText("Starting agent")).toBeInTheDocument();
     expect(screen.getByText("Ready")).toBeInTheDocument();
   });

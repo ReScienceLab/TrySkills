@@ -3,9 +3,10 @@
 import type { SandboxState } from "@/lib/sandbox/types";
 
 const STEPS: { key: SandboxState; label: string; description: string }[] = [
-  { key: "creating", label: "Creating sandbox", description: "Provisioning a secure environment" },
-  { key: "uploading", label: "Installing skill", description: "Uploading skill files and dependencies" },
-  { key: "starting", label: "Starting agent", description: "Launching Hermes Agent + WebUI" },
+  { key: "creating", label: "Creating sandbox", description: "Provisioning a secure environment (~10s)" },
+  { key: "installing", label: "Installing Hermes Agent", description: "Downloading and configuring agent runtime (~2 min)" },
+  { key: "uploading", label: "Uploading skill", description: "Uploading skill files to sandbox" },
+  { key: "starting", label: "Starting agent", description: "Launching Hermes Agent + WebUI (~30s)" },
   { key: "running", label: "Ready", description: "Your agent session is live" },
 ];
 

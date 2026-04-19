@@ -97,21 +97,30 @@ export async function createHermesSandbox(
   );
   activeSandbox = sandbox;
 
-  onProgress("uploading");
+  onProgress("installing");
 
-  const installScript = [
-    "set -e",
-    // Install hermes-agent
+  // Install hermes-agent (this is the slow part, ~1-2 min)
+  await sandbox.process.executeCommand(
     "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash 2>&1 || true",
-    // Write config
-    `cat > $HOME/.hermes/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
-    `cat > $HOME/.hermes/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider)}\nCFGEOF`,
-    // Clone hermes-webui
-    "git clone --depth 1 https://github.com/nesquena/hermes-webui.git $HOME/hermes-webui 2>&1",
-    `cat > $HOME/hermes-webui/.env << 'WEOF'\n${buildWebuiEnv()}\nWEOF`,
-  ].join("\n");
+  ).catch(() => {});
 
-  await sandbox.process.executeCommand(installScript).catch(() => {});
+  // Write config files
+  await sandbox.process.executeCommand(
+    `cat > $HOME/.hermes/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
+  ).catch(() => {});
+  await sandbox.process.executeCommand(
+    `cat > $HOME/.hermes/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider)}\nCFGEOF`,
+  ).catch(() => {});
+
+  // Clone hermes-webui
+  await sandbox.process.executeCommand(
+    "git clone --depth 1 https://github.com/nesquena/hermes-webui.git $HOME/hermes-webui 2>&1",
+  ).catch(() => {});
+  await sandbox.process.executeCommand(
+    `cat > $HOME/hermes-webui/.env << 'WEOF'\n${buildWebuiEnv()}\nWEOF`,
+  ).catch(() => {});
+
+  onProgress("uploading");
 
   for (const file of skillFiles) {
     const destPath = `$HOME/.hermes/skills/${skillName}/${file.path}`;

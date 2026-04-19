@@ -129,7 +129,7 @@ export default function DashboardPage() {
                           ? "bg-green-500 animate-pulse"
                           : sb.state === "stopping"
                             ? "bg-yellow-500"
-                            : sb.state === "creating" || sb.state === "uploading" || sb.state === "starting"
+                            : sb.state === "creating" || sb.state === "installing" || sb.state === "uploading" || sb.state === "starting"
                               ? "bg-blue-400 animate-pulse"
                               : "bg-white/20"
                       }`} />
@@ -146,11 +146,12 @@ export default function DashboardPage() {
                           </span>
                           <span className={`text-xs ${
                             sb.state === "running" ? "text-green-400/60"
-                              : sb.state === "creating" || sb.state === "uploading" || sb.state === "starting" ? "text-blue-400/60"
+                              : sb.state === "creating" || sb.state === "installing" || sb.state === "uploading" || sb.state === "starting" ? "text-blue-400/60"
                               : "text-yellow-400/60"
                           }`}>
                             {sb.state === "creating" ? "Creating sandbox..."
-                              : sb.state === "uploading" ? "Installing skill..."
+                              : sb.state === "installing" ? "Installing agent..."
+                              : sb.state === "uploading" ? "Uploading skill..."
                               : sb.state === "starting" ? "Starting agent..."
                               : sb.state}
                           </span>

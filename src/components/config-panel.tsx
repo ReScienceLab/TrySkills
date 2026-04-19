@@ -18,7 +18,7 @@ export function ConfigPanel({
   onLaunch: (config: LaunchConfig) => void;
   onBack: () => void;
 }) {
-  const { config: savedConfig, loading, migrationPending, save } = useKeyStore();
+  const { config: savedConfig, loading, save } = useKeyStore();
 
   const [provider, setProvider] = useState<Provider>(PROVIDERS[0]);
   const [model, setModel] = useState(PROVIDERS[0].models[0]);
@@ -76,38 +76,6 @@ export function ConfigPanel({
         </svg>
         Back
       </button>
-
-      {migrationPending && (
-        <div className="border border-blue-500/30 bg-blue-500/10 px-5 py-3 mb-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-sm text-blue-300">Migrate keys to encrypted cloud storage?</span>
-              <span className="block text-xs text-white/40">
-                Found keys in localStorage. Encrypt and save to your account.
-              </span>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => save({
-                  providerId: provider.id,
-                  model,
-                  llmKey,
-                  sandboxKey,
-                })}
-                className="px-3 py-1.5 bg-blue-500 text-white text-xs font-medium hover:bg-blue-400 transition-colors"
-              >
-                Migrate
-              </button>
-              <button
-                onClick={() => localStorage.removeItem("tryskills-config")}
-                className="px-3 py-1.5 bg-white/10 text-white/60 text-xs font-medium hover:bg-white/15 transition-colors"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="border border-white/20 bg-black/40 backdrop-blur-sm mb-4">
         <div className="px-6 py-5 border-b border-white/10">
