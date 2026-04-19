@@ -5,9 +5,6 @@ import { env, nodeless } from "unenv";
 const { alias: turbopackAlias } = env(nodeless, {});
 
 const nextConfig: NextConfig = {
-  eslint: {
-    dirs: ["pages", "app", "components", "lib", "src", "convex"],
-  },
   serverExternalPackages: ["@daytona/sdk", "@opentelemetry/resources", "@opentelemetry/sdk-trace-base"],
   turbopack: {
     resolveAlias: {
