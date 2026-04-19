@@ -7,10 +7,10 @@ describe("LaunchProgress", () => {
     render(
       <LaunchProgress state="creating" onRetry={() => {}} onCancel={() => {}} />,
     );
-    expect(screen.getByText("Creating sandbox...")).toBeInTheDocument();
-    expect(screen.getByText("Uploading skill files...")).toBeInTheDocument();
-    expect(screen.getByText("Starting Hermes Agent...")).toBeInTheDocument();
-    expect(screen.getByText("Ready!")).toBeInTheDocument();
+    expect(screen.getByText("Creating sandbox")).toBeInTheDocument();
+    expect(screen.getByText("Installing skill")).toBeInTheDocument();
+    expect(screen.getByText("Starting agent")).toBeInTheDocument();
+    expect(screen.getByText("Ready")).toBeInTheDocument();
   });
 
   it("shows cancel button during normal progress", () => {

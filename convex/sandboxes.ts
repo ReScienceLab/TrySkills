@@ -6,6 +6,7 @@ export const create = mutation({
     sandboxId: v.string(),
     skillPath: v.string(),
     webuiUrl: v.string(),
+    state: v.optional(v.string()),
   },
   returns: v.id("sandboxes"),
   handler: async (ctx, args) => {
@@ -17,7 +18,7 @@ export const create = mutation({
       sandboxId: args.sandboxId,
       skillPath: args.skillPath,
       webuiUrl: args.webuiUrl,
-      state: "running",
+      state: args.state ?? "running",
       createdAt: Date.now(),
     });
   },

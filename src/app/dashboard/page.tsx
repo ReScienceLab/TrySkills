@@ -129,7 +129,9 @@ export default function DashboardPage() {
                           ? "bg-green-500 animate-pulse"
                           : sb.state === "stopping"
                             ? "bg-yellow-500"
-                            : "bg-white/20"
+                            : sb.state === "creating" || sb.state === "uploading" || sb.state === "starting"
+                              ? "bg-blue-400 animate-pulse"
+                              : "bg-white/20"
                       }`} />
                       <div className="min-w-0">
                         <div className="font-mono text-sm text-white/80 truncate">
@@ -143,9 +145,14 @@ export default function DashboardPage() {
                             {formatElapsed(sb.createdAt)}
                           </span>
                           <span className={`text-xs ${
-                            sb.state === "running" ? "text-green-400/60" : "text-yellow-400/60"
+                            sb.state === "running" ? "text-green-400/60"
+                              : sb.state === "creating" || sb.state === "uploading" || sb.state === "starting" ? "text-blue-400/60"
+                              : "text-yellow-400/60"
                           }`}>
-                            {sb.state}
+                            {sb.state === "creating" ? "Creating sandbox..."
+                              : sb.state === "uploading" ? "Installing skill..."
+                              : sb.state === "starting" ? "Starting agent..."
+                              : sb.state}
                           </span>
                         </div>
                       </div>

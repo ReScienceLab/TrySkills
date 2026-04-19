@@ -2,11 +2,11 @@
 
 import type { SandboxState } from "@/lib/sandbox/types";
 
-const STEPS: { key: SandboxState; label: string }[] = [
-  { key: "creating", label: "Creating sandbox..." },
-  { key: "uploading", label: "Uploading skill files..." },
-  { key: "starting", label: "Starting Hermes Agent..." },
-  { key: "running", label: "Ready!" },
+const STEPS: { key: SandboxState; label: string; description: string }[] = [
+  { key: "creating", label: "Creating sandbox", description: "Provisioning a secure environment" },
+  { key: "uploading", label: "Installing skill", description: "Uploading skill files and dependencies" },
+  { key: "starting", label: "Starting agent", description: "Launching Hermes Agent + WebUI" },
+  { key: "running", label: "Ready", description: "Your agent session is live" },
 ];
 
 export function LaunchProgress({
@@ -25,46 +25,58 @@ export function LaunchProgress({
   return (
     <div className="animate-fade-in">
       <div className="border border-white/20 bg-black/40 backdrop-blur-sm p-8">
-        <h2 className="text-lg font-semibold text-white/90 mb-8">
-          Launching Agent Session
-        </h2>
+        <div className="flex items-center gap-3 mb-8">
+          <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+          <h2 className="text-base font-semibold text-white/90">
+            Launching Agent Session
+          </h2>
+        </div>
 
-        <div className="space-y-4 mb-8">
+        <div className="relative ml-1 mb-8">
           {STEPS.map((step, i) => {
             const isActive = step.key === state;
             const isDone = currentIdx > i;
-            const isPending = currentIdx < i;
+            const isLast = i === STEPS.length - 1;
 
             return (
-              <div key={step.key} className="flex items-center gap-4">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-all ${
-                  isDone
-                    ? "bg-green-500 text-white"
-                    : isActive
-                      ? "bg-blue-500 text-white"
-                      : "bg-white/10 text-white/30"
-                }`}>
+              <div key={step.key} className="relative flex gap-4">
+                {/* Vertical line */}
+                {!isLast && (
+                  <div className="absolute left-[5px] top-[18px] w-px h-[calc(100%-2px)]">
+                    <div className={`w-full h-full transition-colors duration-500 ${
+                      isDone ? "bg-white/30" : "bg-white/8"
+                    }`} />
+                  </div>
+                )}
+
+                {/* Dot */}
+                <div className="relative shrink-0 mt-[6px]">
                   {isDone ? (
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                    </svg>
+                    <div className="w-[11px] h-[11px] rounded-full bg-white/70" />
                   ) : isActive ? (
-                    <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    <div className="w-[11px] h-[11px] rounded-full border-2 border-white/70 border-t-transparent animate-spin" />
                   ) : (
-                    <span className="text-xs font-medium">{i + 1}</span>
+                    <div className="w-[11px] h-[11px] rounded-full bg-white/10" />
                   )}
                 </div>
-                <span className={`text-sm transition-colors ${
-                  isDone
-                    ? "text-white/40"
-                    : isActive
-                      ? "text-white font-medium"
-                      : isPending
-                        ? "text-white/30"
-                        : ""
-                }`}>
-                  {step.label}
-                </span>
+
+                {/* Content */}
+                <div className={`pb-6 ${isLast ? "pb-0" : ""}`}>
+                  <div className={`text-sm transition-colors ${
+                    isDone
+                      ? "text-white/40"
+                      : isActive
+                        ? "text-white font-medium"
+                        : "text-white/20"
+                  }`}>
+                    {step.label}
+                  </div>
+                  {isActive && (
+                    <div className="text-xs text-white/30 mt-0.5">
+                      {step.description}
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -96,7 +108,7 @@ export function LaunchProgress({
           ) : (
             <button
               onClick={onCancel}
-              className="w-full py-3 bg-white/10 text-white/60 hover:bg-white/15 text-sm font-medium transition-all"
+              className="w-full py-3 bg-white/5 text-white/40 hover:bg-white/10 text-sm transition-all"
             >
               Cancel
             </button>

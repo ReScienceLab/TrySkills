@@ -33,6 +33,7 @@ export default function SkillPage({
   const { isAuthenticated } = useConvexAuth();
   const createSandboxRecord = useMutation(api.sandboxes.create);
   const removeSandboxRecord = useMutation(api.sandboxes.remove);
+  const updateSandboxState = useMutation(api.sandboxes.updateState);
 
   const resolved = useMemo(() => resolveSkillPath(skillPath), [skillPath]);
   const { owner, repo, skillName } = resolved;
@@ -60,6 +61,18 @@ export default function SkillPage({
       sandboxKey: config.sandboxKey,
     });
 
+    // Create a placeholder record in dashboard immediately
+    const skillPathStr = `${owner}/${repo}/${skillName}`;
+    const placeholderId = `pending-${Date.now()}`;
+    if (isAuthenticated) {
+      await createSandboxRecord({
+        sandboxId: placeholderId,
+        skillPath: skillPathStr,
+        webuiUrl: "",
+        state: "creating",
+      }).catch(() => {});
+    }
+
     try {
       const skillFiles = await fetchSkillDirectory(resolved);
 
@@ -72,7 +85,12 @@ export default function SkillPage({
         },
         skillName,
         skillFiles,
-        (step) => setSandboxState(step as SandboxState),
+        (step) => {
+          setSandboxState(step as SandboxState);
+          if (isAuthenticated) {
+            updateSandboxState({ sandboxId: placeholderId, state: step }).catch(() => {});
+          }
+        },
       );
 
       setSession(result);
@@ -80,12 +98,14 @@ export default function SkillPage({
       setSandboxState("running");
       setPhase("running");
 
-      // Save to Convex for dashboard
+      // Update the placeholder record with real sandbox info
       if (isAuthenticated) {
+        await removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
         await createSandboxRecord({
           sandboxId: result.sandboxId,
-          skillPath: `${owner}/${repo}/${skillName}`,
+          skillPath: skillPathStr,
           webuiUrl: result.webuiUrl,
+          state: "running",
         }).catch(() => {});
       }
 
@@ -93,6 +113,10 @@ export default function SkillPage({
     } catch (err) {
       setSandboxState("error");
       setSandboxError(err instanceof Error ? err.message : "Launch failed");
+      // Remove the placeholder on error
+      if (isAuthenticated) {
+        await removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
+      }
     }
   };
 
