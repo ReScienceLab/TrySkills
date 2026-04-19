@@ -8,4 +8,15 @@ export default defineSchema({
     iv: v.string(),
     updatedAt: v.number(),
   }).index("by_token", ["tokenIdentifier"]),
+
+  sandboxes: defineTable({
+    tokenIdentifier: v.string(),
+    sandboxId: v.string(),
+    skillPath: v.string(),
+    webuiUrl: v.string(),
+    state: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_token", ["tokenIdentifier"])
+    .index("by_sandbox", ["sandboxId"]),
 });

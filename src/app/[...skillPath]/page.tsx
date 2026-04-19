@@ -4,6 +4,9 @@ import { useState, useEffect, useMemo, useRef, use } from "react";
 import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
+import { useConvexAuth } from "convex/react";
+import { useMutation } from "convex/react";
+import { api } from "../../../convex/_generated/api";
 import { ConfigPanel, type LaunchConfig } from "@/components/config-panel";
 import { LaunchProgress } from "@/components/launch-progress";
 import { SessionControl } from "@/components/session-control";
@@ -26,6 +29,9 @@ export default function SkillPage({
   const { skillPath } = resolvedParams;
   const { isSignedIn, isLoaded: authLoaded } = useAuth();
   const { config: savedConfig, loading: keysLoading, save } = useKeyStore();
+  const { isAuthenticated } = useConvexAuth();
+  const createSandboxRecord = useMutation(api.sandboxes.create);
+  const removeSandboxRecord = useMutation(api.sandboxes.remove);
 
   const resolved = useMemo(() => resolveSkillPath(skillPath), [skillPath]);
   const { owner, repo, skillName } = resolved;
@@ -73,6 +79,15 @@ export default function SkillPage({
       setSandboxState("running");
       setPhase("running");
 
+      // Save to Convex for dashboard
+      if (isAuthenticated) {
+        await createSandboxRecord({
+          sandboxId: result.sandboxId,
+          skillPath: `${owner}/${repo}/${skillName}`,
+          webuiUrl: result.webuiUrl,
+        }).catch(() => {});
+      }
+
       window.open(result.webuiUrl, "_blank", "noopener,noreferrer");
     } catch (err) {
       setSandboxState("error");
@@ -116,6 +131,10 @@ export default function SkillPage({
         await destroySandbox(launchConfigRef.current.sandboxKey, session.sandboxId);
       } catch {
         // best effort cleanup
+      }
+      // Remove from Convex dashboard
+      if (isAuthenticated) {
+        await removeSandboxRecord({ sandboxId: session.sandboxId }).catch(() => {});
       }
     }
     setSession(null);

@@ -1,0 +1,83 @@
+import { mutation, query } from "./_generated/server";
+import { v } from "convex/values";
+
+export const create = mutation({
+  args: {
+    sandboxId: v.string(),
+    skillPath: v.string(),
+    webuiUrl: v.string(),
+  },
+  returns: v.id("sandboxes"),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    return await ctx.db.insert("sandboxes", {
+      tokenIdentifier: identity.tokenIdentifier,
+      sandboxId: args.sandboxId,
+      skillPath: args.skillPath,
+      webuiUrl: args.webuiUrl,
+      state: "running",
+      createdAt: Date.now(),
+    });
+  },
+});
+
+export const list = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+
+    return await ctx.db
+      .query("sandboxes")
+      .withIndex("by_token", (q) =>
+        q.eq("tokenIdentifier", identity.tokenIdentifier),
+      )
+      .order("desc")
+      .collect();
+  },
+});
+
+export const updateState = mutation({
+  args: {
+    sandboxId: v.string(),
+    state: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const sandbox = await ctx.db
+      .query("sandboxes")
+      .withIndex("by_sandbox", (q) => q.eq("sandboxId", args.sandboxId))
+      .unique();
+
+    if (sandbox && sandbox.tokenIdentifier === identity.tokenIdentifier) {
+      await ctx.db.patch(sandbox._id, { state: args.state });
+    }
+    return null;
+  },
+});
+
+export const remove = mutation({
+  args: {
+    sandboxId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const sandbox = await ctx.db
+      .query("sandboxes")
+      .withIndex("by_sandbox", (q) => q.eq("sandboxId", args.sandboxId))
+      .unique();
+
+    if (sandbox && sandbox.tokenIdentifier === identity.tokenIdentifier) {
+      await ctx.db.delete(sandbox._id);
+    }
+    return null;
+  },
+});
