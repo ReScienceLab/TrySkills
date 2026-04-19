@@ -1,6 +1,6 @@
 import type { SandboxConfig, SandboxSession, SandboxState } from "./types";
 
-const IMAGE = "ghcr.io/resciencelab/tryskills-hermes:0.1.0";
+const IMAGE = "resciencelab/tryskills-hermes:0.1.0";
 const AUTO_STOP_MINUTES = 60;
 const HEALTH_TIMEOUT_MS = 300_000;
 const HEALTH_POLL_INTERVAL_MS = 3_000;

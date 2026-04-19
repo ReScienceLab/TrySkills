@@ -62,7 +62,7 @@ describe("sandbox/daytona", () => {
 
     expect(mockCreate).toHaveBeenCalledWith(
       expect.objectContaining({
-        image: "ghcr.io/resciencelab/tryskills-hermes:0.1.0",
+        image: "resciencelab/tryskills-hermes:0.1.0",
         ephemeral: true,
         autoStopInterval: 60,
         public: true,
