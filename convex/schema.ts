@@ -15,6 +15,10 @@ export default defineSchema({
     skillPath: v.string(),
     webuiUrl: v.string(),
     state: v.string(),
+    cpu: v.optional(v.number()),
+    memory: v.optional(v.number()),
+    disk: v.optional(v.number()),
+    region: v.optional(v.string()),
     createdAt: v.number(),
   })
     .index("by_token", ["tokenIdentifier"])

@@ -20,4 +20,8 @@ export interface SandboxSession {
   webuiUrl: string;
   state: SandboxState;
   startedAt: number;
+  cpu?: number;
+  memory?: number;
+  disk?: number;
+  region?: string;
 }

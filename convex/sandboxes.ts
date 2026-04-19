@@ -7,6 +7,10 @@ export const create = mutation({
     skillPath: v.string(),
     webuiUrl: v.string(),
     state: v.optional(v.string()),
+    cpu: v.optional(v.number()),
+    memory: v.optional(v.number()),
+    disk: v.optional(v.number()),
+    region: v.optional(v.string()),
   },
   returns: v.id("sandboxes"),
   handler: async (ctx, args) => {
@@ -19,6 +23,10 @@ export const create = mutation({
       skillPath: args.skillPath,
       webuiUrl: args.webuiUrl,
       state: args.state ?? "running",
+      cpu: args.cpu,
+      memory: args.memory,
+      disk: args.disk,
+      region: args.region,
       createdAt: Date.now(),
     });
   },

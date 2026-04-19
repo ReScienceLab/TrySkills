@@ -121,6 +121,10 @@ export default function SkillPage({
         skillPath: skillPathStr,
         webuiUrl: result.webuiUrl,
         state: "running",
+        cpu: result.cpu,
+        memory: result.memory,
+        disk: result.disk,
+        region: result.region,
       }).catch(() => {});
 
       window.open(result.webuiUrl, "_blank", "noopener,noreferrer");

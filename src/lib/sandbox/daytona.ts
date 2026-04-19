@@ -157,6 +157,10 @@ export async function createHermesSandbox(
     webuiUrl,
     state: "running",
     startedAt: Date.now(),
+    cpu: sandbox.cpu,
+    memory: sandbox.memory,
+    disk: sandbox.disk,
+    region: sandbox.target,
   };
 }
 
