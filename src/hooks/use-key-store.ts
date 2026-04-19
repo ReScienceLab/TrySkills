@@ -14,7 +14,13 @@ export interface StoredConfig {
   sandboxKey: string;
 }
 
-const LS_KEY = "tryskills-config";
+// [Fix #1] Per-user localStorage key to prevent cross-account leakage
+function lsKey(userId: string): string {
+  return `tryskills-config-${userId}`;
+}
+
+// [Fix #3] Max wait time before giving up on Convex auth sync
+const CONVEX_SYNC_TIMEOUT_MS = 10_000;
 
 export function useKeyStore() {
   const { isAuthenticated } = useConvexAuth();
@@ -36,14 +42,13 @@ export function useKeyStore() {
     if (loadedRef.current) return;
     if (!authLoaded) return;
 
-    // Not signed in -> done
     if (!isSignedIn) {
       loadedRef.current = true;
       setLoading(false);
       return;
     }
 
-    // Signed in + Convex synced + query resolved
+    // Signed in + Convex synced + query resolved -> authoritative source
     if (isAuthenticated && user && storedKeys !== undefined) {
       loadedRef.current = true;
 
@@ -53,15 +58,15 @@ export function useKeyStore() {
           .then((plaintext) => {
             const parsed = JSON.parse(plaintext) as StoredConfig;
             setConfig(parsed);
-            // Sync to localStorage as offline cache
-            localStorage.setItem(LS_KEY, JSON.stringify(parsed));
+            // [Fix #1] Cache per-user
+            localStorage.setItem(lsKey(user.id), JSON.stringify(parsed));
           })
           .catch(() => {})
           .finally(() => setLoading(false));
       } else {
-        // No keys in Convex -- check localStorage for migration
+        // No keys in Convex -- check per-user localStorage for migration
         try {
-          const raw = localStorage.getItem(LS_KEY);
+          const raw = localStorage.getItem(lsKey(user.id));
           if (raw) {
             const parsed = JSON.parse(raw) as StoredConfig;
             if (parsed.llmKey || parsed.sandboxKey) {
@@ -75,11 +80,10 @@ export function useKeyStore() {
       return;
     }
 
-    // Signed in but Convex not yet synced -- use localStorage as cache while waiting
-    // This avoids showing onboarding for users who have keys but Convex is slow
-    if (isSignedIn && !isAuthenticated) {
+    // [Fix #1] Signed in but Convex not synced -- use per-user cache only
+    if (isSignedIn && user && !isAuthenticated) {
       try {
-        const raw = localStorage.getItem(LS_KEY);
+        const raw = localStorage.getItem(lsKey(user.id));
         if (raw) {
           const parsed = JSON.parse(raw) as StoredConfig;
           if (parsed.llmKey && parsed.sandboxKey) {
@@ -90,15 +94,30 @@ export function useKeyStore() {
           }
         }
       } catch {}
-      // No cache -- keep waiting for Convex (spinner shows)
+      // No per-user cache -- keep waiting for Convex
     }
   }, [authLoaded, isSignedIn, isAuthenticated, user, storedKeys]);
+
+  // [Fix #3] Timeout: if Convex never syncs and no cache, stop loading after timeout
+  useEffect(() => {
+    if (!authLoaded || !isSignedIn || loadedRef.current) return;
+    const timer = setTimeout(() => {
+      if (!loadedRef.current) {
+        loadedRef.current = true;
+        setLoading(false);
+        // config stays null -> onboarding will show
+      }
+    }, CONVEX_SYNC_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [authLoaded, isSignedIn]);
 
   const save = useCallback(
     async (newConfig: StoredConfig) => {
       setConfig(newConfig);
-      // Always cache to localStorage as fallback
-      localStorage.setItem(LS_KEY, JSON.stringify(newConfig));
+      // [Fix #1] Cache per-user
+      if (user) {
+        localStorage.setItem(lsKey(user.id), JSON.stringify(newConfig));
+      }
 
       if (isAuthenticated && user) {
         const key = await deriveKey(user.id);
@@ -114,11 +133,13 @@ export function useKeyStore() {
 
   const clear = useCallback(async () => {
     setConfig(null);
-    localStorage.removeItem(LS_KEY);
+    if (user) {
+      localStorage.removeItem(lsKey(user.id));
+    }
     if (isAuthenticated) {
       await removeFromConvex({});
     }
-  }, [isAuthenticated, removeFromConvex]);
+  }, [isAuthenticated, user, removeFromConvex]);
 
   return { config, loading, isAuthenticated, migrationPending, save, clear };
 }

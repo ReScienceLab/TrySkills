@@ -20,6 +20,9 @@ import type { SandboxState, SandboxSession } from "@/lib/sandbox/types";
 
 type AppPhase = "config" | "launching" | "running";
 
+// Module-level flag survives React Strict Mode double-mount
+let globalAutoLaunchFired = false;
+
 export default function SkillPage({
   params,
 }: {
@@ -44,12 +47,11 @@ export default function SkillPage({
   const launchConfigRef = useRef<LaunchConfig | null>(null);
   const sessionRef = useRef<SandboxSession | null>(null);
   const autoLaunchFired = useRef(false);
-  // [Fix #1] AbortController to cancel in-flight launches
   const launchAbortRef = useRef<AbortController | null>(null);
   const placeholderIdRef = useRef<string | null>(null);
+  const userCancelled = useRef(false);
 
   const handleLaunch = async (config: LaunchConfig) => {
-    // Cancel any previous in-flight launch
     launchAbortRef.current?.abort();
     const abort = new AbortController();
     launchAbortRef.current = abort;
@@ -59,26 +61,25 @@ export default function SkillPage({
     setSandboxState("creating");
     setSandboxError(undefined);
 
-    await save({
-      providerId: config.provider.id,
-      model: config.model,
-      llmKey: config.llmKey,
-      sandboxKey: config.sandboxKey,
-    });
-
     const skillPathStr = `${owner}/${repo}/${skillName}`;
     const placeholderId = `pending-${Date.now()}`;
     placeholderIdRef.current = placeholderId;
 
-    // Always try to save -- mutation will fail silently if not auth'd yet
-    await createSandboxRecord({
-      sandboxId: placeholderId,
-      skillPath: skillPathStr,
-      webuiUrl: "",
-      state: "creating",
-    }).catch(() => {});
-
     try {
+      await save({
+        providerId: config.provider.id,
+        model: config.model,
+        llmKey: config.llmKey,
+        sandboxKey: config.sandboxKey,
+      });
+
+      await createSandboxRecord({
+        sandboxId: placeholderId,
+        skillPath: skillPathStr,
+        webuiUrl: "",
+        state: "creating",
+      }).catch(() => {});
+
       if (abort.signal.aborted) return;
 
       const skillFiles = await fetchSkillDirectory(resolved);
@@ -130,7 +131,6 @@ export default function SkillPage({
     }
   };
 
-  // [Fix #1] Cancel handler that actually aborts the in-flight launch
   const handleCancel = () => {
     launchAbortRef.current?.abort();
     launchAbortRef.current = null;
@@ -146,19 +146,21 @@ export default function SkillPage({
     setSandboxState("idle");
     setSandboxError(undefined);
     setPhase("config");
-    autoLaunchFired.current = false;
+    userCancelled.current = true;
   };
 
-  // [Fix #2] Auto-launch only when BOTH keys exist
   const hasCompleteConfig = !!(savedConfig?.llmKey && savedConfig?.sandboxKey);
 
   useEffect(() => {
-    if (autoLaunchFired.current || !isSignedIn || keysLoading || !savedConfig) return;
+    if (globalAutoLaunchFired || autoLaunchFired.current || userCancelled.current) return;
+    if (phase !== "config") return;
+    if (!isSignedIn || keysLoading || !savedConfig) return;
     if (!savedConfig.llmKey || !savedConfig.sandboxKey) return;
     const provider = getProvider(savedConfig.providerId);
     if (!provider) return;
 
     autoLaunchFired.current = true;
+    globalAutoLaunchFired = true;
     void handleLaunch({
       provider,
       model: savedConfig.model,
@@ -166,9 +168,8 @@ export default function SkillPage({
       sandboxKey: savedConfig.sandboxKey,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSignedIn, keysLoading, savedConfig]);
+  }, [isSignedIn, keysLoading, savedConfig, phase]);
 
-  // [Fix #1] Clean up on page unload -- includes in-flight launches
   useEffect(() => {
     const cleanup = () => {
       launchAbortRef.current?.abort();
@@ -179,7 +180,7 @@ export default function SkillPage({
     window.addEventListener("beforeunload", cleanup);
     return () => {
       window.removeEventListener("beforeunload", cleanup);
-      cleanup();
+      globalAutoLaunchFired = false;
     };
   }, []);
 
@@ -197,7 +198,7 @@ export default function SkillPage({
     sessionRef.current = null;
     setSandboxState("idle");
     setPhase("config");
-    autoLaunchFired.current = false;
+    userCancelled.current = true;
   };
 
   const handleRetryLaunch = () => {
@@ -222,9 +223,8 @@ export default function SkillPage({
     );
   }
 
-  // [Fix #2] Determine what to show in config phase
-  const needsOnboarding = isSignedIn && !keysLoading && !hasCompleteConfig;
-  const readyToAutoLaunch = isSignedIn && !keysLoading && hasCompleteConfig;
+  const needsOnboarding = isSignedIn && !keysLoading && !hasCompleteConfig && !userCancelled.current;
+  const readyToAutoLaunch = isSignedIn && !keysLoading && hasCompleteConfig && !userCancelled.current && !autoLaunchFired.current;
 
   return (
     <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
@@ -260,14 +260,20 @@ export default function SkillPage({
             </div>
           )}
 
-          {/* [Fix #2] Show onboarding when ANY key is missing, not just llmKey */}
           {phase === "config" && needsOnboarding && (
             <OnboardingModal onComplete={() => {
               window.location.reload();
             }} />
           )}
 
-          {/* Show spinner while auto-launch is about to fire */}
+          {/* Show config after user cancels */}
+          {phase === "config" && isSignedIn && !keysLoading && userCancelled.current && (
+            <ConfigPanel
+              onLaunch={handleLaunch}
+              onBack={() => { window.location.href = "/"; }}
+            />
+          )}
+
           {phase === "config" && readyToAutoLaunch && (
             <div className="flex items-center justify-center py-20">
               <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
