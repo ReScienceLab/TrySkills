@@ -36,6 +36,7 @@ export default function SkillPage({
   const [session, setSession] = useState<SandboxSession | null>(null);
   const launchConfigRef = useRef<LaunchConfig | null>(null);
   const autoLaunchFired = useRef(false);
+  const sessionRef = useRef<SandboxSession | null>(null);
 
   const handleLaunch = async (config: LaunchConfig) => {
     launchConfigRef.current = config;
@@ -59,6 +60,7 @@ export default function SkillPage({
       );
 
       setSession(result);
+      sessionRef.current = result;
       setSandboxState("running");
       setPhase("running");
 
@@ -89,16 +91,15 @@ export default function SkillPage({
 
   useEffect(() => {
     const cleanup = () => {
-      if (session && launchConfigRef.current) {
-        destroySandbox(launchConfigRef.current.sandboxKey, session.sandboxId).catch(() => {});
+      if (sessionRef.current && launchConfigRef.current) {
+        destroySandbox(launchConfigRef.current.sandboxKey, sessionRef.current.sandboxId).catch(() => {});
       }
     };
     window.addEventListener("beforeunload", cleanup);
     return () => {
       window.removeEventListener("beforeunload", cleanup);
-      cleanup();
     };
-  }, [session]);
+  }, []);
 
   const handleStop = async () => {
     if (session && launchConfigRef.current) {
@@ -110,6 +111,7 @@ export default function SkillPage({
       }
     }
     setSession(null);
+    sessionRef.current = null;
     setSandboxState("idle");
     setPhase("config");
   };
