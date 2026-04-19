@@ -57,7 +57,7 @@ export function SkillTree({
   resolvedPath: string;
 }) {
   return (
-    <div className="border border-white/10 bg-white/[0.02] backdrop-blur-sm">
+    <div className="border border-white/20 bg-black/40 backdrop-blur-sm">
       <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
         <span className="font-mono text-xs text-white/50">
           {resolvedPath}

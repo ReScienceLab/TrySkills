@@ -24,8 +24,8 @@ export function LaunchProgress({
 
   return (
     <div className="animate-fade-in">
-      <div className="card p-8">
-        <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-8">
+      <div className="border border-white/20 bg-black/40 backdrop-blur-sm p-8">
+        <h2 className="text-lg font-semibold text-white/90 mb-8">
           Launching Agent Session
         </h2>
 
@@ -39,10 +39,10 @@ export function LaunchProgress({
               <div key={step.key} className="flex items-center gap-4">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-all ${
                   isDone
-                    ? "bg-[var(--success)] text-white"
+                    ? "bg-green-500 text-white"
                     : isActive
-                      ? "bg-[var(--accent)] text-white"
-                      : "bg-[var(--bg-tertiary)] text-[var(--text-muted)]"
+                      ? "bg-blue-500 text-white"
+                      : "bg-white/10 text-white/30"
                 }`}>
                   {isDone ? (
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -56,11 +56,11 @@ export function LaunchProgress({
                 </div>
                 <span className={`text-sm transition-colors ${
                   isDone
-                    ? "text-[var(--text-muted)]"
+                    ? "text-white/40"
                     : isActive
-                      ? "text-[var(--text-primary)] font-medium"
+                      ? "text-white font-medium"
                       : isPending
-                        ? "text-[var(--text-muted)]"
+                        ? "text-white/30"
                         : ""
                 }`}>
                   {step.label}
@@ -71,9 +71,9 @@ export function LaunchProgress({
         </div>
 
         {state === "error" && (
-          <div className="mb-6 p-4 rounded-lg bg-[var(--error)]/10 border border-[var(--error)]/20">
-            <div className="text-sm text-[var(--error)] font-medium mb-1">Launch failed</div>
-            <div className="text-sm text-[var(--text-secondary)]">{error || "Unknown error"}</div>
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20">
+            <div className="text-sm text-red-400 font-medium mb-1">Launch failed</div>
+            <div className="text-sm text-white/60">{error || "Unknown error"}</div>
           </div>
         )}
 
@@ -82,13 +82,13 @@ export function LaunchProgress({
             <>
               <button
                 onClick={onRetry}
-                className="flex-1 py-3 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-sm font-medium transition-all"
+                className="flex-1 py-3 bg-white text-black text-sm font-medium hover:bg-white/90 transition-all"
               >
                 Retry
               </button>
               <button
                 onClick={onCancel}
-                className="px-6 py-3 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] text-sm font-medium transition-all"
+                className="px-6 py-3 bg-white/10 text-white/60 hover:bg-white/15 text-sm font-medium transition-all"
               >
                 Cancel
               </button>
@@ -96,7 +96,7 @@ export function LaunchProgress({
           ) : (
             <button
               onClick={onCancel}
-              className="w-full py-3 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] text-sm font-medium transition-all"
+              className="w-full py-3 bg-white/10 text-white/60 hover:bg-white/15 text-sm font-medium transition-all"
             >
               Cancel
             </button>

@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { ConfigPanel, type LaunchConfig } from "@/components/config-panel";
 import { LaunchProgress } from "@/components/launch-progress";
 import { SessionControl } from "@/components/session-control";
+import { GlowMesh } from "@/components/glow-mesh";
 import { resolveSkillPath, fetchSkillDirectory } from "@/lib/skill/resolver";
 import { createHermesSandbox, destroySandbox } from "@/lib/sandbox/daytona";
 import { loadConfig } from "@/lib/key-store";
@@ -17,15 +18,15 @@ type AppPhase = "config" | "launching" | "running";
 
 function Header({ owner, repo, skillName }: { owner: string; repo: string; skillName: string }) {
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-lg border-b border-[var(--border)]">
+    <header className="fixed top-0 left-0 right-0 z-50">
       <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5">
           <Image src="/logo.svg" alt="TrySkills.sh" width={28} height={28} />
-          <span className="font-semibold text-sm text-[var(--text-primary)] tracking-tight">
-            tryskills<span className="text-[var(--accent)]">.sh</span>
+          <span className="text-white/90 text-sm font-semibold tracking-tight">
+            tryskills<span className="text-blue-400">.sh</span>
           </span>
         </Link>
-        <div className="font-mono text-xs text-[var(--text-muted)]">
+        <div className="font-mono text-xs text-white/40">
           {owner}/{repo}/{skillName}
         </div>
       </div>
@@ -47,7 +48,6 @@ export default function SkillPage({
   const { owner, repo, skillName } = resolved;
   const isValidPath = !!(owner && repo && skillName);
 
-  // Check if we can auto-launch (keys available from homepage)
   const canAutoLaunch = useMemo(() => {
     if (!autoLaunch || !isValidPath) return false;
     if (typeof window === "undefined") return false;
@@ -95,7 +95,6 @@ export default function SkillPage({
     }
   };
 
-  // Auto-launch when coming from homepage with ?launch=1
   useEffect(() => {
     if (!canAutoLaunch || autoLaunchFired.current) return;
     autoLaunchFired.current = true;
@@ -147,15 +146,16 @@ export default function SkillPage({
 
   if (!isValidPath) {
     return (
-      <main className="min-h-screen bg-[var(--bg-primary)]">
+      <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
+        <GlowMesh />
         <Header owner="" repo="" skillName="" />
-        <div className="relative z-10 pt-24 pb-12 max-w-3xl mx-auto px-6">
-          <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
-            <div className="text-[var(--text-primary)] font-semibold mb-2">Invalid skill path</div>
-            <div className="text-[var(--text-secondary)] text-sm mb-6">
+        <div className="flex-1 flex items-center justify-center relative z-10 px-6">
+          <div className="flex flex-col items-center animate-fade-in">
+            <div className="text-white font-semibold mb-2">Invalid skill path</div>
+            <div className="text-white/50 text-sm mb-6">
               Expected format: /owner/repo/skill-name
             </div>
-            <Link href="/" className="px-6 py-3 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-sm font-medium transition-all">
+            <Link href="/" className="px-6 py-3 bg-white text-black text-sm font-medium hover:bg-white/90 transition-colors">
               Go home
             </Link>
           </div>
@@ -165,36 +165,39 @@ export default function SkillPage({
   }
 
   return (
-    <main className="min-h-screen bg-[var(--bg-primary)]">
+    <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
+      <GlowMesh />
       <Header owner={owner} repo={repo} skillName={skillName} />
 
-      <div className="relative z-10 pt-24 pb-12 max-w-3xl mx-auto px-6">
-        {phase === "config" && (
-          <ConfigPanel
-            onLaunch={handleLaunch}
-            onBack={() => { window.location.href = "/"; }}
-          />
-        )}
+      <div className="flex-1 flex items-center justify-center relative z-10 px-6">
+        <div className="w-full max-w-[640px]">
+          {phase === "config" && (
+            <ConfigPanel
+              onLaunch={handleLaunch}
+              onBack={() => { window.location.href = "/"; }}
+            />
+          )}
 
-        {phase === "launching" && (
-          <LaunchProgress
-            state={sandboxState}
-            error={sandboxError}
-            onRetry={handleRetryLaunch}
-            onCancel={() => {
-              handleStop();
-              setPhase("config");
-            }}
-          />
-        )}
+          {phase === "launching" && (
+            <LaunchProgress
+              state={sandboxState}
+              error={sandboxError}
+              onRetry={handleRetryLaunch}
+              onCancel={() => {
+                handleStop();
+                setPhase("config");
+              }}
+            />
+          )}
 
-        {phase === "running" && session && (
-          <SessionControl
-            webuiUrl={session.webuiUrl}
-            startedAt={session.startedAt}
-            onStop={handleStop}
-          />
-        )}
+          {phase === "running" && session && (
+            <SessionControl
+              webuiUrl={session.webuiUrl}
+              startedAt={session.startedAt}
+              onStop={handleStop}
+            />
+          )}
+        </div>
       </div>
     </main>
   );

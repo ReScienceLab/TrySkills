@@ -72,30 +72,30 @@ export function ConfigPanel({
     <div className="animate-fade-in">
       <button
         onClick={onBack}
-        className="flex items-center gap-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors mb-6"
+        className="flex items-center gap-2 text-sm text-white/40 hover:text-white/70 transition-colors mb-6"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
         </svg>
-        Back to preview
+        Back
       </button>
 
-      <div className="card p-8 mb-6">
-        <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-6">
-          LLM Provider
-        </h2>
-        <div className="space-y-5">
+      <div className="border border-white/20 bg-black/40 backdrop-blur-sm mb-4">
+        <div className="px-6 py-5 border-b border-white/10">
+          <h2 className="text-base font-semibold text-white/90">LLM Provider</h2>
+        </div>
+        <div className="px-6 py-5 space-y-5">
           <div>
-            <label className="block text-sm text-[var(--text-secondary)] mb-2">Provider</label>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">Provider</label>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-1">
               {PROVIDERS.map((p) => (
                 <button
                   key={p.id}
                   onClick={() => handleProviderChange(p.id)}
-                  className={`px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  className={`px-3 py-2 text-xs font-medium transition-all ${
                     provider.id === p.id
-                      ? "bg-[var(--accent)] text-white"
-                      : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+                      ? "bg-white text-black"
+                      : "bg-white/5 text-white/60 hover:bg-white/10"
                   }`}
                 >
                   {p.name}
@@ -105,22 +105,22 @@ export function ConfigPanel({
           </div>
 
           <div>
-            <label className="block text-sm text-[var(--text-secondary)] mb-2">Model</label>
+            <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">Model</label>
             <select
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              className="w-full px-4 py-3 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] outline-none transition-colors text-sm"
+              className="w-full px-4 py-2.5 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors appearance-none cursor-pointer"
             >
               {provider.models.map((m) => (
-                <option key={m} value={m}>{m}</option>
+                <option key={m} value={m} className="bg-[#111] text-white">{m}</option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="block text-sm text-[var(--text-secondary)] mb-2">
+            <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
               API Key
-              <a href={provider.keyUrl} target="_blank" rel="noopener noreferrer" className="ml-2 text-[var(--accent)] hover:underline">
+              <a href={provider.keyUrl} target="_blank" rel="noopener noreferrer" className="ml-2 text-blue-400 hover:underline normal-case tracking-normal">
                 Get a key &rarr;
               </a>
             </label>
@@ -130,11 +130,11 @@ export function ConfigPanel({
                 value={llmKey}
                 onChange={(e) => setLlmKey(e.target.value)}
                 placeholder={`${provider.keyPrefix}...`}
-                className="w-full px-4 py-3 pr-12 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] outline-none transition-colors font-mono text-sm"
+                className="w-full px-4 py-2.5 pr-12 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors placeholder:text-white/20"
               />
               <button
                 onClick={() => setShowLlmKey(!showLlmKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors text-xs"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors text-xs"
               >
                 {showLlmKey ? "Hide" : "Show"}
               </button>
@@ -143,73 +143,62 @@ export function ConfigPanel({
         </div>
       </div>
 
-      <div className="card p-8 mb-6">
-        <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-6">Sandbox</h2>
-        <div className="space-y-5">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="px-3 py-1.5 rounded-lg bg-[var(--accent)] text-white text-sm font-medium">Daytona</div>
-            <span className="text-xs text-[var(--text-muted)]">Free tier: $200 credits</span>
+      <div className="border border-white/20 bg-black/40 backdrop-blur-sm mb-4">
+        <div className="px-6 py-5 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <h2 className="text-base font-semibold text-white/90">Sandbox</h2>
+            <span className="text-xs text-white/30">Daytona &middot; $200 free credits</span>
           </div>
-          <div>
-            <label className="block text-sm text-[var(--text-secondary)] mb-2">
-              Daytona API Key
-              <a href="https://app.daytona.io/dashboard/keys" target="_blank" rel="noopener noreferrer" className="ml-2 text-[var(--accent)] hover:underline">
-                Get a key &rarr;
-              </a>
-            </label>
-            <div className="relative">
-              <input
-                type={showSandboxKey ? "text" : "password"}
-                value={sandboxKey}
-                onChange={(e) => setSandboxKey(e.target.value)}
-                placeholder="daytona-..."
-                className="w-full px-4 py-3 pr-12 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border)] focus:border-[var(--accent)] outline-none transition-colors font-mono text-sm"
-              />
-              <button
-                onClick={() => setShowSandboxKey(!showSandboxKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors text-xs"
-              >
-                {showSandboxKey ? "Hide" : "Show"}
-              </button>
-            </div>
+        </div>
+        <div className="px-6 py-5">
+          <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
+            Daytona API Key
+            <a href="https://app.daytona.io/dashboard/keys" target="_blank" rel="noopener noreferrer" className="ml-2 text-blue-400 hover:underline normal-case tracking-normal">
+              Get a key &rarr;
+            </a>
+          </label>
+          <div className="relative">
+            <input
+              type={showSandboxKey ? "text" : "password"}
+              value={sandboxKey}
+              onChange={(e) => setSandboxKey(e.target.value)}
+              placeholder="daytona-..."
+              className="w-full px-4 py-2.5 pr-12 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors placeholder:text-white/20"
+            />
+            <button
+              onClick={() => setShowSandboxKey(!showSandboxKey)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors text-xs"
+            >
+              {showSandboxKey ? "Hide" : "Show"}
+            </button>
           </div>
         </div>
       </div>
 
-      <div className="card p-5 mb-6">
+      <div className="border border-white/10 bg-black/20 px-5 py-3 mb-4">
         <label className="flex items-center gap-3 cursor-pointer">
           <input
             type="checkbox"
             checked={rememberKeys}
             onChange={(e) => setRememberKeys(e.target.checked)}
-            className="w-4 h-4 accent-[var(--accent)] rounded"
+            className="w-4 h-4 accent-blue-500 rounded"
           />
           <div>
-            <span className="text-sm text-[var(--text-primary)]">Remember my keys</span>
-            <span className="block text-xs text-[var(--text-muted)]">
+            <span className="text-sm text-white/70">Remember my keys</span>
+            <span className="block text-xs text-white/30">
               Stored in localStorage &mdash; never sent to any server
             </span>
           </div>
         </label>
       </div>
 
-      <div className="card p-5 mb-6">
-        <div className="flex items-center gap-3">
-          <div className="text-sm text-[var(--text-secondary)]">
-            Estimated cost per session:{" "}
-            <span className="text-[var(--accent)] font-medium">~$0.02&ndash;0.10</span>
-            <span className="text-[var(--text-muted)]"> depending on model and usage</span>
-          </div>
-        </div>
-      </div>
-
       <button
         onClick={handleLaunch}
         disabled={!isReady}
-        className={`w-full py-4 rounded-xl font-semibold text-lg transition-all duration-200 active:scale-[0.98] ${
+        className={`w-full py-3 text-sm font-medium transition-all ${
           isReady
-            ? "bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white hover:shadow-xl hover:shadow-[var(--accent)]/20 shadow-sm"
-            : "bg-[var(--bg-elevated)] text-[var(--text-muted)] cursor-not-allowed"
+            ? "bg-white text-black hover:bg-white/90"
+            : "bg-white/10 text-white/30 cursor-not-allowed"
         }`}
       >
         {isReady ? "Launch Agent" : "Enter API keys to launch"}
