@@ -547,7 +547,7 @@ function ConfigPanel({
             </div>
             {!sandboxKey && (
               <a
-                href="https://app.daytona.io"
+                href="https://app.daytona.io/dashboard/keys"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 mt-2 px-3 py-2 bg-white/5 border border-dashed border-white/15 text-xs text-white/50 hover:text-white/80 hover:border-white/30 transition-all"
@@ -565,11 +565,11 @@ function ConfigPanel({
                     d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
                   />
                 </svg>
-                Don&apos;t have one? Get a free Daytona sandbox key at{" "}
+                Don&apos;t have one? Get a free Daytona API key at{" "}
                 <span className="text-white/70 underline underline-offset-2">
-                  app.daytona.io
+                  app.daytona.io/dashboard/keys
                 </span>
-                <span className="ml-auto text-white/30">100 free hrs/mo</span>
+                <span className="ml-auto text-white/30">$200 free credits</span>
               </a>
             )}
           </div>

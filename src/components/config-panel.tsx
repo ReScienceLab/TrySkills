@@ -153,7 +153,7 @@ export function ConfigPanel({
           <div>
             <label className="block text-sm text-[var(--text-secondary)] mb-2">
               Daytona API Key
-              <a href="https://app.daytona.io" target="_blank" rel="noopener noreferrer" className="ml-2 text-[var(--accent)] hover:underline">
+              <a href="https://app.daytona.io/dashboard/keys" target="_blank" rel="noopener noreferrer" className="ml-2 text-[var(--accent)] hover:underline">
                 Get a key &rarr;
               </a>
             </label>
