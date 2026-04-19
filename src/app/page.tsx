@@ -278,7 +278,7 @@ function Header() {
             Docs
           </a>
           <a
-            href="https://github.com/anthropics/tryskills.sh"
+            href="https://github.com/ReScienceLab/TrySkills"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 text-sm text-white/60 hover:text-white transition-colors"
@@ -342,7 +342,7 @@ function Footer() {
             Specification
           </a>
           <a
-            href="https://github.com/anthropics/tryskills.sh"
+            href="https://github.com/ReScienceLab/TrySkills"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 text-sm text-white/50 hover:text-white/80 transition-colors"
