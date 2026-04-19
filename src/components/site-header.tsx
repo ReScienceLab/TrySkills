@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { SignInButton, UserButton, Show } from "@clerk/nextjs";
 
 export function SiteHeader({ breadcrumb }: { breadcrumb?: string }) {
   return (
@@ -51,6 +52,23 @@ export function SiteHeader({ breadcrumb }: { breadcrumb?: string }) {
               </svg>
               <span className="hidden sm:inline">GitHub</span>
             </a>
+
+            <Show when="signed-out">
+              <SignInButton mode="modal">
+                <button className="text-sm text-white/60 hover:text-white transition-colors">
+                  Sign in
+                </button>
+              </SignInButton>
+            </Show>
+            <Show when="signed-in">
+              <UserButton
+                appearance={{
+                  elements: {
+                    avatarBox: "w-7 h-7",
+                  },
+                }}
+              />
+            </Show>
           </nav>
         </div>
       </div>

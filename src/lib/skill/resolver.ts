@@ -1,3 +1,5 @@
+import { githubFetch } from "@/lib/github-fetch";
+
 export interface SkillMeta {
   name: string;
   description: string;
@@ -114,9 +116,8 @@ async function searchSkillInRepo(
 ): Promise<string | null> {
   for (const branch of ["main", "master"]) {
     try {
-      const treeRes = await fetch(
+      const treeRes = await githubFetch(
         `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`,
-        { headers: { Accept: "application/vnd.github.v3+json" } },
       );
       if (!treeRes.ok) continue;
 
@@ -148,7 +149,8 @@ async function searchSkillInRepo(
         const res = await fetch(rawUrl);
         if (res.ok) return res.text();
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && err.name === "GitHubRateLimitError") throw err;
       continue;
     }
   }
@@ -178,9 +180,7 @@ export async function fetchSkillDirectory(
     for (const apiUrl of buildDirectoryCandidateUrls(owner, repo, skillName, branch)) {
       try {
         const files: SkillFile[] = [];
-        const res = await fetch(apiUrl, {
-          headers: { Accept: "application/vnd.github.v3+json" },
-        });
+        const res = await githubFetch(apiUrl);
         if (!res.ok) continue;
 
         const data = await res.json();
@@ -205,7 +205,8 @@ export async function fetchSkillDirectory(
         }
 
         if (files.length > 0) return files;
-      } catch {
+      } catch (err) {
+        if (err instanceof Error && err.name === "GitHubRateLimitError") throw err;
         continue;
       }
     }
@@ -214,9 +215,8 @@ export async function fetchSkillDirectory(
   // Fallback: search via tree API and fetch the directory
   for (const branch of ["main", "master"]) {
     try {
-      const treeRes = await fetch(
+      const treeRes = await githubFetch(
         `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`,
-        { headers: { Accept: "application/vnd.github.v3+json" } },
       );
       if (!treeRes.ok) continue;
 
@@ -247,7 +247,8 @@ export async function fetchSkillDirectory(
         }
         if (files.length > 0) return files;
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && err.name === "GitHubRateLimitError") throw err;
       continue;
     }
   }

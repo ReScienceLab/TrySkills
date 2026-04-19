@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useMemo, useRef, use } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useAuth } from "@clerk/nextjs";
+import { SignInButton } from "@clerk/nextjs";
 import { ConfigPanel, type LaunchConfig } from "@/components/config-panel";
 import { LaunchProgress } from "@/components/launch-progress";
 import { SessionControl } from "@/components/session-control";
@@ -10,8 +11,6 @@ import { GlowMesh } from "@/components/glow-mesh";
 import { SiteHeader } from "@/components/site-header";
 import { resolveSkillPath, fetchSkillDirectory } from "@/lib/skill/resolver";
 import { createHermesSandbox, destroySandbox } from "@/lib/sandbox/daytona";
-import { loadConfig } from "@/lib/key-store";
-import { getProvider } from "@/lib/providers/registry";
 import type { SandboxState, SandboxSession } from "@/lib/sandbox/types";
 
 type AppPhase = "config" | "launching" | "running";
@@ -23,8 +22,7 @@ export default function SkillPage({
 }) {
   const resolvedParams = use(params);
   const { skillPath } = resolvedParams;
-  const searchParams = useSearchParams();
-  const autoLaunch = searchParams.get("launch") === "1";
+  const { isSignedIn, isLoaded: authLoaded } = useAuth();
 
   const resolved = useMemo(() => resolveSkillPath(skillPath), [skillPath]);
   const { owner, repo, skillName } = resolved;
@@ -35,7 +33,6 @@ export default function SkillPage({
   const [sandboxError, setSandboxError] = useState<string | undefined>();
   const [session, setSession] = useState<SandboxSession | null>(null);
   const launchConfigRef = useRef<LaunchConfig | null>(null);
-  const autoLaunchFired = useRef(false);
   const sessionRef = useRef<SandboxSession | null>(null);
 
   const handleLaunch = async (config: LaunchConfig) => {
@@ -70,24 +67,6 @@ export default function SkillPage({
       setSandboxError(err instanceof Error ? err.message : "Launch failed");
     }
   };
-
-  useEffect(() => {
-    if (!autoLaunch || !isValidPath || autoLaunchFired.current) return;
-    autoLaunchFired.current = true;
-
-    const saved = loadConfig();
-    if (!saved || !saved.llmKey || !saved.sandboxKey) return;
-    const provider = getProvider(saved.providerId);
-    if (!provider) return;
-
-    handleLaunch({
-      provider,
-      model: saved.model,
-      llmKey: saved.llmKey,
-      sandboxKey: saved.sandboxKey,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoLaunch, isValidPath]);
 
   useEffect(() => {
     const cleanup = () => {
@@ -149,7 +128,32 @@ export default function SkillPage({
 
       <div className="flex-1 flex items-center justify-center relative z-10 px-6">
         <div className="w-full max-w-[640px]">
-          {phase === "config" && (
+          {phase === "config" && !isSignedIn && authLoaded && (
+            <div className="animate-fade-in">
+              <div className="border border-white/20 bg-black/40 backdrop-blur-sm p-8 text-center">
+                <svg className="w-10 h-10 mx-auto mb-4 text-white/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                </svg>
+                <h2 className="text-lg font-semibold text-white/90 mb-2">Sign in to continue</h2>
+                <p className="text-sm text-white/50 mb-6">
+                  Sign in with GitHub to configure and launch your agent session. Your API keys will be encrypted and saved for next time.
+                </p>
+                <SignInButton mode="modal">
+                  <button className="px-6 py-3 bg-white text-black text-sm font-medium hover:bg-white/90 transition-all">
+                    Sign in with GitHub
+                  </button>
+                </SignInButton>
+              </div>
+            </div>
+          )}
+
+          {phase === "config" && !authLoaded && (
+            <div className="flex items-center justify-center py-20">
+              <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
+            </div>
+          )}
+
+          {phase === "config" && isSignedIn && (
             <ConfigPanel
               onLaunch={handleLaunch}
               onBack={() => { window.location.href = "/"; }}

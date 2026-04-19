@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
+import { useAuth } from "@clerk/nextjs";
+import { SignInButton } from "@clerk/nextjs";
 import { parseSkillUrl } from "@/lib/skill/url-parser";
 import { fetchSkillTree, type TreeNode } from "@/lib/skill/tree";
 import { SkillTree } from "@/components/skill-tree";
 import { GlowMesh } from "@/components/glow-mesh";
 import { SiteHeader } from "@/components/site-header";
+import { GitHubRateLimitError } from "@/lib/github-fetch";
+import { useKeyStore } from "@/hooks/use-key-store";
 
 const PROVIDERS = [
   {
@@ -111,41 +115,31 @@ function Footer() {
   );
 }
 
-function getHomepageInitialConfig() {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem("tryskills-config");
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-function ConfigPanel({
+function HomeConfigPanel({
   skillUrl,
   onBack,
 }: {
   skillUrl: string;
   onBack: () => void;
 }) {
-  const [provider, setProvider] = useState(() => {
-    const saved = getHomepageInitialConfig();
-    if (saved?.providerId) {
-      const p = PROVIDERS.find((p) => p.id === saved.providerId);
-      if (p) return p;
-    }
-    return PROVIDERS[0];
-  });
-  const [model, setModel] = useState(() => {
-    const saved = getHomepageInitialConfig();
-    if (saved?.model) return saved.model;
-    return PROVIDERS[0].models[0];
-  });
-  const [llmKey, setLlmKey] = useState(() => getHomepageInitialConfig()?.llmKey || "");
-  const [sandboxKey, setSandboxKey] = useState(() => getHomepageInitialConfig()?.sandboxKey || "");
+  const { config: savedConfig, loading } = useKeyStore();
+
+  const [provider, setProvider] = useState(PROVIDERS[0]);
+  const [model, setModel] = useState(PROVIDERS[0].models[0]);
+  const [llmKey, setLlmKey] = useState("");
+  const [sandboxKey, setSandboxKey] = useState("");
   const [showLlmKey, setShowLlmKey] = useState(false);
   const [showSandboxKey, setShowSandboxKey] = useState(false);
+
+  // Hydrate from saved config
+  useEffect(() => {
+    if (!savedConfig) return;
+    const p = PROVIDERS.find((p) => p.id === savedConfig.providerId) || PROVIDERS[0];
+    setProvider(p);
+    setModel(savedConfig.model || p.models[0]);
+    setLlmKey(savedConfig.llmKey || "");
+    setSandboxKey(savedConfig.sandboxKey || "");
+  }, [savedConfig]);
 
   const handleProviderChange = (id: string) => {
     const p = PROVIDERS.find((p) => p.id === id);
@@ -158,18 +152,9 @@ function ConfigPanel({
   const isReady = llmKey.length > 5 && sandboxKey.length > 5;
 
   const handleLaunch = () => {
-    localStorage.setItem(
-      "tryskills-config",
-      JSON.stringify({
-        providerId: provider.id,
-        model,
-        llmKey,
-        sandboxKey,
-      }),
-    );
     const parsed = parseSkillUrl(skillUrl);
     if (!parsed) return;
-    window.location.href = `${parsed}?launch=1`;
+    window.location.href = `/${parsed}`;
   };
 
   return (
@@ -341,6 +326,7 @@ function ConfigPanel({
 }
 
 export default function Home() {
+  const { isSignedIn, isLoaded: authLoaded } = useAuth();
   const [url, setUrl] = useState("");
   const [phase, setPhase] = useState<"input" | "tree" | "config">("input");
   const [urlError, setUrlError] = useState<string | null>(null);
@@ -349,6 +335,7 @@ export default function Home() {
   const [treeResolvedPath, setTreeResolvedPath] = useState("");
   const [treeLoading, setTreeLoading] = useState(false);
   const [treeError, setTreeError] = useState<string | null>(null);
+  const [isRateLimited, setIsRateLimited] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -382,8 +369,13 @@ export default function Home() {
       } else {
         setTreeError("Could not find skill directory in repository. The skill may still work — proceed to configure.");
       }
-    } catch {
-      setTreeError("Failed to fetch skill structure. The skill may still work — proceed to configure.");
+    } catch (err) {
+      if (err instanceof GitHubRateLimitError) {
+        setIsRateLimited(true);
+        setTreeError(err.message);
+      } else {
+        setTreeError("Failed to fetch skill structure. The skill may still work — proceed to configure.");
+      }
     } finally {
       setTreeLoading(false);
     }
@@ -456,7 +448,7 @@ export default function Home() {
           <div className="w-full max-w-[640px] animate-fade-in-up space-y-4">
             <div className="flex items-center justify-between">
               <button
-                onClick={() => { setPhase("input"); setTreeData(null); setTreeError(null); }}
+                onClick={() => { setPhase("input"); setTreeData(null); setTreeError(null); setIsRateLimited(false); }}
                 className="flex items-center gap-2 text-sm text-white/40 hover:text-white/70 transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -477,25 +469,64 @@ export default function Home() {
             ) : treeData ? (
               <SkillTree tree={treeData} skillName={skillName} resolvedPath={treeResolvedPath} />
             ) : treeError ? (
-              <div className="border border-yellow-500/20 bg-yellow-500/5 px-4 py-3">
-                <span className="text-xs text-yellow-400/80 font-mono">{treeError}</span>
+              <div className={`border px-4 py-3 ${isRateLimited ? "border-red-500/30 bg-red-500/10" : "border-yellow-500/20 bg-yellow-500/5"}`}>
+                <span className={`text-xs font-mono ${isRateLimited ? "text-red-400" : "text-yellow-400/80"}`}>{treeError}</span>
+                {isRateLimited && !isSignedIn && (
+                  <div className="mt-3 flex items-center gap-3">
+                    <SignInButton mode="modal">
+                      <button className="px-3 py-1.5 bg-white text-black text-xs font-medium hover:bg-white/90 transition-colors">
+                        Sign in with GitHub
+                      </button>
+                    </SignInButton>
+                    <span className="text-xs text-white/30">to increase API limits</span>
+                  </div>
+                )}
+                {isRateLimited && isSignedIn && (
+                  <div className="mt-2">
+                    <span className="text-xs text-white/40">
+                      Please wait a few minutes and try again.
+                    </span>
+                  </div>
+                )}
               </div>
             ) : null}
 
-            <button
-              onClick={() => setPhase("config")}
-              disabled={treeLoading}
-              className={`w-full py-3 text-sm font-medium transition-all ${
-                treeLoading
-                  ? "bg-white/10 text-white/30 cursor-not-allowed"
-                  : "bg-white text-black hover:bg-white/90"
-              }`}
-            >
-              Configure & Launch
-            </button>
+            {!authLoaded ? (
+              <button
+                disabled
+                className="w-full py-3 text-sm font-medium bg-white/10 text-white/30 cursor-not-allowed transition-all"
+              >
+                Loading...
+              </button>
+            ) : isSignedIn ? (
+              <button
+                onClick={() => setPhase("config")}
+                disabled={treeLoading}
+                className={`w-full py-3 text-sm font-medium transition-all ${
+                  treeLoading
+                    ? "bg-white/10 text-white/30 cursor-not-allowed"
+                    : "bg-white text-black hover:bg-white/90"
+                }`}
+              >
+                Configure & Launch
+              </button>
+            ) : (
+              <SignInButton mode="modal">
+                <button
+                  disabled={treeLoading}
+                  className={`w-full py-3 text-sm font-medium transition-all ${
+                    treeLoading
+                      ? "bg-white/10 text-white/30 cursor-not-allowed"
+                      : "bg-white text-black hover:bg-white/90"
+                  }`}
+                >
+                  Sign in to Configure & Launch
+                </button>
+              </SignInButton>
+            )}
           </div>
         ) : (
-          <ConfigPanel skillUrl={url} onBack={() => setPhase("tree")} />
+          <HomeConfigPanel skillUrl={url} onBack={() => setPhase("tree")} />
         )}
       </div>
 

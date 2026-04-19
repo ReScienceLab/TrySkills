@@ -1,3 +1,5 @@
+import { githubFetch } from "@/lib/github-fetch";
+
 export interface TreeNode {
   name: string;
   type: "file" | "dir";
@@ -10,48 +12,78 @@ export async function fetchSkillTree(
   skillName: string,
 ): Promise<{ tree: TreeNode[]; resolvedPath: string } | null> {
   for (const branch of ["main", "master"]) {
-    const treeRes = await fetch(
+    const treeRes = await githubFetch(
       `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`,
-      { headers: { Accept: "application/vnd.github.v3+json" } },
-    ).catch(() => null);
+    ).catch((err) => {
+      if (err.name === "GitHubRateLimitError") throw err;
+      return null;
+    });
 
     if (!treeRes || !treeRes.ok) continue;
 
     const data = await treeRes.json();
     const items = (data.tree || []) as { path: string; type: string }[];
 
-    // Find the skill directory: try exact match first, then common prefixes
-    const candidatePrefixes = [
-      `${skillName}/`,
-      `skills/${skillName}/`,
-      `${repo}/${skillName}/`,
-      `.agents/skills/${skillName}/`,
-      `.claude/skills/${skillName}/`,
-      `plugin/skills/${skillName}/`,
-    ];
-
-    // Also try stripped name variants
-    const strippedNames: string[] = [];
-    for (const prefix of [owner, repo]) {
-      if (skillName.startsWith(`${prefix}-`) && skillName.length > prefix.length + 1) {
-        strippedNames.push(skillName.slice(prefix.length + 1));
-      }
-    }
-    for (const stripped of strippedNames) {
-      candidatePrefixes.push(`skills/${stripped}/`);
-      candidatePrefixes.push(`${stripped}/`);
-    }
-
-    for (const prefix of candidatePrefixes) {
+    const dir = findSkillDir(items, owner, repo, skillName);
+    if (dir) {
+      const prefix = dir + "/";
       const matching = items.filter(
-        (item) => item.path.startsWith(prefix) && item.path !== prefix.slice(0, -1),
+        (item) => item.path.startsWith(prefix) && item.path !== dir,
       );
-
       if (matching.length > 0) {
         const tree = buildTree(matching, prefix);
-        return { tree, resolvedPath: `${owner}/${repo}/${branch}/${prefix.slice(0, -1)}` };
+        return { tree, resolvedPath: `${owner}/${repo}/${branch}/${dir}` };
       }
     }
+  }
+
+  return null;
+}
+
+function findSkillDir(
+  items: { path: string; type: string }[],
+  owner: string,
+  repo: string,
+  skillName: string,
+): string | null {
+  // Collect all SKILL.md paths and their parent directories
+  const skillDirs = items
+    .filter((i) => i.path.endsWith("/SKILL.md") || i.path === "SKILL.md")
+    .map((i) => {
+      const dir = i.path.replace(/\/SKILL\.md$/, "");
+      const dirName = dir.split("/").pop() || dir;
+      return { dir, dirName };
+    });
+
+  // 1. Exact match: directory name equals skillName
+  const exact = skillDirs.find((d) => d.dirName === skillName);
+  if (exact) return exact.dir;
+
+  // 2. Stripped prefix match: remove owner- or repo- prefix from skillName
+  for (const prefix of [owner, repo]) {
+    if (skillName.startsWith(`${prefix}-`) && skillName.length > prefix.length + 1) {
+      const stripped = skillName.slice(prefix.length + 1);
+      const match = skillDirs.find((d) => d.dirName === stripped);
+      if (match) return match.dir;
+    }
+  }
+
+  // 3. Progressive dash-trim: "remotion-best-practices" -> "remotion-best" -> "remotion"
+  const segments = skillName.split("-");
+  for (let len = segments.length - 1; len >= 1; len--) {
+    const partial = segments.slice(0, len).join("-");
+    const match = skillDirs.find((d) => d.dirName === partial);
+    if (match) return match.dir;
+  }
+
+  // 4. Repo-name as parent directory: "better-auth-best-practices" -> "better-auth/best-practices"
+  const repoPrefix = `${repo}-`;
+  if (skillName.startsWith(repoPrefix)) {
+    const afterRepo = skillName.slice(repoPrefix.length);
+    const match = skillDirs.find(
+      (d) => d.dir === `${repo}/${afterRepo}` || d.dir.endsWith(`/${repo}/${afterRepo}`),
+    );
+    if (match) return match.dir;
   }
 
   return null;
