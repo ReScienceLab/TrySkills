@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, use } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ConfigPanel, type LaunchConfig } from "@/components/config-panel";
 import { LaunchProgress } from "@/components/launch-progress";
 import { SessionControl } from "@/components/session-control";
 import { GlowMesh } from "@/components/glow-mesh";
+import { SiteHeader } from "@/components/site-header";
 import { resolveSkillPath, fetchSkillDirectory } from "@/lib/skill/resolver";
 import { createHermesSandbox, destroySandbox } from "@/lib/sandbox/daytona";
 import { loadConfig } from "@/lib/key-store";
@@ -15,24 +15,6 @@ import { getProvider } from "@/lib/providers/registry";
 import type { SandboxState, SandboxSession } from "@/lib/sandbox/types";
 
 type AppPhase = "config" | "launching" | "running";
-
-function Header({ owner, repo, skillName }: { owner: string; repo: string; skillName: string }) {
-  return (
-    <header className="fixed top-0 left-0 right-0 z-50">
-      <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2.5">
-          <Image src="/logo.svg" alt="TrySkills.sh" width={28} height={28} />
-          <span className="text-white/90 text-sm font-semibold tracking-tight">
-            tryskills<span className="text-blue-400">.sh</span>
-          </span>
-        </Link>
-        <div className="font-mono text-xs text-white/40">
-          {owner}/{repo}/{skillName}
-        </div>
-      </div>
-    </header>
-  );
-}
 
 export default function SkillPage({
   params,
@@ -148,7 +130,7 @@ export default function SkillPage({
     return (
       <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
         <GlowMesh />
-        <Header owner="" repo="" skillName="" />
+        <SiteHeader />
         <div className="flex-1 flex items-center justify-center relative z-10 px-6">
           <div className="flex flex-col items-center animate-fade-in">
             <div className="text-white font-semibold mb-2">Invalid skill path</div>
@@ -167,7 +149,7 @@ export default function SkillPage({
   return (
     <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
       <GlowMesh />
-      <Header owner={owner} repo={repo} skillName={skillName} />
+      <SiteHeader breadcrumb={`${owner}/${repo}/${skillName}`} />
 
       <div className="flex-1 flex items-center justify-center relative z-10 px-6">
         <div className="w-full max-w-[640px]">
