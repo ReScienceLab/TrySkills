@@ -1,11 +1,10 @@
 import type { SandboxConfig, SandboxSession, SandboxState } from "./types";
 
-const IMAGE = "nousresearch/hermes-agent:latest";
 const AUTO_STOP_MINUTES = 60;
 const HEALTH_TIMEOUT_MS = 300_000;
-const HEALTH_POLL_INTERVAL_MS = 3_000;
+const HEALTH_POLL_INTERVAL_MS = 5_000;
 const GATEWAY_PORT = 8642;
-const DASHBOARD_PORT = 9119;
+const WEBUI_PORT = 8787;
 
 export interface SkillFile {
   path: string;
@@ -44,6 +43,27 @@ function buildConfigYaml(model: string, inferenceProvider: string): string {
   ].join("\n");
 }
 
+function buildEnvFile(providerEnvVar: string, apiKey: string): string {
+  return [
+    `${providerEnvVar}=${apiKey}`,
+    "API_SERVER_ENABLED=true",
+    "API_SERVER_CORS_ORIGINS=*",
+    "GATEWAY_ALLOW_ALL_USERS=true",
+    "",
+  ].join("\n");
+}
+
+function buildWebuiEnv(): string {
+  return [
+    "HERMES_WEBUI_AGENT_DIR=$HOME/.hermes/hermes-agent",
+    "HERMES_WEBUI_PYTHON=$HOME/.hermes/hermes-agent/venv/bin/python3",
+    "HERMES_WEBUI_HOST=0.0.0.0",
+    `HERMES_WEBUI_PORT=${WEBUI_PORT}`,
+    "HERMES_HOME=$HOME/.hermes",
+    "",
+  ].join("\n");
+}
+
 export async function createHermesSandbox(
   config: SandboxConfig,
   skillName: string,
@@ -63,7 +83,7 @@ export async function createHermesSandbox(
   onProgress("creating");
   const sandbox = await daytona.create(
     {
-      image: IMAGE,
+      image: "ubuntu:latest",
       ephemeral: true,
       autoStopInterval: AUTO_STOP_MINUTES,
       public: true,
@@ -73,7 +93,7 @@ export async function createHermesSandbox(
         API_SERVER_CORS_ORIGINS: "*",
         GATEWAY_ALLOW_ALL_USERS: "true",
       },
-      resources: { cpu: 2, memory: 4, disk: 8 },
+      resources: { cpu: 4, memory: 8, disk: 30 },
     },
     { timeout: 300 },
   );
@@ -81,46 +101,48 @@ export async function createHermesSandbox(
 
   onProgress("uploading");
 
-  const configYaml = buildConfigYaml(config.llmModel, providerMapping.inferenceProvider);
-  await sandbox.fs.uploadFile(
-    Buffer.from(configYaml),
-    "/opt/data/config.yaml",
-  );
-
-  const envContent = [
-    `${providerMapping.envVar}=${config.llmApiKey}`,
-    "API_SERVER_ENABLED=true",
-    "API_SERVER_CORS_ORIGINS=*",
-    "GATEWAY_ALLOW_ALL_USERS=true",
-    "",
+  const installScript = [
+    "set -e",
+    // Install hermes-agent
+    "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash 2>&1 || true",
+    // Write config
+    `cat > $HOME/.hermes/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
+    `cat > $HOME/.hermes/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider)}\nCFGEOF`,
+    // Clone hermes-webui
+    "git clone --depth 1 https://github.com/nesquena/hermes-webui.git $HOME/hermes-webui 2>&1",
+    `cat > $HOME/hermes-webui/.env << 'WEOF'\n${buildWebuiEnv()}\nWEOF`,
   ].join("\n");
-  await sandbox.fs.uploadFile(
-    Buffer.from(envContent),
-    "/opt/data/.env",
-  );
+
+  await sandbox.process.executeCommand(installScript).catch(() => {});
 
   for (const file of skillFiles) {
-    const destPath = `/opt/data/skills/${skillName}/${file.path}`;
-    await sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
+    const destPath = `$HOME/.hermes/skills/${skillName}/${file.path}`;
+    const dir = destPath.substring(0, destPath.lastIndexOf("/"));
+    await sandbox.process.executeCommand(`mkdir -p "${dir}"`).catch(() => {});
+    await sandbox.fs.uploadFile(Buffer.from(file.content), `/home/daytona/.hermes/skills/${skillName}/${file.path}`);
   }
-
-  await sandbox.process.executeCommand(
-    "chown -R hermes:hermes /opt/data/skills /opt/data/config.yaml /opt/data/.env 2>/dev/null || true",
-  ).catch(() => {});
 
   onProgress("starting");
 
   await sandbox.process.executeCommand(
-    "cd /opt/hermes && nohup /opt/hermes/docker/entrypoint.sh gateway run > /tmp/hermes-gateway.log 2>&1 &",
+    "export PATH=$HOME/.local/bin:$PATH && nohup hermes gateway run > /tmp/hermes-gateway.log 2>&1 &",
   ).catch(() => {});
 
   await sandbox.process.executeCommand(
-    "HERMES_HOME=/opt/data nohup /opt/hermes/.venv/bin/hermes dashboard --host 0.0.0.0 --no-open --insecure > /tmp/hermes-dashboard.log 2>&1 &",
+    [
+      "cd $HOME/hermes-webui",
+      "export HERMES_WEBUI_AGENT_DIR=$HOME/.hermes/hermes-agent",
+      "export HERMES_WEBUI_PYTHON=$HOME/.hermes/hermes-agent/venv/bin/python3",
+      "export HERMES_WEBUI_HOST=0.0.0.0",
+      `export HERMES_WEBUI_PORT=${WEBUI_PORT}`,
+      "export HERMES_HOME=$HOME/.hermes",
+      `nohup $HOME/.hermes/hermes-agent/venv/bin/python3 server.py > /tmp/hermes-webui.log 2>&1 &`,
+    ].join(" && "),
   ).catch(() => {});
 
   await waitForHealth(sandbox);
 
-  const preview = await sandbox.getPreviewLink(DASHBOARD_PORT);
+  const preview = await sandbox.getPreviewLink(WEBUI_PORT);
   const webuiUrl = preview.url + (preview.token ? `?token=${preview.token}` : "");
 
   return {

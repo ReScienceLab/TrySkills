@@ -62,13 +62,15 @@ describe("sandbox/daytona", () => {
 
     expect(mockCreate).toHaveBeenCalledWith(
       expect.objectContaining({
-        image: "nousresearch/hermes-agent:latest",
         ephemeral: true,
         autoStopInterval: 60,
         public: true,
         envVars: expect.objectContaining({
           OPENROUTER_API_KEY: "sk-or-test-key",
+          API_SERVER_ENABLED: "true",
+          GATEWAY_ALLOW_ALL_USERS: "true",
         }),
+        resources: { cpu: 4, memory: 8, disk: 30 },
       }),
       expect.objectContaining({ timeout: 300 }),
     );
@@ -93,7 +95,16 @@ describe("sandbox/daytona", () => {
     expect(progress).toContain("starting");
   });
 
-  it("uploads skill files and config to the correct paths", async () => {
+  it("installs hermes-agent and hermes-webui via executeCommand", async () => {
+    await createHermesSandbox(testConfig, "my-skill", testSkillFiles, () => {});
+
+    const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
+    const installCmd = allCmds.find((c: string) => c.includes("hermes-agent/main/scripts/install.sh"));
+    expect(installCmd).toBeDefined();
+    expect(installCmd).toContain("hermes-webui");
+  });
+
+  it("uploads skill files to ~/.hermes/skills/", async () => {
     await createHermesSandbox(
       testConfig,
       "my-skill",
@@ -104,22 +115,13 @@ describe("sandbox/daytona", () => {
       () => {},
     );
 
-    // config.yaml + .env + 2 skill files = 4 uploads
     expect(mockUploadFile).toHaveBeenCalledWith(
       expect.any(Buffer),
-      "/opt/data/config.yaml",
+      "/home/daytona/.hermes/skills/my-skill/SKILL.md",
     );
     expect(mockUploadFile).toHaveBeenCalledWith(
       expect.any(Buffer),
-      "/opt/data/.env",
-    );
-    expect(mockUploadFile).toHaveBeenCalledWith(
-      expect.any(Buffer),
-      "/opt/data/skills/my-skill/SKILL.md",
-    );
-    expect(mockUploadFile).toHaveBeenCalledWith(
-      expect.any(Buffer),
-      "/opt/data/skills/my-skill/scripts/setup.sh",
+      "/home/daytona/.hermes/skills/my-skill/scripts/setup.sh",
     );
   });
 
@@ -146,6 +148,22 @@ describe("sandbox/daytona", () => {
         expect.anything(),
       );
     }
+  });
+
+  it("starts gateway and hermes-webui", async () => {
+    await createHermesSandbox(testConfig, "test", testSkillFiles, () => {});
+
+    const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
+    const gwCmd = allCmds.find((c: string) => c.includes("hermes gateway run"));
+    const webuiCmd = allCmds.find((c: string) => c.includes("server.py"));
+    expect(gwCmd).toBeDefined();
+    expect(webuiCmd).toBeDefined();
+    expect(webuiCmd).toContain("8787");
+  });
+
+  it("gets preview link on webui port 8787", async () => {
+    await createHermesSandbox(testConfig, "test", testSkillFiles, () => {});
+    expect(mockGetPreviewLink).toHaveBeenCalledWith(8787);
   });
 
   it("appends token to webui URL when present", async () => {
