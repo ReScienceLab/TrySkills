@@ -7,7 +7,7 @@ import { SignInButton } from "@clerk/nextjs";
 import { useConvexAuth } from "convex/react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import { ConfigPanel, type LaunchConfig } from "@/components/config-panel";
+import { type LaunchConfig } from "@/components/config-panel";
 import { LaunchProgress } from "@/components/launch-progress";
 import { SessionControl } from "@/components/session-control";
 import { GlowMesh } from "@/components/glow-mesh";
@@ -16,6 +16,7 @@ import { resolveSkillPath, fetchSkillDirectory } from "@/lib/skill/resolver";
 import { createHermesSandbox, destroySandbox } from "@/lib/sandbox/daytona";
 import { useKeyStore } from "@/hooks/use-key-store";
 import { getProvider } from "@/lib/providers/registry";
+import { OnboardingModal } from "@/components/onboarding-modal";
 import type { SandboxState, SandboxSession } from "@/lib/sandbox/types";
 
 type AppPhase = "config" | "launching" | "running";
@@ -209,10 +210,10 @@ export default function SkillPage({
           )}
 
           {phase === "config" && isSignedIn && !keysLoading && !savedConfig?.llmKey && (
-            <ConfigPanel
-              onLaunch={handleLaunch}
-              onBack={() => { window.location.href = "/"; }}
-            />
+            <OnboardingModal onComplete={() => {
+              // Keys are now saved; the useEffect auto-launch will fire on next render
+              // when savedConfig updates from Convex
+            }} />
           )}
 
           {phase === "launching" && (
