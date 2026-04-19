@@ -211,8 +211,7 @@ export default function SkillPage({
 
           {phase === "config" && isSignedIn && !keysLoading && !savedConfig?.llmKey && (
             <OnboardingModal onComplete={() => {
-              // Keys are now saved; the useEffect auto-launch will fire on next render
-              // when savedConfig updates from Convex
+              window.location.reload();
             }} />
           )}
 
