@@ -27,12 +27,228 @@ export function resolveSkillPath(pathSegments: string[]): ResolvedSkill {
   return { owner, repo, skillName, rawBaseUrl };
 }
 
+function buildCandidatePaths(owner: string, repo: string, skillName: string, branch: string): string[] {
+  const base = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}`;
+
+  const candidates = [
+    `${base}/${skillName}/SKILL.md`,
+    `${base}/skills/${skillName}/SKILL.md`,
+    `${base}/${repo}/${skillName}/SKILL.md`,
+    `${base}/.agents/skills/${skillName}/SKILL.md`,
+    `${base}/.claude/skills/${skillName}/SKILL.md`,
+    `${base}/plugin/skills/${skillName}/SKILL.md`,
+    `${base}/plugins/${owner}/skills/${skillName}/SKILL.md`,
+  ];
+
+  // Handle name normalization: "vercel-react-best-practices" -> "react-best-practices"
+  // Try stripping common prefixes that match the owner or repo name
+  const prefixes = [owner, repo, `${owner}-`, `${repo}-`];
+  for (const prefix of prefixes) {
+    if (skillName.startsWith(prefix) && skillName.length > prefix.length) {
+      const stripped = skillName.startsWith(`${prefix}-`)
+        ? skillName.slice(prefix.length + 1)
+        : skillName.slice(prefix.length);
+      if (stripped) {
+        candidates.push(`${base}/skills/${stripped}/SKILL.md`);
+        candidates.push(`${base}/${stripped}/SKILL.md`);
+        candidates.push(`${base}/.agents/skills/${stripped}/SKILL.md`);
+        candidates.push(`${base}/.claude/skills/${stripped}/SKILL.md`);
+        candidates.push(`${base}/plugin/skills/${stripped}/SKILL.md`);
+      }
+    }
+  }
+
+  // Handle repo-name-as-directory pattern: "better-auth/skills" + "better-auth-best-practices"
+  // -> "better-auth/best-practices/SKILL.md"
+  const repoPrefix = `${repo}-`;
+  if (skillName.startsWith(repoPrefix)) {
+    const afterRepo = skillName.slice(repoPrefix.length);
+    candidates.push(`${base}/${repo}/${afterRepo}/SKILL.md`);
+  }
+
+  // Handle "sleek-design-mobile-apps" -> "design-mobile-apps" (strip first word)
+  const dashIdx = skillName.indexOf("-");
+  if (dashIdx > 0) {
+    const withoutFirst = skillName.slice(dashIdx + 1);
+    candidates.push(`${base}/skills/${withoutFirst}/SKILL.md`);
+  }
+
+  return candidates;
+}
+
+export async function fetchSkillContent(resolved: ResolvedSkill): Promise<string | null> {
+  const { owner, repo, skillName } = resolved;
+
+  // Try main branch first, then master
+  for (const branch of ["main", "master"]) {
+    const candidates = buildCandidatePaths(owner, repo, skillName, branch);
+    for (const url of candidates) {
+      try {
+        const res = await fetch(url);
+        if (res.ok) return res.text();
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  // Last resort: use GitHub tree API to search for SKILL.md matching the skill name
+  const found = await searchSkillInRepo(owner, repo, skillName);
+  if (found) return found;
+
+  return null;
+}
+
+async function searchSkillInRepo(
+  owner: string,
+  repo: string,
+  skillName: string,
+): Promise<string | null> {
+  for (const branch of ["main", "master"]) {
+    try {
+      const treeRes = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`,
+        { headers: { Accept: "application/vnd.github.v3+json" } },
+      );
+      if (!treeRes.ok) continue;
+
+      const tree = await treeRes.json();
+      const items = tree.tree || [];
+
+      // Exact match: path ends with {skillName}/SKILL.md
+      let match = items.find(
+        (item: { path: string }) =>
+          item.path.endsWith(`${skillName}/SKILL.md`) ||
+          item.path.endsWith(`${skillName}/skill.md`),
+      );
+
+      // Partial match: try last segment of skill name (e.g. "remotion-best-practices" -> "remotion")
+      if (!match) {
+        const segments = skillName.split("-");
+        // Try progressively shorter prefixes
+        for (let len = segments.length - 1; len >= 1 && !match; len--) {
+          const partial = segments.slice(0, len).join("-");
+          match = items.find(
+            (item: { path: string }) =>
+              item.path.endsWith(`/${partial}/SKILL.md`),
+          );
+        }
+      }
+
+      if (match) {
+        const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${match.path}`;
+        const res = await fetch(rawUrl);
+        if (res.ok) return res.text();
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+function buildDirectoryCandidateUrls(owner: string, repo: string, skillName: string, branch: string): string[] {
+  const apiBase = `https://api.github.com/repos/${owner}/${repo}/contents`;
+  const candidates = [
+    `${apiBase}/${skillName}?ref=${branch}`,
+    `${apiBase}/skills/${skillName}?ref=${branch}`,
+    `${apiBase}/${repo}/${skillName}?ref=${branch}`,
+    `${apiBase}/.agents/skills/${skillName}?ref=${branch}`,
+    `${apiBase}/.claude/skills/${skillName}?ref=${branch}`,
+    `${apiBase}/plugin/skills/${skillName}?ref=${branch}`,
+    `${apiBase}/plugins/${owner}/skills/${skillName}?ref=${branch}`,
+  ];
+  return candidates;
+}
+
 export async function fetchSkillDirectory(
   resolved: ResolvedSkill,
 ): Promise<SkillFile[]> {
-  const files: SkillFile[] = [];
-  await fetchDirectoryRecursive(resolved.rawBaseUrl, "", files);
-  return files;
+  const { owner, repo, skillName } = resolved;
+
+  for (const branch of ["main", "master"]) {
+    for (const apiUrl of buildDirectoryCandidateUrls(owner, repo, skillName, branch)) {
+      try {
+        const files: SkillFile[] = [];
+        const res = await fetch(apiUrl, {
+          headers: { Accept: "application/vnd.github.v3+json" },
+        });
+        if (!res.ok) continue;
+
+        const data = await res.json();
+
+        if (!Array.isArray(data)) {
+          const content = data.encoding === "base64"
+            ? atob(data.content)
+            : data.content;
+          files.push({ path: data.name, content });
+          return files;
+        }
+
+        for (const item of data) {
+          if (item.type === "file") {
+            const fileRes = await fetch(item.download_url);
+            if (fileRes.ok) {
+              files.push({ path: item.name, content: await fileRes.text() });
+            }
+          } else if (item.type === "dir") {
+            await fetchDirectoryRecursive(item.url, item.name, files);
+          }
+        }
+
+        if (files.length > 0) return files;
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  // Fallback: search via tree API and fetch the directory
+  for (const branch of ["main", "master"]) {
+    try {
+      const treeRes = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`,
+        { headers: { Accept: "application/vnd.github.v3+json" } },
+      );
+      if (!treeRes.ok) continue;
+
+      const tree = await treeRes.json();
+      const items = (tree.tree || []) as { path: string; type: string }[];
+
+      const skillDir = items.find(
+        (item) =>
+          item.type === "tree" && item.path.endsWith(`/${skillName}`),
+      );
+
+      if (skillDir) {
+        const dirFiles = items.filter(
+          (item) => item.type === "blob" && item.path.startsWith(`${skillDir.path}/`),
+        );
+        const files: SkillFile[] = [];
+        for (const f of dirFiles) {
+          const relativePath = f.path.slice(skillDir.path.length + 1);
+          const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${f.path}`;
+          try {
+            const res = await fetch(rawUrl);
+            if (res.ok) {
+              files.push({ path: relativePath, content: await res.text() });
+            }
+          } catch {
+            continue;
+          }
+        }
+        if (files.length > 0) return files;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  // Last resort: just get SKILL.md content
+  const content = await fetchSkillContent(resolved);
+  if (content) return [{ path: "SKILL.md", content }];
+
+  return [];
 }
 
 async function fetchDirectoryRecursive(
@@ -43,50 +259,20 @@ async function fetchDirectoryRecursive(
   const res = await fetch(apiUrl, {
     headers: { Accept: "application/vnd.github.v3+json" },
   });
-
-  if (!res.ok) {
-    if (res.status === 404) {
-      const rawUrl = apiUrl
-        .replace("https://api.github.com/repos/", "https://raw.githubusercontent.com/")
-        .replace("/contents/", "/main/");
-      const fallback = await fetch(rawUrl);
-      if (fallback.ok) {
-        const content = await fallback.text();
-        const fileName = relativePath || "SKILL.md";
-        files.push({ path: fileName, content });
-      }
-      return;
-    }
-    throw new Error(`GitHub API error: ${res.status}`);
-  }
+  if (!res.ok) return;
 
   const data = await res.json();
-
-  if (!Array.isArray(data)) {
-    const content = data.encoding === "base64"
-      ? atob(data.content)
-      : data.content;
-    files.push({ path: relativePath || data.name, content });
-    return;
-  }
+  if (!Array.isArray(data)) return;
 
   for (const item of data) {
-    const itemPath = relativePath ? `${relativePath}/${item.name}` : item.name;
+    const itemPath = `${relativePath}/${item.name}`;
     if (item.type === "file") {
       const fileRes = await fetch(item.download_url);
       if (fileRes.ok) {
-        const content = await fileRes.text();
-        files.push({ path: itemPath, content });
+        files.push({ path: itemPath, content: await fileRes.text() });
       }
     } else if (item.type === "dir") {
       await fetchDirectoryRecursive(item.url, itemPath, files);
     }
   }
-}
-
-export async function fetchSkillContent(resolved: ResolvedSkill): Promise<string | null> {
-  const rawUrl = `https://raw.githubusercontent.com/${resolved.owner}/${resolved.repo}/main/${resolved.skillName}/SKILL.md`;
-  const res = await fetch(rawUrl);
-  if (!res.ok) return null;
-  return res.text();
 }
