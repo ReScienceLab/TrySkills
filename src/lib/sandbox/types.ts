@@ -9,7 +9,7 @@ export type SandboxState =
   | "error"
   | "cleaning";
 
-export type PoolState = "active" | "installing" | "stopped";
+export type PoolState = "active" | "creating" | "stopped";
 
 export interface SandboxConfig {
   daytonaApiKey: string;

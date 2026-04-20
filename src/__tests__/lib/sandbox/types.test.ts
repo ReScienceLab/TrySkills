@@ -18,7 +18,7 @@ describe("sandbox/types", () => {
   });
 
   it("PoolState covers all pool states", () => {
-    const states: PoolState[] = ["active", "installing", "stopped"];
+    const states: PoolState[] = ["active", "creating", "stopped"];
     expect(states).toHaveLength(3);
   });
 

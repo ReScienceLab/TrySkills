@@ -17,7 +17,7 @@ export default defineSchema({
     state: v.string(),
     poolState: v.optional(v.union(
       v.literal("active"),
-      v.literal("installing"),
+      v.literal("creating"),
       v.literal("stopped"),
     )),
     currentSkillPath: v.optional(v.string()),

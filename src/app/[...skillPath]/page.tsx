@@ -43,11 +43,11 @@ export default function SkillPage({
   const createSandboxRecord = useMutation(api.sandboxes.create);
   const removeSandboxRecord = useMutation(api.sandboxes.remove);
   const updateSandboxState = useMutation(api.sandboxes.updateState);
-  const claimSandbox = useMutation(api.sandboxes.claimSandbox);
+  const acquireCreateLock = useMutation(api.sandboxes.acquireCreateLock);
   const updatePoolState = useMutation(api.sandboxes.updatePoolState);
   const recordTrial = useMutation(api.skillTrials.record);
-  const reusableSandbox = useQuery(
-    api.sandboxes.findReusable,
+  const userSandbox = useQuery(
+    api.sandboxes.getSandbox,
     isAuthenticated ? {} : "skip",
   );
 
@@ -83,134 +83,127 @@ export default function SkillPage({
     const skillPathStr = `${owner}/${repo}/${skillName}`;
     const configHash = await computeConfigHash(config.provider.id, config.model, config.llmKey);
 
-    // Check for existing sandbox
-    const claimed = await claimSandbox({}).catch(() => null);
+    // Check for existing sandbox (read-only query, no lock)
+    const sandbox = userSandbox;
 
-    if (claimed && !abort.signal.aborted) {
-      const isStopped = claimed.poolState === "stopped";
-      const skillInstalled = claimed.installedSkills?.includes(skillPathStr) ?? false;
-      const sameConfig = claimed.configHash === configHash;
-      const urlFresh = claimed.webuiUrlCreatedAt
-        ? Date.now() - claimed.webuiUrlCreatedAt < 50 * 60 * 1000 // 50min buffer before 1h TTL
+    if (sandbox && sandbox.status === "found" && !abort.signal.aborted) {
+      const isStopped = sandbox.poolState === "stopped";
+      const skillInstalled = sandbox.installedSkills?.includes(skillPathStr) ?? false;
+      const sameConfig = sandbox.configHash === configHash;
+      const urlFresh = sandbox.webuiUrlCreatedAt
+        ? Date.now() - sandbox.webuiUrlCreatedAt < 50 * 60 * 1000
         : false;
-      const heartbeatRecent = claimed.lastHeartbeat
-        ? Date.now() - claimed.lastHeartbeat < 30 * 60 * 1000 // must match Daytona auto-stop
+      const heartbeatRecent = sandbox.lastHeartbeat
+        ? Date.now() - sandbox.lastHeartbeat < 30 * 60 * 1000
         : false;
 
       // INSTANT PATH: skill installed + same config + active + URL fresh + heartbeat recent
       if (skillInstalled && sameConfig && !isStopped && urlFresh && heartbeatRecent) {
-        setSession({
-          sandboxId: claimed.sandboxId,
-          webuiUrl: claimed.webuiUrl,
-          webuiBaseUrl: claimed.webuiUrl,
-          state: "running",
-          startedAt: Date.now(),
-        });
-        sessionRef.current = {
-          sandboxId: claimed.sandboxId,
-          webuiUrl: claimed.webuiUrl,
-          webuiBaseUrl: claimed.webuiUrl,
-          state: "running",
+        const sess = {
+          sandboxId: sandbox.sandboxId,
+          webuiUrl: sandbox.webuiUrl,
+          webuiBaseUrl: sandbox.webuiUrl,
+          state: "running" as const,
           startedAt: Date.now(),
         };
+        setSession(sess);
+        sessionRef.current = sess;
         setSandboxState("running");
         setPhase("running");
         await updatePoolState({
-          sandboxId: claimed.sandboxId,
+          sandboxId: sandbox.sandboxId,
           poolState: "active",
           currentSkillPath: skillPathStr,
           configHash,
         }).catch(() => {});
-        recordTrial({ sandboxId: claimed.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
+        recordTrial({ sandboxId: sandbox.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
         return;
       }
 
-      // INSTALL PATH: different skill or stopped sandbox
+      // INSTALL PATH: upload skill files (no sandbox-level lock needed)
       setLaunchMode("hotswap");
       setNeedsWake(isStopped);
       setSandboxState(isStopped ? "starting" : "uploading");
 
-      let skillFiles;
       try {
-        skillFiles = await fetchSkillDirectory(resolved);
-      } catch (fetchErr) {
-        console.error("[install] Failed to fetch skill files:", fetchErr);
-        await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "active" }).catch(() => {});
-        // Fall through to cold create which will retry the fetch
-        skillFiles = null;
-      }
+        const skillFiles = await fetchSkillDirectory(resolved);
+        if (abort.signal.aborted) return;
 
-      if (abort.signal.aborted) {
-        await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "active" }).catch(() => {});
+        const result = await installSkill(
+          {
+            daytonaApiKey: config.sandboxKey,
+            llmProvider: config.provider.id,
+            llmApiKey: config.llmKey,
+            llmModel: config.model,
+          },
+          sandbox.sandboxId,
+          skillPathStr,
+          skillFiles,
+          (step) => {
+            if (abort.signal.aborted) return;
+            setSandboxState(step as SandboxState);
+          },
+        );
+
+        if (abort.signal.aborted) return;
+
+        setSession(result);
+        sessionRef.current = result;
+        setSandboxState("running");
+        setPhase("running");
+
+        await updatePoolState({
+          sandboxId: sandbox.sandboxId,
+          poolState: "active",
+          currentSkillPath: skillPathStr,
+          webuiUrl: result.webuiUrl,
+          configHash,
+          installedSkills: [...new Set([...(sandbox.installedSkills ?? []), skillPathStr])],
+          webuiUrlCreatedAt: Date.now(),
+        }).catch(() => {});
+        recordTrial({ sandboxId: sandbox.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
+        return;
+      } catch (err) {
+        console.error("[install] installSkill failed:", err);
+        setSandboxState("error");
+        setSandboxError(err instanceof Error ? err.message : "Install failed");
         return;
       }
+    }
 
-      if (skillFiles) {
-        try {
-          const result = await installSkill(
-            {
-              daytonaApiKey: config.sandboxKey,
-              llmProvider: config.provider.id,
-              llmApiKey: config.llmKey,
-              llmModel: config.model,
-            },
-            claimed.sandboxId,
-            skillPathStr,
-            skillFiles,
-            (step) => {
-              if (abort.signal.aborted) return;
-              setSandboxState(step as SandboxState);
-            },
-          );
-
-          if (abort.signal.aborted) {
-            await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "active" }).catch(() => {});
-            return;
-          }
-
-          setSession(result);
-          sessionRef.current = result;
-          setSandboxState("running");
-          setPhase("running");
-
-          await updatePoolState({
-            sandboxId: claimed.sandboxId,
-            poolState: "active",
-            currentSkillPath: skillPathStr,
-            webuiUrl: result.webuiUrl,
-            configHash,
-            installedSkills: [...new Set([...(claimed.installedSkills ?? []), skillPathStr])],
-            webuiUrlCreatedAt: Date.now(),
-          }).catch(() => {});
-          recordTrial({ sandboxId: claimed.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
-
-          return;
-        } catch (err) {
-          console.error("[install] installSkill failed, destroying sandbox:", err);
-          destroySandbox(config.sandboxKey, claimed.sandboxId).catch(() => {});
-          removeSandboxRecord({ sandboxId: claimed.sandboxId }).catch(() => {});
-        }
-      }
+    // Sandbox is being created by another tab
+    if (sandbox && sandbox.status === "creating") {
+      setSandboxState("creating");
+      setSandboxError("Another tab is creating your sandbox. Please wait...");
+      // Poll: the useQuery(getSandbox) will auto-update when the record changes
+      return;
     }
 
     if (abort.signal.aborted) return;
 
-    // COLD CREATE PATH: no existing sandbox
+    // COLD CREATE PATH: no sandbox exists, acquire create lock
+    const lock = await acquireCreateLock({}).catch(() => null);
+
+    if (!lock || lock.status === "exists") {
+      // Sandbox appeared (race), retry launch
+      void handleLaunch(config);
+      return;
+    }
+
+    if (lock.status === "creating") {
+      setSandboxState("creating");
+      setSandboxError("Another tab is creating your sandbox. Please wait...");
+      return;
+    }
+
+    // lock.status === "acquired"
+    const placeholderId = lock.placeholderId;
+    placeholderIdRef.current = placeholderId;
     setLaunchMode("snapshot");
     setNeedsWake(false);
     setSandboxState("creating");
 
-    const placeholderId = `pending-${Date.now()}`;
-    placeholderIdRef.current = placeholderId;
-
     try {
-      await createSandboxRecord({
-        sandboxId: placeholderId,
-        skillPath: skillPathStr,
-        webuiUrl: "",
-        state: "creating",
-      }).catch(() => {});
-
       const skillFiles = await fetchSkillDirectory(resolved);
       if (abort.signal.aborted) {
         removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
