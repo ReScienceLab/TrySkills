@@ -5,7 +5,7 @@ const mockGet = vi.fn();
 const mockDelete = vi.fn();
 const mockUploadFile = vi.fn();
 const mockExecuteCommand = vi.fn();
-const mockGetPreviewLink = vi.fn();
+const mockGetSignedPreviewUrl = vi.fn();
 
 vi.mock("@daytona/sdk", () => {
   return {
@@ -26,7 +26,7 @@ describe("sandbox/daytona", () => {
     id: "sb-test-123",
     fs: { uploadFile: mockUploadFile },
     process: { executeCommand: mockExecuteCommand },
-    getPreviewLink: mockGetPreviewLink,
+    getSignedPreviewUrl: mockGetSignedPreviewUrl,
   };
 
   const testConfig: SandboxConfig = {
@@ -44,9 +44,11 @@ describe("sandbox/daytona", () => {
     vi.clearAllMocks();
     mockCreate.mockResolvedValue(mockSandbox);
     mockExecuteCommand.mockResolvedValue({ exitCode: 0 });
-    mockGetPreviewLink.mockResolvedValue({
-      url: "https://preview.daytona.io/sb-test-123",
-      token: "tok-abc",
+    mockGetSignedPreviewUrl.mockResolvedValue({
+      url: "https://8787-signedtoken.proxy.daytona.work",
+      token: "signedtoken",
+      sandboxId: "sb-test-123",
+      port: 8787,
     });
   });
 
@@ -75,8 +77,8 @@ describe("sandbox/daytona", () => {
 
     expect(session.sandboxId).toBe("sb-test-123");
     expect(session.state).toBe("running");
-    expect(session.webuiUrl).toContain("preview.daytona.io");
-    expect(session.webuiBaseUrl).toContain("preview.daytona.io");
+    expect(session.webuiUrl).toContain("proxy.daytona.work");
+    expect(session.webuiBaseUrl).toContain("proxy.daytona.work");
   });
 
   it("passes userId as label when provided", async () => {
@@ -205,15 +207,17 @@ describe("sandbox/daytona", () => {
     expect(webuiCmd).toContain("8787");
   });
 
-  it("gets preview link on webui port 8787", async () => {
+  it("gets signed preview URL on webui port 8787", async () => {
     await createHermesSandbox(testConfig, "test", testSkillFiles, () => {});
-    expect(mockGetPreviewLink).toHaveBeenCalledWith(8787);
+    expect(mockGetSignedPreviewUrl).toHaveBeenCalledWith(8787, 3600);
   });
 
-  it("appends token to webui URL when present", async () => {
-    mockGetPreviewLink.mockResolvedValue({
-      url: "https://preview.daytona.io/sb-123",
-      token: "secret-token",
+  it("uses signed preview URL directly (no token query param)", async () => {
+    mockGetSignedPreviewUrl.mockResolvedValue({
+      url: "https://8787-signedtoken.proxy.daytona.work",
+      token: "signedtoken",
+      sandboxId: "sb-123",
+      port: 8787,
     });
 
     const session = await createHermesSandbox(
@@ -224,28 +228,11 @@ describe("sandbox/daytona", () => {
     );
 
     expect(session.webuiBaseUrl).toBe(
-      "https://preview.daytona.io/sb-123?token=secret-token",
+      "https://8787-signedtoken.proxy.daytona.work",
     );
     expect(session.webuiUrl).toBe(
-      "https://preview.daytona.io/sb-123?token=secret-token",
+      "https://8787-signedtoken.proxy.daytona.work",
     );
-  });
-
-  it("handles webui URL without token", async () => {
-    mockGetPreviewLink.mockResolvedValue({
-      url: "https://preview.daytona.io/sb-123",
-      token: "",
-    });
-
-    const session = await createHermesSandbox(
-      testConfig,
-      "test",
-      testSkillFiles,
-      () => {},
-    );
-
-    expect(session.webuiBaseUrl).toBe("https://preview.daytona.io/sb-123");
-    expect(session.webuiUrl).toBe("https://preview.daytona.io/sb-123");
   });
 
   describe("destroySandbox", () => {

@@ -8,6 +8,7 @@ const HEALTH_TIMEOUT_MS = 120_000;
 const HEALTH_POLL_INTERVAL_MS = 2_000;
 const GATEWAY_PORT = 8642;
 const WEBUI_PORT = 8787;
+const SIGNED_URL_TTL_SECONDS = 3600; // 1 hour signed preview URL
 
 export interface SkillFile {
   path: string;
@@ -214,8 +215,8 @@ export async function createHermesSandbox(
 
   await waitForHealth(sandbox);
 
-  const preview = await sandbox.getPreviewLink(WEBUI_PORT);
-  const webuiUrl = preview.url + (preview.token ? `?token=${preview.token}` : "");
+  const signedPreview = await sandbox.getSignedPreviewUrl(WEBUI_PORT, SIGNED_URL_TTL_SECONDS);
+  const webuiUrl = signedPreview.url;
 
   return {
     sandboxId: sandbox.id,
@@ -308,8 +309,8 @@ export async function hotSwapSkill(
   // Just verify the gateway is still healthy.
   await waitForHealth(sandbox);
 
-  const preview = await sandbox.getPreviewLink(WEBUI_PORT);
-  const webuiUrl = preview.url + (preview.token ? `?token=${preview.token}` : "");
+  const signedPreview = await sandbox.getSignedPreviewUrl(WEBUI_PORT, SIGNED_URL_TTL_SECONDS);
+  const webuiUrl = signedPreview.url;
 
   return {
     sandboxId: sandbox.id,

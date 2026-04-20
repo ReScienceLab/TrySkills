@@ -9,6 +9,10 @@ function buildUrl(baseUrl: string, path: string): string {
   return url.toString();
 }
 
+const DAYTONA_HEADERS = {
+  "X-Daytona-Skip-Preview-Warning": "true",
+};
+
 export async function createSession(
   webuiBaseUrl: string,
   model?: string,
@@ -17,7 +21,7 @@ export async function createSession(
   console.log("[hermes-api] createSession URL:", url);
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...DAYTONA_HEADERS },
     body: JSON.stringify({ model }),
   });
   const ct = res.headers.get("content-type") || "";
@@ -39,7 +43,7 @@ export async function sendMessage(
   const url = buildUrl(webuiBaseUrl, "/api/chat/start");
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...DAYTONA_HEADERS },
     body: JSON.stringify({ session_id: sessionId, message, model }),
   });
   if (!res.ok) {
@@ -102,7 +106,7 @@ export async function cancelStream(
   const cancelUrl = new URL(webuiBaseUrl);
   cancelUrl.pathname = "/api/chat/cancel";
   cancelUrl.searchParams.set("stream_id", streamId);
-  await fetch(cancelUrl.toString()).catch(() => {});
+  await fetch(cancelUrl.toString(), { headers: DAYTONA_HEADERS }).catch(() => {});
 }
 
 export async function respondApproval(
@@ -112,7 +116,7 @@ export async function respondApproval(
 ): Promise<void> {
   await fetch(buildUrl(webuiBaseUrl, "/api/approval/respond"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...DAYTONA_HEADERS },
     body: JSON.stringify({ session_id: sessionId, choice }),
   }).catch(() => {});
 }
