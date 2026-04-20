@@ -75,10 +75,8 @@ describe("sandbox/daytona", () => {
 
     expect(session.sandboxId).toBe("sb-test-123");
     expect(session.state).toBe("running");
-    expect(session.webuiUrl).toContain("prompt=");
-    expect(session.webuiUrl).toContain("test-skill");
+    expect(session.webuiUrl).toContain("preview.daytona.io");
     expect(session.webuiBaseUrl).toContain("preview.daytona.io");
-    expect(session.webuiBaseUrl).not.toContain("prompt=");
   });
 
   it("passes userId as label when provided", async () => {
@@ -228,7 +226,9 @@ describe("sandbox/daytona", () => {
     expect(session.webuiBaseUrl).toBe(
       "https://preview.daytona.io/sb-123?token=secret-token",
     );
-    expect(session.webuiUrl).toContain("&prompt=");
+    expect(session.webuiUrl).toBe(
+      "https://preview.daytona.io/sb-123?token=secret-token",
+    );
   });
 
   it("handles webui URL without token", async () => {
@@ -245,7 +245,7 @@ describe("sandbox/daytona", () => {
     );
 
     expect(session.webuiBaseUrl).toBe("https://preview.daytona.io/sb-123");
-    expect(session.webuiUrl).toContain("?prompt=");
+    expect(session.webuiUrl).toBe("https://preview.daytona.io/sb-123");
   });
 
   describe("destroySandbox", () => {

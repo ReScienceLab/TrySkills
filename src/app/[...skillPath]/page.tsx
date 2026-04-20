@@ -9,7 +9,7 @@ import { useConvexAuth } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { ConfigPanel, type LaunchConfig } from "@/components/config-panel";
 import { LaunchProgress, type LaunchMode } from "@/components/launch-progress";
-import { SessionControl } from "@/components/session-control";
+import { ChatPanel } from "@/components/chat/chat-panel";
 import { GlowMesh } from "@/components/glow-mesh";
 import { SiteHeader } from "@/components/site-header";
 import { resolveSkillPath, fetchSkillDirectory } from "@/lib/skill/resolver";
@@ -156,7 +156,6 @@ export default function SkillPage({
             state: "running",
           }).catch(() => {});
 
-          window.open(result.webuiUrl, "_blank", "noopener,noreferrer");
           return;
         } catch (swapErr) {
           console.error("[hot-swap] Failed, falling back to cold create:", swapErr);
@@ -415,8 +414,11 @@ export default function SkillPage({
           )}
 
           {phase === "running" && session && (
-            <SessionControl
-              webuiUrl={session.webuiBaseUrl || session.webuiUrl}
+            <ChatPanel
+              webuiBaseUrl={session.webuiBaseUrl || session.webuiUrl}
+              webuiUrl={session.webuiUrl}
+              model={savedConfig?.model || "anthropic/claude-sonnet-4"}
+              skillName={skillName}
               startedAt={session.startedAt}
               onStop={handleStop}
               onTryAnother={handleTryAnother}
