@@ -7,6 +7,12 @@ export const create = mutation({
     skillPath: v.string(),
     webuiUrl: v.string(),
     state: v.optional(v.string()),
+    poolState: v.optional(v.union(
+      v.literal("warm"),
+      v.literal("active"),
+      v.literal("swapping"),
+      v.literal("stopped"),
+    )),
     cpu: v.optional(v.number()),
     memory: v.optional(v.number()),
     disk: v.optional(v.number()),
@@ -23,6 +29,7 @@ export const create = mutation({
       skillPath: args.skillPath,
       webuiUrl: args.webuiUrl,
       state: args.state ?? "running",
+      poolState: args.poolState,
       cpu: args.cpu,
       memory: args.memory,
       disk: args.disk,
@@ -126,9 +133,11 @@ export const claimWarm = mutation({
       )
       .collect();
 
-    // Match warm OR active (active = previous session didn't cleanly transition to warm)
+    // Match warm OR active, skip placeholders and records without poolState
     const reusable = sandboxes.find(
-      (s) => s.poolState === "warm" || s.poolState === "active",
+      (s) =>
+        !s.sandboxId.startsWith("pending-") &&
+        (s.poolState === "warm" || s.poolState === "active"),
     );
     if (!reusable) return null;
 
@@ -152,7 +161,9 @@ export const findReusable = query({
       .collect();
 
     const reusable = sandboxes.find(
-      (s) => s.poolState === "warm" || s.poolState === "stopped",
+      (s) =>
+        !s.sandboxId.startsWith("pending-") &&
+        (s.poolState === "warm" || s.poolState === "stopped"),
     );
     if (!reusable) return null;
 

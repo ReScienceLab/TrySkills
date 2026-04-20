@@ -196,16 +196,11 @@ export default function SkillPage({
         skillPath: skillPathStr,
         webuiUrl: result.webuiUrl,
         state: "running",
+        poolState: "active",
         cpu: result.cpu,
         memory: result.memory,
         disk: result.disk,
         region: result.region,
-      }).catch(() => {});
-
-      await updatePoolState({
-        sandboxId: result.sandboxId,
-        poolState: "active",
-        currentSkillPath: skillPathStr,
       }).catch(() => {});
 
       window.open(result.webuiUrl, "_blank", "noopener,noreferrer");
