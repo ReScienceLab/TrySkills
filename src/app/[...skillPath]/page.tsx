@@ -132,6 +132,7 @@ export default function SkillPage({
               if (abort.signal.aborted) return;
               setSandboxState(step as SandboxState);
             },
+            typeof window !== "undefined" ? window.location.origin : undefined,
           );
 
           if (abort.signal.aborted) {

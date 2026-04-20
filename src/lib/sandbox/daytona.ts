@@ -242,6 +242,7 @@ export async function hotSwapSkill(
   skillName: string,
   skillFiles: SkillFile[],
   onProgress: (step: SandboxState) => void,
+  callerOrigin?: string,
 ): Promise<SandboxSession> {
   const { Daytona } = await getDaytonaSDK();
   const daytona = new Daytona({
@@ -265,6 +266,27 @@ export async function hotSwapSkill(
   const providerMapping = PROVIDER_ENV_MAP[config.llmProvider] || PROVIDER_ENV_MAP.openrouter;
 
   onProgress("swapping");
+
+  // Update CORS allowed origins and restart WebUI so cross-origin chat API works
+  const allowedOrigins = callerOrigin
+    ? `${BASE_ALLOWED_ORIGINS},${callerOrigin}`
+    : BASE_ALLOWED_ORIGINS;
+  const webuiDir = "/opt/hermes-webui";
+  const agentDir = "/opt/hermes-agent";
+  const pythonCmd = `${agentDir}/venv/bin/python3`;
+  await sandbox.process.executeCommand(
+    [
+      `pkill -f "server.py" 2>/dev/null; sleep 0.5`,
+      `cd ${webuiDir}`,
+      `export HERMES_WEBUI_ALLOWED_ORIGINS="${allowedOrigins}"`,
+      `export HERMES_WEBUI_AGENT_DIR=${agentDir}`,
+      `export HERMES_WEBUI_PYTHON=${pythonCmd}`,
+      `export HERMES_WEBUI_HOST=0.0.0.0`,
+      `export HERMES_WEBUI_PORT=${WEBUI_PORT}`,
+      `export HERMES_HOME=/home/daytona/.hermes`,
+      `nohup ${pythonCmd} server.py > /tmp/hermes-webui.log 2>&1 &`,
+    ].join(" && "),
+  ).catch(() => {});
 
   await sandbox.process.executeCommand("rm -rf /home/daytona/.hermes/skills/*").catch(() => {});
 

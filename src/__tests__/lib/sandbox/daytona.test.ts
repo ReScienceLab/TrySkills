@@ -294,7 +294,9 @@ describe("sandbox/daytona", () => {
 
       const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
       expect(allCmds.some((c: string) => c.includes("rm -rf /home/daytona/.hermes/skills/*"))).toBe(true);
-      expect(allCmds.every((c: string) => !c.includes("pkill -f"))).toBe(true);
+      // WebUI restart for CORS, but no hermes gateway restart
+      expect(allCmds.some((c: string) => c.includes("server.py"))).toBe(true);
+      expect(allCmds.every((c: string) => !c.includes("hermes gateway"))).toBe(true);
     });
 
     it("throws on unexpected sandbox state", async () => {
