@@ -72,8 +72,20 @@ export default function SkillPage({
 
     launchConfigRef.current = config;
     setPhase("launching");
-    setSandboxState("creating");
     setSandboxError(undefined);
+
+    // Check for reusable sandbox before showing any UI
+    const claimed = await claimWarm({}).catch(() => null);
+
+    if (claimed && !abort.signal.aborted) {
+      const isStopped = reusableSandbox?.poolState === "stopped";
+      setLaunchMode("hotswap");
+      setNeedsWake(isStopped);
+      setSandboxState(isStopped ? "starting" : "swapping");
+    } else {
+      setLaunchMode("snapshot");
+      setSandboxState("creating");
+    }
 
     const skillPathStr = `${owner}/${repo}/${skillName}`;
     const placeholderId = `pending-${Date.now()}`;
@@ -92,18 +104,7 @@ export default function SkillPage({
       const skillFiles = await fetchSkillDirectory(resolved);
       if (abort.signal.aborted) return;
 
-      // Try hot-swap path: reuse existing warm/stopped sandbox
-      const claimed = await claimWarm({}).catch(() => null);
-
       if (claimed && !abort.signal.aborted) {
-        const isStopped = reusableSandbox?.poolState === "stopped";
-        setLaunchMode("hotswap");
-        setNeedsWake(isStopped);
-        if (isStopped) {
-          setSandboxState("starting");
-        } else {
-          setSandboxState("swapping");
-        }
 
         try {
           const result = await hotSwapSkill(
