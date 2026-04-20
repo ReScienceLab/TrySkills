@@ -113,9 +113,10 @@ export default function SkillPage({
         },
         skillName,
         skillFiles,
-        (step) => {
+        (step, meta) => {
           if (abort.signal.aborted) return;
           setSandboxState(step as SandboxState);
+          if (meta?.usedSnapshot !== undefined) setUsedSnapshot(meta.usedSnapshot);
           updateSandboxState({ sandboxId: placeholderId, state: step }).catch(() => {});
         },
       );
@@ -135,10 +136,12 @@ export default function SkillPage({
 
       await removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
 
-      // Deferred cleanup: destroy previous sandbox now that the new one is healthy
+      // Deferred cleanup: destroy previous sandbox now that the new one is healthy.
+      // destroySandbox is best-effort; if it fails, the cron will clean the record
+      // after heartbeat timeout, and Daytona auto-stops the sandbox after 15min idle.
       if (previousSandbox) {
-        destroySandbox(config.sandboxKey, previousSandbox.sandboxId).catch(() => {});
-        removeSandboxRecord({ sandboxId: previousSandbox.sandboxId }).catch(() => {});
+        await destroySandbox(config.sandboxKey, previousSandbox.sandboxId);
+        await removeSandboxRecord({ sandboxId: previousSandbox.sandboxId }).catch(() => {});
       }
 
       await createSandboxRecord({

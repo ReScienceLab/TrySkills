@@ -75,7 +75,7 @@ export async function createHermesSandbox(
   config: SandboxConfig,
   skillName: string,
   skillFiles: SkillFile[],
-  onProgress: (step: SandboxState) => void,
+  onProgress: (step: SandboxState, meta?: { usedSnapshot?: boolean }) => void,
 ): Promise<SandboxSession & { usedSnapshot: boolean }> {
   const { Daytona } = await getDaytonaSDK();
 
@@ -130,11 +130,9 @@ export async function createHermesSandbox(
   }
   activeSandbox = sandbox;
 
-  onProgress("configuring");
-
   if (usedSnapshot) {
     // Fast path: hermes-agent and webui are pre-installed at /opt/
-    // Just link them to user home and write config
+    onProgress("configuring", { usedSnapshot: true });
     await sandbox.process.executeCommand([
       "mkdir -p /home/daytona/.hermes/skills /home/daytona/.hermes/logs",
       "ln -sfn /opt/hermes-agent /home/daytona/.hermes/hermes-agent",
@@ -143,10 +141,11 @@ export async function createHermesSandbox(
     ].join(" && ")).catch(() => {});
   } else {
     // Cold path: install from scratch (fallback)
-    onProgress("installing");
+    onProgress("installing", { usedSnapshot: false });
     await sandbox.process.executeCommand(
       "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup 2>&1 || true",
     ).catch(() => {});
+    onProgress("configuring", { usedSnapshot: false });
   }
 
   // Write config files

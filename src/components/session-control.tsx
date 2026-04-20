@@ -30,8 +30,6 @@ export function SessionControl({
   };
 
   const cost = ((elapsed / 3600) * COST_PER_HOUR).toFixed(3);
-  const autoStopRemaining = Math.max(0, AUTO_STOP_MINUTES * 60 - elapsed);
-  const autoStopMin = Math.ceil(autoStopRemaining / 60);
 
   const openWebUI = () => {
     window.open(webuiUrl, "_blank", "noopener,noreferrer");
@@ -61,8 +59,8 @@ export function SessionControl({
               2 vCPU + 4GB RAM
             </span>
           </div>
-          <span className={`font-mono ${autoStopMin <= 3 ? "text-amber-400/70" : "text-white/30"}`}>
-            auto-stop {autoStopMin > 0 ? `${autoStopMin}min` : "now"}
+          <span className="text-white/30 font-mono">
+            idle-stop: {AUTO_STOP_MINUTES}min
           </span>
         </div>
 
@@ -90,7 +88,7 @@ export function SessionControl({
         </div>
 
         <div className="text-xs text-white/25 text-center">
-          Sandbox auto-stops after {AUTO_STOP_MINUTES} minutes of inactivity to save resources.
+          Sandbox auto-stops after {AUTO_STOP_MINUTES} minutes of idle time (no activity or open tabs).
         </div>
       </div>
     </div>
