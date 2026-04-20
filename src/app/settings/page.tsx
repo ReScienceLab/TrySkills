@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
 import { PROVIDERS, type Provider } from "@/lib/providers/registry";
@@ -12,22 +12,71 @@ export default function SettingsPage() {
   const { isSignedIn, isLoaded } = useAuth();
   const { config: savedConfig, loading, save, clear } = useKeyStore();
 
-  const [provider, setProvider] = useState<Provider>(PROVIDERS[0]);
-  const [model, setModel] = useState(PROVIDERS[0].models[0]);
-  const [llmKey, setLlmKey] = useState("");
-  const [sandboxKey, setSandboxKey] = useState("");
+  const configKey = useMemo(
+    () =>
+      savedConfig
+        ? `${savedConfig.providerId}:${savedConfig.model}:${savedConfig.llmKey}:${savedConfig.sandboxKey}`
+        : "empty",
+    [savedConfig],
+  );
+
+  const initialProvider = useMemo(() => {
+    if (!savedConfig) return PROVIDERS[0];
+    return PROVIDERS.find((p) => p.id === savedConfig.providerId) || PROVIDERS[0];
+  }, [savedConfig]);
+
+  const initialModel = useMemo(
+    () => (savedConfig?.model ? savedConfig.model : initialProvider.models[0]),
+    [savedConfig, initialProvider],
+  );
+
+  return (
+    <SettingsForm
+      key={configKey}
+      initialProvider={initialProvider}
+      initialModel={initialModel}
+      initialLlmKey={savedConfig?.llmKey ?? ""}
+      initialSandboxKey={savedConfig?.sandboxKey ?? ""}
+      savedConfig={savedConfig}
+      isLoaded={isLoaded}
+      isSignedIn={isSignedIn}
+      loading={loading}
+      save={save}
+      clear={clear}
+    />
+  );
+}
+
+function SettingsForm({
+  initialProvider,
+  initialModel,
+  initialLlmKey,
+  initialSandboxKey,
+  savedConfig,
+  isLoaded,
+  isSignedIn,
+  loading,
+  save,
+  clear,
+}: {
+  initialProvider: Provider;
+  initialModel: string;
+  initialLlmKey: string;
+  initialSandboxKey: string;
+  savedConfig: import("@/hooks/use-key-store").StoredConfig | null;
+  isLoaded: boolean;
+  isSignedIn: boolean | undefined;
+  loading: boolean;
+  save: (config: import("@/hooks/use-key-store").StoredConfig) => Promise<void>;
+  clear: () => Promise<void>;
+}) {
+  const [provider, setProvider] = useState<Provider>(initialProvider);
+  const [model, setModel] = useState(initialModel);
+  const [llmKey, setLlmKey] = useState(initialLlmKey);
+  const [sandboxKey, setSandboxKey] = useState(initialSandboxKey);
   const [showLlmKey, setShowLlmKey] = useState(false);
   const [showSandboxKey, setShowSandboxKey] = useState(false);
   const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    if (!savedConfig) return;
-    const p = PROVIDERS.find((p) => p.id === savedConfig.providerId) || PROVIDERS[0];
-    setProvider(p);
-    setModel(savedConfig.model || p.models[0]);
-    setLlmKey(savedConfig.llmKey || "");
-    setSandboxKey(savedConfig.sandboxKey || "");
-  }, [savedConfig]);
 
   const handleProviderChange = (id: string) => {
     const p = PROVIDERS.find((p) => p.id === id);
