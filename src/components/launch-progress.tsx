@@ -3,8 +3,17 @@
 import type { SandboxState } from "@/lib/sandbox/types";
 
 const STEPS: { key: SandboxState; label: string; description: string }[] = [
+  { key: "creating", label: "Creating sandbox", description: "Spinning up from snapshot (~5s)" },
+  { key: "configuring", label: "Configuring environment", description: "Linking agent runtime and writing config" },
+  { key: "uploading", label: "Uploading skill", description: "Uploading skill files to sandbox" },
+  { key: "starting", label: "Starting agent", description: "Launching Hermes Gateway + WebUI" },
+  { key: "running", label: "Ready", description: "Your agent session is live" },
+];
+
+const FALLBACK_STEPS: { key: SandboxState; label: string; description: string }[] = [
   { key: "creating", label: "Creating sandbox", description: "Provisioning a secure environment (~10s)" },
   { key: "installing", label: "Installing Hermes Agent", description: "Downloading and configuring agent runtime (~2 min)" },
+  { key: "configuring", label: "Configuring environment", description: "Writing config files" },
   { key: "uploading", label: "Uploading skill", description: "Uploading skill files to sandbox" },
   { key: "starting", label: "Starting agent", description: "Launching Hermes Agent + WebUI (~30s)" },
   { key: "running", label: "Ready", description: "Your agent session is live" },
@@ -15,13 +24,16 @@ export function LaunchProgress({
   error,
   onRetry,
   onCancel,
+  usedSnapshot = true,
 }: {
   state: SandboxState;
   error?: string;
   onRetry: () => void;
   onCancel: () => void;
+  usedSnapshot?: boolean;
 }) {
-  const currentIdx = STEPS.findIndex((s) => s.key === state);
+  const steps = usedSnapshot ? STEPS : FALLBACK_STEPS;
+  const currentIdx = steps.findIndex((s) => s.key === state);
 
   return (
     <div className="animate-fade-in">
@@ -31,17 +43,21 @@ export function LaunchProgress({
           <h2 className="text-base font-semibold text-white/90">
             Launching Agent Session
           </h2>
+          {usedSnapshot && (
+            <span className="ml-auto text-[10px] font-mono text-emerald-400/60 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+              snapshot
+            </span>
+          )}
         </div>
 
         <div className="relative ml-1 mb-8">
-          {STEPS.map((step, i) => {
+          {steps.map((step, i) => {
             const isActive = step.key === state;
             const isDone = currentIdx > i;
-            const isLast = i === STEPS.length - 1;
+            const isLast = i === steps.length - 1;
 
             return (
               <div key={step.key} className="relative flex gap-4">
-                {/* Vertical line */}
                 {!isLast && (
                   <div className="absolute left-[5px] top-[18px] w-px h-[calc(100%-2px)]">
                     <div className={`w-full h-full transition-colors duration-500 ${
@@ -50,7 +66,6 @@ export function LaunchProgress({
                   </div>
                 )}
 
-                {/* Dot */}
                 <div className="relative shrink-0 mt-[6px]">
                   {isDone ? (
                     <div className="w-[11px] h-[11px] rounded-full bg-white/70" />
@@ -61,7 +76,6 @@ export function LaunchProgress({
                   )}
                 </div>
 
-                {/* Content */}
                 <div className={`pb-6 ${isLast ? "pb-0" : ""}`}>
                   <div className={`text-sm transition-colors ${
                     isDone

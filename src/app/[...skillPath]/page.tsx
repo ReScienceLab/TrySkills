@@ -8,6 +8,7 @@ import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { ConfigPanel, type LaunchConfig } from "@/components/config-panel";
 import { LaunchProgress } from "@/components/launch-progress";
+import { SandboxSkeleton } from "@/components/sandbox-skeleton";
 import { SessionControl } from "@/components/session-control";
 import { GlowMesh } from "@/components/glow-mesh";
 import { SiteHeader } from "@/components/site-header";
@@ -291,12 +292,15 @@ export default function SkillPage({
           )}
 
           {phase === "launching" && (
-            <LaunchProgress
-              state={sandboxState}
-              error={sandboxError}
-              onRetry={handleRetryLaunch}
-              onCancel={handleCancel}
-            />
+            <div className="space-y-6">
+              <SandboxSkeleton skillName={skillName} />
+              <LaunchProgress
+                state={sandboxState}
+                error={sandboxError}
+                onRetry={handleRetryLaunch}
+                onCancel={handleCancel}
+              />
+            </div>
           )}
 
           {phase === "running" && session && (

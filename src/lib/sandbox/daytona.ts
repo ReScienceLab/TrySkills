@@ -1,8 +1,9 @@
 import type { SandboxConfig, SandboxSession, SandboxState } from "./types";
 
+const SNAPSHOT_NAME = process.env.NEXT_PUBLIC_HERMES_SNAPSHOT || "hermes-ready";
 const AUTO_STOP_MINUTES = 60;
-const HEALTH_TIMEOUT_MS = 300_000;
-const HEALTH_POLL_INTERVAL_MS = 5_000;
+const HEALTH_TIMEOUT_MS = 120_000; // 2 min (snapshot-based is much faster)
+const HEALTH_POLL_INTERVAL_MS = 2_000;
 const GATEWAY_PORT = 8642;
 const WEBUI_PORT = 8787;
 
@@ -55,15 +56,21 @@ function buildEnvFile(providerEnvVar: string, apiKey: string): string {
 
 function buildWebuiEnv(): string {
   return [
-    "HERMES_WEBUI_AGENT_DIR=$HOME/.hermes/hermes-agent",
-    "HERMES_WEBUI_PYTHON=$HOME/.hermes/hermes-agent/venv/bin/python3",
+    "HERMES_WEBUI_AGENT_DIR=/opt/hermes-agent",
+    "HERMES_WEBUI_PYTHON=/opt/hermes-agent/venv/bin/python3",
     "HERMES_WEBUI_HOST=0.0.0.0",
     `HERMES_WEBUI_PORT=${WEBUI_PORT}`,
-    "HERMES_HOME=$HOME/.hermes",
+    "HERMES_HOME=/home/daytona/.hermes",
     "",
   ].join("\n");
 }
 
+/**
+ * Create a sandbox from the pre-baked "hermes-ready" snapshot.
+ * This eliminates the ~2min install step — sandbox is ready in ~15s.
+ *
+ * Fallback: if snapshot is unavailable, falls back to cold-start install.
+ */
 export async function createHermesSandbox(
   config: SandboxConfig,
   skillName: string,
@@ -81,69 +88,117 @@ export async function createHermesSandbox(
   const providerMapping = PROVIDER_ENV_MAP[config.llmProvider] || PROVIDER_ENV_MAP.openrouter;
 
   onProgress("creating");
-  const sandbox = await daytona.create(
-    {
-      ephemeral: true,
-      autoStopInterval: AUTO_STOP_MINUTES,
-      public: true,
-      envVars: {
-        [providerMapping.envVar]: config.llmApiKey,
-        API_SERVER_ENABLED: "true",
-        API_SERVER_CORS_ORIGINS: "*",
-        GATEWAY_ALLOW_ALL_USERS: "true",
+
+  // Try snapshot-based fast path first
+  let sandbox;
+  let usedSnapshot = false;
+  try {
+    sandbox = await daytona.create(
+      {
+        snapshot: SNAPSHOT_NAME,
+        ephemeral: true,
+        autoStopInterval: AUTO_STOP_MINUTES,
+        public: true,
+        envVars: {
+          [providerMapping.envVar]: config.llmApiKey,
+          API_SERVER_ENABLED: "true",
+          API_SERVER_CORS_ORIGINS: "*",
+          GATEWAY_ALLOW_ALL_USERS: "true",
+        },
       },
-    } as unknown as Parameters<typeof daytona.create>[0],
-    { timeout: 300 },
-  );
+      { timeout: 120 },
+    );
+    usedSnapshot = true;
+  } catch {
+    // Snapshot not available — fall back to default sandbox + cold install
+    sandbox = await daytona.create(
+      {
+        ephemeral: true,
+        autoStopInterval: AUTO_STOP_MINUTES,
+        public: true,
+        envVars: {
+          [providerMapping.envVar]: config.llmApiKey,
+          API_SERVER_ENABLED: "true",
+          API_SERVER_CORS_ORIGINS: "*",
+          GATEWAY_ALLOW_ALL_USERS: "true",
+        },
+      } as unknown as Parameters<typeof daytona.create>[0],
+      { timeout: 300 },
+    );
+  }
   activeSandbox = sandbox;
 
-  onProgress("installing");
+  onProgress("configuring");
 
-  // Install hermes-agent (this is the slow part, ~1-2 min)
-  await sandbox.process.executeCommand(
-    "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash 2>&1 || true",
-  ).catch(() => {});
+  if (usedSnapshot) {
+    // Fast path: hermes-agent and webui are pre-installed at /opt/
+    // Just link them to user home and write config
+    await sandbox.process.executeCommand([
+      "mkdir -p /home/daytona/.hermes/skills /home/daytona/.hermes/logs",
+      "ln -sfn /opt/hermes-agent /home/daytona/.hermes/hermes-agent",
+      "mkdir -p /home/daytona/.local/bin",
+      "ln -sf /opt/hermes-agent/venv/bin/hermes /home/daytona/.local/bin/hermes",
+    ].join(" && ")).catch(() => {});
+  } else {
+    // Cold path: install from scratch (fallback)
+    onProgress("installing");
+    await sandbox.process.executeCommand(
+      "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup 2>&1 || true",
+    ).catch(() => {});
+  }
 
   // Write config files
   await sandbox.process.executeCommand(
-    `cat > $HOME/.hermes/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
+    `mkdir -p /home/daytona/.hermes && cat > /home/daytona/.hermes/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
   ).catch(() => {});
   await sandbox.process.executeCommand(
-    `cat > $HOME/.hermes/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider)}\nCFGEOF`,
+    `cat > /home/daytona/.hermes/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider)}\nCFGEOF`,
   ).catch(() => {});
 
-  // Clone hermes-webui
+  // Write webui .env
+  const webuiDir = usedSnapshot ? "/opt/hermes-webui" : "/home/daytona/hermes-webui";
+  if (!usedSnapshot) {
+    await sandbox.process.executeCommand(
+      "git clone --depth 1 https://github.com/nesquena/hermes-webui.git /home/daytona/hermes-webui 2>&1",
+    ).catch(() => {});
+  }
   await sandbox.process.executeCommand(
-    "git clone --depth 1 https://github.com/nesquena/hermes-webui.git $HOME/hermes-webui 2>&1",
-  ).catch(() => {});
-  await sandbox.process.executeCommand(
-    `cat > $HOME/hermes-webui/.env << 'WEOF'\n${buildWebuiEnv()}\nWEOF`,
+    `cat > ${webuiDir}/.env << 'WEOF'\n${buildWebuiEnv()}\nWEOF`,
   ).catch(() => {});
 
+  // Upload skill files
   onProgress("uploading");
-
   for (const file of skillFiles) {
-    const destPath = `$HOME/.hermes/skills/${skillName}/${file.path}`;
+    const destPath = `/home/daytona/.hermes/skills/${skillName}/${file.path}`;
     const dir = destPath.substring(0, destPath.lastIndexOf("/"));
     await sandbox.process.executeCommand(`mkdir -p "${dir}"`).catch(() => {});
-    await sandbox.fs.uploadFile(Buffer.from(file.content), `/home/daytona/.hermes/skills/${skillName}/${file.path}`);
+    await sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
   }
 
+  // Start services
   onProgress("starting");
 
+  const hermesCmd = usedSnapshot
+    ? "/opt/hermes-agent/venv/bin/hermes"
+    : "export PATH=$HOME/.local/bin:$PATH && hermes";
+
   await sandbox.process.executeCommand(
-    "export PATH=$HOME/.local/bin:$PATH && nohup hermes gateway run > /tmp/hermes-gateway.log 2>&1 &",
+    `${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &`,
   ).catch(() => {});
+
+  const pythonCmd = usedSnapshot
+    ? "/opt/hermes-agent/venv/bin/python3"
+    : "/home/daytona/.hermes/hermes-agent/venv/bin/python3";
 
   await sandbox.process.executeCommand(
     [
-      "cd $HOME/hermes-webui",
-      "export HERMES_WEBUI_AGENT_DIR=$HOME/.hermes/hermes-agent",
-      "export HERMES_WEBUI_PYTHON=$HOME/.hermes/hermes-agent/venv/bin/python3",
+      `cd ${webuiDir}`,
+      `export HERMES_WEBUI_AGENT_DIR=/opt/hermes-agent`,
+      `export HERMES_WEBUI_PYTHON=${pythonCmd}`,
       "export HERMES_WEBUI_HOST=0.0.0.0",
       `export HERMES_WEBUI_PORT=${WEBUI_PORT}`,
-      "export HERMES_HOME=$HOME/.hermes",
-      `nohup $HOME/.hermes/hermes-agent/venv/bin/python3 server.py > /tmp/hermes-webui.log 2>&1 &`,
+      "export HERMES_HOME=/home/daytona/.hermes",
+      `nohup ${pythonCmd} server.py > /tmp/hermes-webui.log 2>&1 &`,
     ].join(" && "),
   ).catch(() => {});
 
@@ -167,7 +222,7 @@ export async function createHermesSandbox(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function waitForHealth(sandbox: any): Promise<void> {
   const start = Date.now();
-  const healthCmd = `python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:${GATEWAY_PORT}/health')"`;
+  const healthCmd = `python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:${GATEWAY_PORT}/health')" 2>/dev/null || /opt/hermes-agent/venv/bin/python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:${GATEWAY_PORT}/health')"`;
   while (Date.now() - start < HEALTH_TIMEOUT_MS) {
     try {
       const result = await sandbox.process.executeCommand(healthCmd);
@@ -177,7 +232,7 @@ async function waitForHealth(sandbox: any): Promise<void> {
     }
     await new Promise((r) => setTimeout(r, HEALTH_POLL_INTERVAL_MS));
   }
-  throw new Error("Sandbox health check timed out after 5 minutes");
+  throw new Error("Sandbox health check timed out");
 }
 
 export async function destroySandbox(

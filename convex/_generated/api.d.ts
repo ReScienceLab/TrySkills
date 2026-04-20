@@ -10,6 +10,7 @@
 
 import type * as apiKeys from "../apiKeys.js";
 import type * as sandboxes from "../sandboxes.js";
+import type * as userSnapshots from "../userSnapshots.js";
 
 import type {
   ApiFromModules,
@@ -20,6 +21,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   apiKeys: typeof apiKeys;
   sandboxes: typeof sandboxes;
+  userSnapshots: typeof userSnapshots;
 }>;
 
 /**
