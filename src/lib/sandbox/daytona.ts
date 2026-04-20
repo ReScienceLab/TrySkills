@@ -76,6 +76,10 @@ const BASE_ALLOWED_ORIGINS = "https://tryskills.sh,https://www.tryskills.sh";
  *
  * Fallback: if snapshot is unavailable, falls back to cold-start install.
  */
+function sanitizeSkillDir(skillName: string): string {
+  return skillName.replace(/\//g, "--");
+}
+
 export async function createHermesSandbox(
   config: SandboxConfig,
   skillName: string,
@@ -186,7 +190,7 @@ export async function createHermesSandbox(
 
   onProgress("uploading");
   for (const file of skillFiles) {
-    const destPath = `/home/daytona/.hermes/skills/${skillName}/${file.path}`;
+    const destPath = `/home/daytona/.hermes/skills/${sanitizeSkillDir(skillName)}/${file.path}`;
     const dir = destPath.substring(0, destPath.lastIndexOf("/"));
     await sandbox.process.executeCommand(`mkdir -p "${dir}"`).catch(() => {});
     await sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
@@ -271,7 +275,7 @@ export async function installSkill(
 
   // Write config and upload skill files in parallel (no cleanup of old skills)
   const skillDirs = [...new Set(skillFiles.map((f) => {
-    const destPath = `/home/daytona/.hermes/skills/${skillName}/${f.path}`;
+    const destPath = `/home/daytona/.hermes/skills/${sanitizeSkillDir(skillName)}/${f.path}`;
     return destPath.substring(0, destPath.lastIndexOf("/"));
   }))];
 
@@ -289,7 +293,7 @@ export async function installSkill(
 
   await Promise.all(
     skillFiles.map((file) => {
-      const destPath = `/home/daytona/.hermes/skills/${skillName}/${file.path}`;
+      const destPath = `/home/daytona/.hermes/skills/${sanitizeSkillDir(skillName)}/${file.path}`;
       return sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
     }),
   );

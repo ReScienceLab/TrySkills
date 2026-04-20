@@ -129,7 +129,10 @@ export default function SkillPage({
 
       try {
         const skillFiles = await fetchSkillDirectory(resolved);
-        if (abort.signal.aborted) return;
+        if (abort.signal.aborted) {
+          await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "active" }).catch(() => {});
+          return;
+        }
 
         const result = await installSkill(
           {
@@ -139,7 +142,7 @@ export default function SkillPage({
             llmModel: config.model,
           },
           claimed.sandboxId,
-          skillName,
+          skillPathStr,
           skillFiles,
           (step) => {
             if (abort.signal.aborted) return;
@@ -147,7 +150,10 @@ export default function SkillPage({
           },
         );
 
-        if (abort.signal.aborted) return;
+        if (abort.signal.aborted) {
+          await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "active" }).catch(() => {});
+          return;
+        }
 
         setSession(result);
         sessionRef.current = result;
@@ -168,6 +174,7 @@ export default function SkillPage({
         return;
       } catch (err) {
         console.error("[install] Failed, falling back to cold create:", err);
+        await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "active" }).catch(() => {});
       }
     }
 
@@ -202,7 +209,7 @@ export default function SkillPage({
           llmApiKey: config.llmKey,
           llmModel: config.model,
         },
-        skillName,
+        skillPathStr,
         skillFiles,
         (step, meta) => {
           if (abort.signal.aborted) return;
