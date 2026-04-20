@@ -140,8 +140,13 @@ export default function SkillPage({
       // destroySandbox is best-effort; if it fails, the cron will clean the record
       // after heartbeat timeout, and Daytona auto-stops the sandbox after 15min idle.
       if (previousSandbox) {
-        await destroySandbox(config.sandboxKey, previousSandbox.sandboxId);
-        await removeSandboxRecord({ sandboxId: previousSandbox.sandboxId }).catch(() => {});
+        try {
+          await destroySandbox(config.sandboxKey, previousSandbox.sandboxId);
+          await removeSandboxRecord({ sandboxId: previousSandbox.sandboxId }).catch(() => {});
+        } catch {
+          // Sandbox deletion failed — keep the Convex record so the
+          // dashboard still shows the orphaned sandbox for manual cleanup.
+        }
       }
 
       await createSandboxRecord({
