@@ -22,6 +22,7 @@ export default defineSchema({
     currentSkillPath: v.optional(v.string()),
     configHash: v.optional(v.string()),
     installedSkills: v.optional(v.array(v.string())),
+    webuiUrlCreatedAt: v.optional(v.number()),
     cpu: v.optional(v.number()),
     memory: v.optional(v.number()),
     disk: v.optional(v.number()),

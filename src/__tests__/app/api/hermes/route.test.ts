@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 describe("hermes proxy host validation", () => {
-  const ALLOWED_HOST_PATTERN = /^\d+-[a-z0-9]+\.daytonaproxy\d*\.net$/;
+  const ALLOWED_HOST_PATTERN = /^\d+-[a-z0-9]+\.(daytonaproxy\d*\.net|proxy\.daytona\.(work|io))$/;
 
   function isAllowedHost(url: string): boolean {
     try {
@@ -17,6 +17,8 @@ describe("hermes proxy host validation", () => {
     expect(isAllowedHost("https://8787-gk1dusgvfsqnktjr.daytonaproxy01.net")).toBe(true);
     expect(isAllowedHost("https://3000-xyz789.daytonaproxy.net")).toBe(true);
     expect(isAllowedHost("https://8787-abc123.daytonaproxy02.net")).toBe(true);
+    expect(isAllowedHost("https://8787-signedtoken.proxy.daytona.work")).toBe(true);
+    expect(isAllowedHost("https://8787-abc123.proxy.daytona.io")).toBe(true);
   });
 
   it("blocks arbitrary external URLs", () => {

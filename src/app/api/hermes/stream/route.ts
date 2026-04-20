@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextRequest } from "next/server";
 
 const DAYTONA_SKIP_HEADER = "X-Daytona-Skip-Preview-Warning";
-const ALLOWED_HOST_PATTERN = /^\d+-[a-z0-9]+\.daytonaproxy\d*\.net$/;
+const ALLOWED_HOST_PATTERN = /^\d+-[a-z0-9]+\.(daytonaproxy\d*\.net|proxy\.daytona\.(work|io))$/;
 
 function isAllowedHost(url: string): boolean {
   try {

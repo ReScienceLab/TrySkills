@@ -90,9 +90,12 @@ export default function SkillPage({
       const isStopped = claimed.poolState === "stopped";
       const skillInstalled = claimed.installedSkills?.includes(skillPathStr) ?? false;
       const sameConfig = claimed.configHash === configHash;
+      const urlFresh = claimed.webuiUrlCreatedAt
+        ? Date.now() - claimed.webuiUrlCreatedAt < 50 * 60 * 1000 // 50min buffer before 1h TTL
+        : false;
 
-      // INSTANT PATH: skill already installed + same config + sandbox active = zero Daytona API calls
-      if (skillInstalled && sameConfig && !isStopped) {
+      // INSTANT PATH: skill already installed + same config + sandbox active + URL not expired
+      if (skillInstalled && sameConfig && !isStopped && urlFresh) {
         setSession({
           sandboxId: claimed.sandboxId,
           webuiUrl: claimed.webuiUrl,
@@ -158,6 +161,7 @@ export default function SkillPage({
           webuiUrl: result.webuiUrl,
           configHash,
           installedSkills: [...new Set([...(claimed.installedSkills ?? []), skillPathStr])],
+          webuiUrlCreatedAt: Date.now(),
         }).catch(() => {});
         recordTrial({ sandboxId: claimed.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
 
@@ -232,6 +236,7 @@ export default function SkillPage({
         currentSkillPath: skillPathStr,
         configHash,
         installedSkills: [skillPathStr],
+        webuiUrlCreatedAt: Date.now(),
         cpu: result.cpu,
         memory: result.memory,
         disk: result.disk,

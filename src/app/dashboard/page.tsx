@@ -58,9 +58,9 @@ export default function DashboardPage() {
     setLiveInfo(null);
   };
 
-  const handleWakeUp = async () => {
-    if (!sandbox) return;
-    await updatePoolState({ sandboxId: sandbox.sandboxId, poolState: "active" });
+  const handleWakeUp = () => {
+    if (!sandbox?.currentSkillPath) return;
+    window.location.href = `/${sandbox.currentSkillPath}`;
   };
 
   if (!isLoaded) {
@@ -154,9 +154,9 @@ export default function DashboardPage() {
                 )}
 
                 <div className="flex gap-2">
-                  {isStopped && (
+                  {isStopped && sandbox?.currentSkillPath && (
                     <button onClick={handleWakeUp} className="px-4 py-2 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 text-xs font-medium transition-all">
-                      Wake Up
+                      Resume Last Skill
                     </button>
                   )}
                   <button onClick={handleDestroy} className="px-4 py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 text-xs font-medium transition-all">
