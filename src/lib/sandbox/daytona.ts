@@ -110,8 +110,14 @@ export async function createHermesSandbox(
       { timeout: 120 },
     );
     usedSnapshot = true;
-  } catch {
-    // Snapshot not available — fall back to default sandbox + cold install
+  } catch (err) {
+    // Only fall back to cold install if snapshot is truly unavailable (not found/invalid).
+    // If it's a timeout or other error, the sandbox may already be created — re-throw
+    // to avoid orphaning a half-started sandbox.
+    const msg = err instanceof Error ? err.message.toLowerCase() : "";
+    const isSnapshotMissing = msg.includes("not found") || msg.includes("snapshot") || msg.includes("404") || msg.includes("unprocessable");
+    if (!isSnapshotMissing) throw err;
+
     sandbox = await daytona.create(
       {
         ephemeral: true,
