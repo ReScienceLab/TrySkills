@@ -244,24 +244,33 @@ export default function SkillPage({
       setPhase("running");
       placeholderIdRef.current = null;
 
-      // Insert real record BEFORE deleting placeholder to avoid null window
-      await createSandboxRecord({
-        sandboxId: result.sandboxId,
-        skillPath: skillPathStr,
-        webuiUrl: result.webuiUrl,
-        state: "running",
-        poolState: "active",
-        currentSkillPath: skillPathStr,
-        configHash,
-        installedSkills: [skillPathStr],
-        webuiUrlCreatedAt: Date.now(),
-        cpu: result.cpu,
-        memory: result.memory,
-        disk: result.disk,
-        region: result.region,
-      }).catch(() => {});
-
-      await removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
+      // Insert real record BEFORE deleting placeholder to avoid null window.
+      // If insert fails, destroy sandbox to prevent orphan.
+      try {
+        await createSandboxRecord({
+          sandboxId: result.sandboxId,
+          skillPath: skillPathStr,
+          webuiUrl: result.webuiUrl,
+          state: "running",
+          poolState: "active",
+          currentSkillPath: skillPathStr,
+          configHash,
+          installedSkills: [skillPathStr],
+          webuiUrlCreatedAt: Date.now(),
+          cpu: result.cpu,
+          memory: result.memory,
+          disk: result.disk,
+          region: result.region,
+        });
+        await removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
+      } catch {
+        // Real record insert failed -- destroy sandbox to prevent orphan
+        destroySandbox(config.sandboxKey, result.sandboxId).catch(() => {});
+        await removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
+        setSandboxState("error");
+        setSandboxError("Failed to save sandbox record. Please try again.");
+        return;
+      }
       recordTrial({ sandboxId: result.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
     } catch (err) {
       if (abort.signal.aborted) return;
