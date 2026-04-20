@@ -190,6 +190,7 @@ export default function SkillPage({
           updateSandboxState({ sandboxId: placeholderId, state: step }).catch(() => {});
         },
         userId ?? undefined,
+        typeof window !== "undefined" ? window.location.origin : undefined,
       );
 
       if (abort.signal.aborted) {

@@ -67,10 +67,7 @@ function buildWebuiEnv(agentDir: string): string {
   ].join("\n");
 }
 
-const ALLOWED_ORIGINS = [
-  "https://tryskills.sh",
-  "https://www.tryskills.sh",
-].join(",");
+const BASE_ALLOWED_ORIGINS = "https://tryskills.sh,https://www.tryskills.sh";
 
 /**
  * Create a sandbox from the pre-baked "hermes-ready" snapshot.
@@ -84,6 +81,7 @@ export async function createHermesSandbox(
   skillFiles: SkillFile[],
   onProgress: (step: SandboxState, meta?: { usedSnapshot?: boolean }) => void,
   userId?: string,
+  callerOrigin?: string,
 ): Promise<SandboxSession & { usedSnapshot: boolean }> {
   const { Daytona } = await getDaytonaSDK();
 
@@ -116,7 +114,9 @@ export async function createHermesSandbox(
           API_SERVER_ENABLED: "true",
           API_SERVER_CORS_ORIGINS: "*",
           GATEWAY_ALLOW_ALL_USERS: "true",
-          HERMES_WEBUI_ALLOWED_ORIGINS: ALLOWED_ORIGINS,
+          HERMES_WEBUI_ALLOWED_ORIGINS: callerOrigin
+            ? `${BASE_ALLOWED_ORIGINS},${callerOrigin}`
+            : BASE_ALLOWED_ORIGINS,
         },
       },
       { timeout: 120 },
@@ -139,7 +139,9 @@ export async function createHermesSandbox(
           API_SERVER_ENABLED: "true",
           API_SERVER_CORS_ORIGINS: "*",
           GATEWAY_ALLOW_ALL_USERS: "true",
-          HERMES_WEBUI_ALLOWED_ORIGINS: ALLOWED_ORIGINS,
+          HERMES_WEBUI_ALLOWED_ORIGINS: callerOrigin
+            ? `${BASE_ALLOWED_ORIGINS},${callerOrigin}`
+            : BASE_ALLOWED_ORIGINS,
         },
       } as unknown as Parameters<typeof daytona.create>[0],
       { timeout: 300 },
