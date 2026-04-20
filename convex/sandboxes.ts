@@ -123,7 +123,9 @@ export const listStale = internalQuery({
     // eslint-disable-next-line @convex-dev/no-collect-in-query
     const all = await ctx.db.query("sandboxes").collect();
     return all.filter((s) => {
-      if (s.state !== "running" && s.state !== "creating" && s.state !== "starting") return false;
+      // Skip terminal states — only clean non-terminal (active/in-flight) records
+      const terminal = ["error", "cleaning", "idle"];
+      if (terminal.includes(s.state)) return false;
       const age = now - s.createdAt;
       if (age < args.ageThresholdMs) return false;
       const lastBeat = s.lastHeartbeat ?? s.createdAt;

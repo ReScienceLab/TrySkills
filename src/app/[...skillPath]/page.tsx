@@ -63,7 +63,7 @@ export default function SkillPage({
   const userCancelled = useRef(false);
 
   // Heartbeat: keeps sandbox alive while user is on page
-  useHeartbeat(session?.sandboxId ?? null);
+  useHeartbeat(session?.sandboxId ?? null, savedConfig?.sandboxKey ?? null);
 
   const handleLaunch = async (config: LaunchConfig) => {
     launchAbortRef.current?.abort();
