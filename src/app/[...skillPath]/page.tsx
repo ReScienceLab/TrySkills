@@ -159,7 +159,7 @@ export default function SkillPage({
           poolState: "active",
           currentSkillPath: skillPathStr,
           webuiUrl: result.webuiUrl,
-          configHash,
+          configHash: sameConfig ? undefined : configHash, // only update if we actually wrote config files
           webuiUrlCreatedAt: Date.now(),
         }).catch(() => {});
         addInstalledSkillMut({ sandboxId: sandbox.sandboxId, skillPath: skillPathStr }).catch(() => {});
@@ -267,6 +267,9 @@ export default function SkillPage({
         // Real record insert failed -- destroy sandbox to prevent orphan
         destroySandbox(config.sandboxKey, result.sandboxId).catch(() => {});
         await removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
+        setSession(null);
+        sessionRef.current = null;
+        setPhase("config");
         setSandboxState("error");
         setSandboxError("Failed to save sandbox record. Please try again.");
         return;
