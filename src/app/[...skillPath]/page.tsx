@@ -225,6 +225,10 @@ export default function SkillPage({
       setSandboxState("error");
       setSandboxError(err instanceof Error ? err.message : "Launch failed");
       await removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
+      // Restore claimed sandbox if it was stranded in swapping
+      if (claimed) {
+        await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "warm" }).catch(() => {});
+      }
       placeholderIdRef.current = null;
     }
   };
