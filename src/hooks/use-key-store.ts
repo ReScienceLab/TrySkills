@@ -104,8 +104,16 @@ export function useKeyStore() {
 
     if (isAuthenticated && storedKeys !== undefined) {
       if (storedKeys === null) {
-        // Convex explicitly has no keys — respect the backend state.
-        // Only keep localOverride if user just saved in this session.
+        // Convex has no keys. If we have a local cache, use it as a fallback
+        // and let the replay effect sync it to Convex. This handles:
+        // - User saved locally before auth synced (replay pending)
+        // - Page reload with keys only in localStorage (will auto-sync)
+        // The clear() function wipes both localStorage AND Convex, so a
+        // legitimate deletion won't have stale local cache.
+        if (isSignedIn && user) {
+          const cached = readLocalCache(user.id);
+          if (cached) return cached;
+        }
         return null;
       }
       if (!isDecrypting) return decryptedConfig;
