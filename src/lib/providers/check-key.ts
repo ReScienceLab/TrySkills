@@ -11,19 +11,15 @@ export async function checkProviderKey(
   }
 
   try {
-    const res = await fetch(provider.checkEndpoint, {
-      method: "GET",
-      headers: provider.checkAuthHeader(apiKey),
-      signal: AbortSignal.timeout(10_000),
+    const res = await fetch("/api/check-key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ providerId: provider.id, apiKey }),
+      signal: AbortSignal.timeout(15_000),
     });
 
-    if (res.ok) return { ok: true };
-
-    if (res.status === 401 || res.status === 403) {
-      return { ok: false, error: "Invalid API key" };
-    }
-
-    return { ok: false, error: `HTTP ${res.status}` };
+    const data = (await res.json()) as CheckResult;
+    return data;
   } catch (err) {
     if (err instanceof DOMException && err.name === "TimeoutError") {
       return { ok: false, error: "Request timed out" };

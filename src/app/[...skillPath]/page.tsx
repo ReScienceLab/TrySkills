@@ -35,7 +35,7 @@ export default function SkillPage({
   const { skillPath } = resolvedParams;
   const { isSignedIn, isLoaded: authLoaded } = useAuth();
   const { isAuthenticated } = useConvexAuth();
-  const { config: savedConfig, loading: keysLoading, save } = useKeyStore();
+  const { config: savedConfig, loading: keysLoading } = useKeyStore();
   const createSandboxRecord = useMutation(api.sandboxes.create);
   const removeSandboxRecord = useMutation(api.sandboxes.remove);
   const updateSandboxState = useMutation(api.sandboxes.updateState);
@@ -84,13 +84,8 @@ export default function SkillPage({
     placeholderIdRef.current = placeholderId;
 
     try {
-      await save({
-        providerId: config.provider.id,
-        model: config.model,
-        llmKey: config.llmKey,
-        sandboxKey: config.sandboxKey,
-        providerKeys: savedConfig?.providerKeys,
-      });
+      // Config is already saved by ConfigPanelForm.handleLaunch or auto-launch;
+      // do not save again here to avoid overwriting providerKeys with stale data.
 
       await createSandboxRecord({
         sandboxId: placeholderId,

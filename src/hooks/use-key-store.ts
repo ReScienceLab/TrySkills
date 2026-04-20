@@ -177,6 +177,20 @@ export function useKeyStore() {
     [isAuthenticated, user, saveToConvex],
   );
 
+  // Sync local-only saves to Convex once auth becomes available
+  useEffect(() => {
+    if (!isAuthenticated || !user || !localOverride) return;
+    let cancelled = false;
+    (async () => {
+      const key = await deriveKey(user.id);
+      const { ciphertext, iv } = await encrypt(JSON.stringify(localOverride), key);
+      if (!cancelled) {
+        await saveToConvex({ encryptedData: ciphertext, iv });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isAuthenticated, user, localOverride, saveToConvex]);
+
   const clear = useCallback(async () => {
     setLocalOverride(null);
     setHasUserSaved(false);
