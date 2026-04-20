@@ -23,6 +23,7 @@ export interface SandboxConfig {
 export interface SandboxSession {
   sandboxId: string;
   webuiUrl: string;
+  webuiBaseUrl: string;
   state: SandboxState;
   startedAt: number;
   cpu?: number;

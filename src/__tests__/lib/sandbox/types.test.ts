@@ -40,7 +40,8 @@ describe("sandbox/types", () => {
   it("SandboxSession is structurally valid", () => {
     const session: SandboxSession = {
       sandboxId: "sb-123",
-      webuiUrl: "https://preview.daytona.io/sb-123",
+      webuiUrl: "https://preview.daytona.io/sb-123?prompt=test",
+      webuiBaseUrl: "https://preview.daytona.io/sb-123",
       state: "running",
       startedAt: Date.now(),
     };

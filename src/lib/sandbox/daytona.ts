@@ -67,6 +67,30 @@ function buildWebuiEnv(agentDir: string): string {
   ].join("\n");
 }
 
+const PREFILL_SCRIPT = `
+(function(){
+  var p=new URLSearchParams(location.search).get('prompt');
+  if(!p)return;
+  var poll=setInterval(function(){
+    var ta=document.getElementById('msg');
+    if(!ta)return;
+    clearInterval(poll);
+    ta.value=p;
+    ta.dispatchEvent(new Event('input',{bubbles:true}));
+  },200);
+  setTimeout(function(){clearInterval(poll)},10000);
+})();
+`.trim();
+
+function buildWebuiUrl(baseUrl: string, skillName: string): { webuiUrl: string; webuiBaseUrl: string } {
+  const prompt = encodeURIComponent(`I want to try the ${skillName} skill`);
+  const separator = baseUrl.includes("?") ? "&" : "?";
+  return {
+    webuiUrl: `${baseUrl}${separator}prompt=${prompt}`,
+    webuiBaseUrl: baseUrl,
+  };
+}
+
 /**
  * Create a sandbox from the pre-baked "hermes-ready" snapshot.
  * This eliminates the ~2min install step — sandbox is ready in ~15s.
@@ -174,6 +198,11 @@ export async function createHermesSandbox(
     `cat > ${webuiDir}/.env << 'WEOF'\n${buildWebuiEnv(agentDir)}\nWEOF`,
   ).catch(() => {});
 
+  // Inject prompt prefill script into WebUI
+  await sandbox.process.executeCommand(
+    `cat >> ${webuiDir}/static/boot.js << 'JSEOF'\n${PREFILL_SCRIPT}\nJSEOF`,
+  ).catch(() => {});
+
   onProgress("uploading");
   for (const file of skillFiles) {
     const destPath = `/home/daytona/.hermes/skills/${skillName}/${file.path}`;
@@ -206,11 +235,13 @@ export async function createHermesSandbox(
   await waitForHealth(sandbox);
 
   const preview = await sandbox.getPreviewLink(WEBUI_PORT);
-  const webuiUrl = preview.url + (preview.token ? `?token=${preview.token}` : "");
+  const baseUrl = preview.url + (preview.token ? `?token=${preview.token}` : "");
+  const { webuiUrl, webuiBaseUrl } = buildWebuiUrl(baseUrl, skillName);
 
   return {
     sandboxId: sandbox.id,
     webuiUrl,
+    webuiBaseUrl,
     state: "running",
     startedAt: Date.now(),
     cpu: sandbox.cpu,
@@ -283,11 +314,13 @@ export async function hotSwapSkill(
   await waitForHealth(sandbox);
 
   const preview = await sandbox.getPreviewLink(WEBUI_PORT);
-  const webuiUrl = preview.url + (preview.token ? `?token=${preview.token}` : "");
+  const baseUrl = preview.url + (preview.token ? `?token=${preview.token}` : "");
+  const { webuiUrl, webuiBaseUrl } = buildWebuiUrl(baseUrl, skillName);
 
   return {
     sandboxId: sandbox.id,
     webuiUrl,
+    webuiBaseUrl,
     state: "running",
     startedAt: Date.now(),
     cpu: sandbox.cpu,

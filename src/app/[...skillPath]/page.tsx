@@ -401,7 +401,7 @@ export default function SkillPage({
 
           {phase === "running" && session && (
             <SessionControl
-              webuiUrl={session.webuiUrl}
+              webuiUrl={session.webuiBaseUrl || session.webuiUrl}
               startedAt={session.startedAt}
               onStop={handleStop}
               onTryAnother={handleTryAnother}
