@@ -105,5 +105,5 @@ export async function respondApproval(
   await proxyPost("/api/approval/respond", webuiBaseUrl, {
     session_id: sessionId,
     choice,
-  }).catch(() => {});
+  });
 }

@@ -9,6 +9,7 @@ export const create = mutation({
     state: v.optional(v.string()),
     poolState: v.optional(v.union(
       v.literal("active"),
+      v.literal("installing"),
       v.literal("stopped"),
     )),
     currentSkillPath: v.optional(v.string()),
@@ -145,7 +146,7 @@ export const claimSandbox = mutation({
     });
     if (!reusable) return null;
 
-    await ctx.db.patch("sandboxes", reusable._id, { poolState: "active" });
+    await ctx.db.patch("sandboxes", reusable._id, { poolState: "installing" });
     return {
       sandboxId: reusable.sandboxId,
       webuiUrl: reusable.webuiUrl,
@@ -192,6 +193,7 @@ export const updatePoolState = mutation({
     sandboxId: v.string(),
     poolState: v.union(
       v.literal("active"),
+      v.literal("installing"),
       v.literal("stopped"),
     ),
     currentSkillPath: v.optional(v.string()),

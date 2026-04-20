@@ -47,9 +47,15 @@ function ApprovalCard({
   webuiBaseUrl: string;
   onDismiss: () => void;
 }) {
+  const [error, setError] = useState<string | null>(null);
   const handleApprove = async (choice: "once" | "session" | "always" | "deny") => {
-    await respondApproval(webuiBaseUrl, approval.sessionId, choice);
-    onDismiss();
+    setError(null);
+    try {
+      await respondApproval(webuiBaseUrl, approval.sessionId, choice);
+      onDismiss();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send approval");
+    }
   };
 
   return (
@@ -60,6 +66,9 @@ function ApprovalCard({
       </pre>
       {approval.description && (
         <p className="text-xs text-white/40 mb-3">{approval.description}</p>
+      )}
+      {error && (
+        <p className="text-xs text-red-400 mb-2">{error} -- try again</p>
       )}
       <div className="flex gap-2">
         <button onClick={() => handleApprove("once")} className="px-3 py-1.5 bg-amber-500/20 text-amber-400 text-xs hover:bg-amber-500/30 rounded transition-all">

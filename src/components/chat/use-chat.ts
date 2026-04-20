@@ -191,6 +191,7 @@ export function useChat(
         setSessionId(sid);
         await startStream(sid, `I want to try the ${skillName} skill`);
       } catch (err) {
+        initRef.current = false; // allow retry on next render/remount
         setError(err instanceof Error ? err.message : "Failed to connect");
       }
     })();
