@@ -89,6 +89,7 @@ export default function SkillPage({
         model: config.model,
         llmKey: config.llmKey,
         sandboxKey: config.sandboxKey,
+        providerKeys: savedConfig?.providerKeys,
       });
 
       await createSandboxRecord({
