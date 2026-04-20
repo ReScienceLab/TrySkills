@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { PROVIDERS, type Provider } from "@/lib/providers/registry";
 import { checkProviderKey, type CheckResult } from "@/lib/providers/check-key";
 
@@ -90,12 +90,17 @@ export function ApiKeyInput({
   const [visible, setVisible] = useState(false);
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<CheckResult | null>(null);
+  const checkedKeyRef = useRef(value);
 
   const handleCheck = async () => {
+    const keyAtStart = value;
+    checkedKeyRef.current = keyAtStart;
     setChecking(true);
     setResult(null);
     const r = await checkProviderKey(provider, value);
-    setResult(r);
+    if (checkedKeyRef.current === keyAtStart) {
+      setResult(r);
+    }
     setChecking(false);
   };
 

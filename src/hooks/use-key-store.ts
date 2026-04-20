@@ -122,9 +122,10 @@ export function useKeyStore() {
 
     if (isAuthenticated && storedKeys !== undefined) {
       if (storedKeys === null) {
-        // Server record is empty — preserve local cache so keys saved
-        // during the Convex-auth timeout window are not discarded.
-        if (user) return readLocalCache(user.id);
+        // Server record is empty. Only fall back to local cache if the user
+        // saved during this session (pre-auth timeout window). Otherwise the
+        // server-side clear is intentional and we should not revive stale keys.
+        if (localOverride) return localOverride;
         return null;
       }
       if (!isDecrypting) return decryptedConfig;
