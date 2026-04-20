@@ -47,13 +47,10 @@ const image = Image.base("ubuntu:22.04").runCommands(
 
   // Clone and install hermes-webui
   "git clone --depth 1 https://github.com/nesquena/hermes-webui.git /opt/hermes-webui",
-  "cd /opt/hermes-webui && npm install --silent",
+  "cd /opt/hermes-webui && npm install --legacy-peer-deps 2>&1 || npm install --force 2>&1 || true",
 
   // Pre-create hermes home directory structure
   "mkdir -p /home/daytona/.hermes/skills /home/daytona/.hermes/logs",
-
-  // Install Playwright chromium for browser tools
-  "cd /opt/hermes-agent && npx playwright install chromium --with-deps 2>/dev/null || true",
 );
 
 async function main() {
@@ -77,7 +74,9 @@ async function main() {
     if (existing) {
       console.log(`Existing snapshot "${SNAPSHOT_NAME}" found (state: ${existing.state}). Deleting...`);
       await daytona.snapshot.delete(existing);
-      console.log("Deleted.");
+      console.log("Deleted. Waiting for cleanup...");
+      // Wait for deletion to propagate
+      await new Promise((r) => setTimeout(r, 10_000));
     }
   } catch {
     // Snapshot doesn't exist — that's fine

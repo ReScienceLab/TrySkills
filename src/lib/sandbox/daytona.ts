@@ -183,7 +183,7 @@ export async function createHermesSandbox(
     : "export PATH=$HOME/.local/bin:$PATH && hermes";
 
   await sandbox.process.executeCommand(
-    `${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &`,
+    `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
   ).catch(() => {});
 
   const pythonCmd = usedSnapshot
@@ -222,7 +222,7 @@ export async function createHermesSandbox(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function waitForHealth(sandbox: any): Promise<void> {
   const start = Date.now();
-  const healthCmd = `python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:${GATEWAY_PORT}/health')" 2>/dev/null || /opt/hermes-agent/venv/bin/python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:${GATEWAY_PORT}/health')"`;
+  const healthCmd = `curl -sf http://localhost:${GATEWAY_PORT}/health 2>/dev/null`;
   while (Date.now() - start < HEALTH_TIMEOUT_MS) {
     try {
       const result = await sandbox.process.executeCommand(healthCmd);
