@@ -112,12 +112,18 @@ export function useKeyStore() {
     if (!isSignedIn) return false;
     if (hasUserSaved) return false;
 
-    // Wait for Convex auth to sync before resolving — prevents
-    // briefly treating configured users as unconfigured on fresh browsers
-    if (!isAuthenticated) return true;
+    // If Convex auth is synced, wait for query + decryption
+    if (isAuthenticated) {
+      return storedKeys === undefined || isDecrypting;
+    }
 
-    return storedKeys === undefined || isDecrypting;
-  }, [authLoaded, isSignedIn, hasUserSaved, isAuthenticated, storedKeys, isDecrypting]);
+    // Convex auth not yet synced — fall back to local cache if available
+    // (prevents infinite spinner if Convex auth stalls)
+    if (user && readLocalCache(user.id)) return false;
+
+    // No local cache and Convex not ready — keep loading briefly
+    return true;
+  }, [authLoaded, isSignedIn, hasUserSaved, isAuthenticated, storedKeys, isDecrypting, user]);
 
   const save = useCallback(
     async (newConfig: StoredConfig) => {

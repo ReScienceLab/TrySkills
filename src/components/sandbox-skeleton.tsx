@@ -57,14 +57,11 @@ export function SandboxSkeleton({ skillName }: { skillName: string }) {
       </div>
 
       {/* Status bar below */}
-      <div className="mt-3 flex items-center justify-between px-1">
+      <div className="mt-3 flex items-center px-1">
         <div className="flex items-center gap-2">
           <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
           <span className="text-[11px] text-white/30">Setting up environment...</span>
         </div>
-        <button className="text-[11px] text-white/20 hover:text-white/40 transition-colors">
-          cancel
-        </button>
       </div>
     </div>
   );
