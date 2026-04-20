@@ -130,56 +130,66 @@ export default function SkillPage({
       setNeedsWake(isStopped);
       setSandboxState(isStopped ? "starting" : "uploading");
 
+      let skillFiles;
       try {
-        const skillFiles = await fetchSkillDirectory(resolved);
-        if (abort.signal.aborted) {
-          await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "active" }).catch(() => {});
-          return;
-        }
+        skillFiles = await fetchSkillDirectory(resolved);
+      } catch (fetchErr) {
+        console.error("[install] Failed to fetch skill files:", fetchErr);
+        await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "active" }).catch(() => {});
+        // Fall through to cold create which will retry the fetch
+        skillFiles = null;
+      }
 
-        const result = await installSkill(
-          {
-            daytonaApiKey: config.sandboxKey,
-            llmProvider: config.provider.id,
-            llmApiKey: config.llmKey,
-            llmModel: config.model,
-          },
-          claimed.sandboxId,
-          skillPathStr,
-          skillFiles,
-          (step) => {
-            if (abort.signal.aborted) return;
-            setSandboxState(step as SandboxState);
-          },
-        );
-
-        if (abort.signal.aborted) {
-          await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "active" }).catch(() => {});
-          return;
-        }
-
-        setSession(result);
-        sessionRef.current = result;
-        setSandboxState("running");
-        setPhase("running");
-
-        await updatePoolState({
-          sandboxId: claimed.sandboxId,
-          poolState: "active",
-          currentSkillPath: skillPathStr,
-          webuiUrl: result.webuiUrl,
-          configHash,
-          installedSkills: [...new Set([...(claimed.installedSkills ?? []), skillPathStr])],
-          webuiUrlCreatedAt: Date.now(),
-        }).catch(() => {});
-        recordTrial({ sandboxId: claimed.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
-
+      if (abort.signal.aborted) {
+        await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "active" }).catch(() => {});
         return;
-      } catch (err) {
-        console.error("[install] Failed, falling back to cold create:", err);
-        // Destroy the old sandbox before cold-creating a new one to prevent orphans
-        destroySandbox(config.sandboxKey, claimed.sandboxId).catch(() => {});
-        removeSandboxRecord({ sandboxId: claimed.sandboxId }).catch(() => {});
+      }
+
+      if (skillFiles) {
+        try {
+          const result = await installSkill(
+            {
+              daytonaApiKey: config.sandboxKey,
+              llmProvider: config.provider.id,
+              llmApiKey: config.llmKey,
+              llmModel: config.model,
+            },
+            claimed.sandboxId,
+            skillPathStr,
+            skillFiles,
+            (step) => {
+              if (abort.signal.aborted) return;
+              setSandboxState(step as SandboxState);
+            },
+          );
+
+          if (abort.signal.aborted) {
+            await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "active" }).catch(() => {});
+            return;
+          }
+
+          setSession(result);
+          sessionRef.current = result;
+          setSandboxState("running");
+          setPhase("running");
+
+          await updatePoolState({
+            sandboxId: claimed.sandboxId,
+            poolState: "active",
+            currentSkillPath: skillPathStr,
+            webuiUrl: result.webuiUrl,
+            configHash,
+            installedSkills: [...new Set([...(claimed.installedSkills ?? []), skillPathStr])],
+            webuiUrlCreatedAt: Date.now(),
+          }).catch(() => {});
+          recordTrial({ sandboxId: claimed.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
+
+          return;
+        } catch (err) {
+          console.error("[install] installSkill failed, destroying sandbox:", err);
+          destroySandbox(config.sandboxKey, claimed.sandboxId).catch(() => {});
+          removeSandboxRecord({ sandboxId: claimed.sandboxId }).catch(() => {});
+        }
       }
     }
 
