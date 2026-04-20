@@ -13,12 +13,19 @@ export async function createSession(
   webuiBaseUrl: string,
   model?: string,
 ): Promise<string> {
-  const res = await fetch(buildUrl(webuiBaseUrl, "/api/session/new"), {
+  const url = buildUrl(webuiBaseUrl, "/api/session/new");
+  console.log("[hermes-api] createSession URL:", url);
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model }),
   });
-  if (!res.ok) throw new Error(`Failed to create session: ${res.status}`);
+  const ct = res.headers.get("content-type") || "";
+  if (!res.ok || !ct.includes("json")) {
+    const text = await res.text().catch(() => "");
+    console.error(`[hermes-api] createSession failed: status=${res.status} ct=${ct} url=${url}`, text.slice(0, 300));
+    throw new Error(`Failed to create session: ${res.status} (${ct.includes("html") ? "got HTML instead of JSON - CSRF or auth issue" : text.slice(0, 100)})`);
+  }
   const data = await res.json();
   return data.session.session_id;
 }
@@ -29,14 +36,16 @@ export async function sendMessage(
   message: string,
   model?: string,
 ): Promise<string> {
-  const res = await fetch(buildUrl(webuiBaseUrl, "/api/chat/start"), {
+  const url = buildUrl(webuiBaseUrl, "/api/chat/start");
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ session_id: sessionId, message, model }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Failed to send message: ${res.status}`);
+    const text = await res.text().catch(() => "");
+    console.error(`[hermes-api] sendMessage failed: ${res.status} ${url}`, text.slice(0, 200));
+    throw new Error(text.includes('"error"') ? JSON.parse(text).error : `Failed to send: ${res.status}`);
   }
   const data = await res.json();
   return data.stream_id;
