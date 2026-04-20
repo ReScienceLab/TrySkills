@@ -112,11 +112,11 @@ export function useKeyStore() {
     if (!isSignedIn) return false;
     if (hasUserSaved) return false;
 
-    if (isAuthenticated) {
-      return storedKeys === undefined || isDecrypting;
-    }
+    // Wait for Convex auth to sync before resolving — prevents
+    // briefly treating configured users as unconfigured on fresh browsers
+    if (!isAuthenticated) return true;
 
-    return false;
+    return storedKeys === undefined || isDecrypting;
   }, [authLoaded, isSignedIn, hasUserSaved, isAuthenticated, storedKeys, isDecrypting]);
 
   const save = useCallback(

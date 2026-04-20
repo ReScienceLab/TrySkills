@@ -88,7 +88,7 @@ export function SessionControl({
         </div>
 
         <div className="text-xs text-white/25 text-center">
-          Sandbox auto-stops after {AUTO_STOP_MINUTES} minutes of idle time (no activity or open tabs).
+          Sandbox auto-stops after {AUTO_STOP_MINUTES} minutes if you close this page.
         </div>
       </div>
     </div>
