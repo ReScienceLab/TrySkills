@@ -122,10 +122,16 @@ export function useKeyStore() {
 
     if (isAuthenticated && storedKeys !== undefined) {
       if (storedKeys === null) {
-        // Server record is empty. Only fall back to local cache if the user
-        // saved during this session (pre-auth timeout window). Otherwise the
-        // server-side clear is intentional and we should not revive stale keys.
-        if (localOverride) return localOverride;
+        // Convex has no keys. If we have a local cache, use it as a fallback
+        // and let the replay effect sync it to Convex. This handles:
+        // - User saved locally before auth synced (replay pending)
+        // - Page reload with keys only in localStorage (will auto-sync)
+        // The clear() function wipes both localStorage AND Convex, so a
+        // legitimate deletion won't have stale local cache.
+        if (isSignedIn && user) {
+          const cached = readLocalCache(user.id);
+          if (cached) return cached;
+        }
         return null;
       }
       if (!isDecrypting) return decryptedConfig;
@@ -178,19 +184,16 @@ export function useKeyStore() {
     [isAuthenticated, user, saveToConvex],
   );
 
-  // Sync local-only saves to Convex once auth becomes available
+  // Replay locally saved keys to Convex once auth becomes available
   useEffect(() => {
-    if (!isAuthenticated || !user || !localOverride) return;
-    let cancelled = false;
-    (async () => {
-      const key = await deriveKey(user.id);
-      const { ciphertext, iv } = await encrypt(JSON.stringify(localOverride), key);
-      if (!cancelled) {
-        await saveToConvex({ encryptedData: ciphertext, iv });
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [isAuthenticated, user, localOverride, saveToConvex]);
+    if (!isAuthenticated || !user || !hasUserSaved || !localOverride) return;
+    // Check if Convex already has keys — if so, skip replay
+    if (storedKeys !== undefined && storedKeys !== null) return;
+    deriveKey(user.id)
+      .then((key) => encrypt(JSON.stringify(localOverride), key))
+      .then(({ ciphertext, iv }) => saveToConvex({ encryptedData: ciphertext, iv }))
+      .catch(() => {});
+  }, [isAuthenticated, user, hasUserSaved, localOverride, storedKeys, saveToConvex]);
 
   const clear = useCallback(async () => {
     setLocalOverride(null);

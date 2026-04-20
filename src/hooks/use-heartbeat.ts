@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import { useMutation } from "convex/react";
-import { useConvexAuth } from "convex/react";
 import { api } from "../../convex/_generated/api";
 
 const HEARTBEAT_INTERVAL_MS = 60_000; // 60 seconds
@@ -16,7 +15,6 @@ const HEARTBEAT_INTERVAL_MS = 60_000; // 60 seconds
  * is hidden — because the user typically interacts with Hermes in a separate tab.
  */
 export function useHeartbeat(sandboxId: string | null, daytonaKey: string | null) {
-  const { isAuthenticated } = useConvexAuth();
   const heartbeat = useMutation(api.sandboxes.heartbeat);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -35,7 +33,10 @@ export function useHeartbeat(sandboxId: string | null, daytonaKey: string | null
   }, [sandboxId, daytonaKey, heartbeat]);
 
   useEffect(() => {
-    if (!sandboxId || !daytonaKey || !isAuthenticated) {
+    // Only need sandboxId + daytonaKey to refresh Daytona activity.
+    // Convex auth is NOT required here — launch can happen from cached keys
+    // before Convex syncs, and the Daytona keepalive must still fire.
+    if (!sandboxId || !daytonaKey) {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
@@ -52,5 +53,5 @@ export function useHeartbeat(sandboxId: string | null, daytonaKey: string | null
         intervalRef.current = null;
       }
     };
-  }, [sandboxId, daytonaKey, isAuthenticated, sendHeartbeat]);
+  }, [sandboxId, daytonaKey, sendHeartbeat]);
 }

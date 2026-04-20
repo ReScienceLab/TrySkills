@@ -26,8 +26,8 @@ const SNAPSHOT_RESOURCES = {
 };
 
 const image = Image.base("ubuntu:22.04").runCommands(
-  // System packages
-  "apt-get update && apt-get install -y --no-install-recommends curl git ripgrep ca-certificates && rm -rf /var/lib/apt/lists/*",
+  // System packages (mirrors install.sh dependencies)
+  "apt-get update && apt-get install -y --no-install-recommends curl git ripgrep ffmpeg ca-certificates build-essential python3-dev libffi-dev && rm -rf /var/lib/apt/lists/*",
 
   // Install uv (fast Python package manager)
   "curl -LsSf https://astral.sh/uv/install.sh | sh",
@@ -38,12 +38,24 @@ const image = Image.base("ubuntu:22.04").runCommands(
   // Install Node.js 22 LTS
   'curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs && rm -rf /var/lib/apt/lists/*',
 
-  // Clone and install hermes-agent
+  // Clone and install hermes-agent with all optional deps
   "git clone --depth 1 https://github.com/NousResearch/hermes-agent.git /opt/hermes-agent",
   'export PATH=/root/.local/bin:$PATH && cd /opt/hermes-agent && uv venv venv --python 3.11 && VIRTUAL_ENV=/opt/hermes-agent/venv uv pip install -e ".[all]" || VIRTUAL_ENV=/opt/hermes-agent/venv uv pip install -e "."',
 
   // Symlink hermes binary to PATH
   "ln -sf /opt/hermes-agent/venv/bin/hermes /usr/local/bin/hermes",
+
+  // Install Node-side dependencies for browser tooling (mirrors install.sh install_node_deps)
+  "cd /opt/hermes-agent && npm install --silent 2>/dev/null || true",
+
+  // Install Playwright chromium for browser-based skills
+  "cd /opt/hermes-agent && npx playwright install --with-deps chromium 2>/dev/null || true",
+
+  // Install TUI dependencies (if present)
+  "cd /opt/hermes-agent && if [ -f ui-tui/package.json ]; then cd ui-tui && npm install --silent 2>/dev/null || true; fi",
+
+  // Install WhatsApp bridge dependencies (if present)
+  "cd /opt/hermes-agent && if [ -f scripts/whatsapp-bridge/package.json ]; then cd scripts/whatsapp-bridge && npm install --silent 2>/dev/null || true; fi",
 
   // Clone and install hermes-webui
   "git clone --depth 1 https://github.com/nesquena/hermes-webui.git /opt/hermes-webui",
