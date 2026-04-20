@@ -3,11 +3,17 @@ export interface SSEEvent {
   data: Record<string, unknown>;
 }
 
+function buildUrl(baseUrl: string, path: string): string {
+  const url = new URL(baseUrl);
+  url.pathname = path;
+  return url.toString();
+}
+
 export async function createSession(
   webuiBaseUrl: string,
   model?: string,
 ): Promise<string> {
-  const res = await fetch(`${webuiBaseUrl}/api/session/new`, {
+  const res = await fetch(buildUrl(webuiBaseUrl, "/api/session/new"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model }),
@@ -23,7 +29,7 @@ export async function sendMessage(
   message: string,
   model?: string,
 ): Promise<string> {
-  const res = await fetch(`${webuiBaseUrl}/api/chat/start`, {
+  const res = await fetch(buildUrl(webuiBaseUrl, "/api/chat/start"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ session_id: sessionId, message, model }),
@@ -43,8 +49,10 @@ export function streamResponse(
   onError: (error: Error) => void,
   onEnd: () => void,
 ): () => void {
-  const url = `${webuiBaseUrl}/api/chat/stream?stream_id=${encodeURIComponent(streamId)}`;
-  const es = new EventSource(url);
+  const streamUrl = new URL(webuiBaseUrl);
+  streamUrl.pathname = "/api/chat/stream";
+  streamUrl.searchParams.set("stream_id", streamId);
+  const es = new EventSource(streamUrl.toString());
 
   const EVENTS = [
     "token", "reasoning", "tool", "tool_complete", "done",
@@ -82,9 +90,10 @@ export async function cancelStream(
   webuiBaseUrl: string,
   streamId: string,
 ): Promise<void> {
-  await fetch(
-    `${webuiBaseUrl}/api/chat/cancel?stream_id=${encodeURIComponent(streamId)}`,
-  ).catch(() => {});
+  const cancelUrl = new URL(webuiBaseUrl);
+  cancelUrl.pathname = "/api/chat/cancel";
+  cancelUrl.searchParams.set("stream_id", streamId);
+  await fetch(cancelUrl.toString()).catch(() => {});
 }
 
 export async function respondApproval(
@@ -92,7 +101,7 @@ export async function respondApproval(
   sessionId: string,
   choice: "once" | "session" | "always" | "deny",
 ): Promise<void> {
-  await fetch(`${webuiBaseUrl}/api/approval/respond`, {
+  await fetch(buildUrl(webuiBaseUrl, "/api/approval/respond"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ session_id: sessionId, choice }),
