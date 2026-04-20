@@ -15,6 +15,15 @@ export default defineSchema({
     skillPath: v.string(),
     webuiUrl: v.string(),
     state: v.string(),
+    poolState: v.optional(v.union(
+      v.literal("active"),
+      v.literal("installing"),
+      v.literal("stopped"),
+    )),
+    currentSkillPath: v.optional(v.string()),
+    configHash: v.optional(v.string()),
+    installedSkills: v.optional(v.array(v.string())),
+    webuiUrlCreatedAt: v.optional(v.number()),
     cpu: v.optional(v.number()),
     memory: v.optional(v.number()),
     disk: v.optional(v.number()),
@@ -36,5 +45,13 @@ export default defineSchema({
     errorReason: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
+  }).index("by_token", ["tokenIdentifier"]),
+
+  skillTrials: defineTable({
+    tokenIdentifier: v.string(),
+    sandboxId: v.string(),
+    skillPath: v.string(),
+    skillName: v.string(),
+    startedAt: v.number(),
   }).index("by_token", ["tokenIdentifier"]),
 });

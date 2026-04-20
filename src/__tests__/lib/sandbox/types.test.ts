@@ -1,18 +1,25 @@
 import { describe, it, expect } from "vitest";
-import type { SandboxState, SandboxConfig, SandboxSession } from "@/lib/sandbox/types";
+import type { SandboxState, SandboxConfig, SandboxSession, PoolState } from "@/lib/sandbox/types";
 
 describe("sandbox/types", () => {
   it("SandboxState covers all lifecycle states", () => {
     const states: SandboxState[] = [
       "idle",
       "creating",
+      "configuring",
+      "installing",
       "uploading",
       "starting",
       "running",
       "error",
       "cleaning",
     ];
-    expect(states).toHaveLength(7);
+    expect(states).toHaveLength(9);
+  });
+
+  it("PoolState covers all pool states", () => {
+    const states: PoolState[] = ["active", "installing", "stopped"];
+    expect(states).toHaveLength(3);
   });
 
   it("SandboxConfig is structurally valid", () => {
@@ -31,7 +38,8 @@ describe("sandbox/types", () => {
   it("SandboxSession is structurally valid", () => {
     const session: SandboxSession = {
       sandboxId: "sb-123",
-      webuiUrl: "https://preview.daytona.io/sb-123",
+      webuiUrl: "https://preview.daytona.io/sb-123?prompt=test",
+      webuiBaseUrl: "https://preview.daytona.io/sb-123",
       state: "running",
       startedAt: Date.now(),
     };

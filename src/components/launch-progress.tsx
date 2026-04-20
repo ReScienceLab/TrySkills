@@ -2,6 +2,8 @@
 
 import type { SandboxState } from "@/lib/sandbox/types";
 
+export type LaunchMode = "hotswap" | "snapshot" | "cold";
+
 const STEPS: { key: SandboxState; label: string; description: string }[] = [
   { key: "creating", label: "Creating sandbox", description: "Spinning up from snapshot (~5s)" },
   { key: "configuring", label: "Configuring environment", description: "Linking agent runtime and writing config" },
@@ -19,21 +21,47 @@ const FALLBACK_STEPS: { key: SandboxState; label: string; description: string }[
   { key: "running", label: "Ready", description: "Your agent session is live" },
 ];
 
+const HOTSWAP_STEPS: { key: SandboxState; label: string; description: string }[] = [
+  { key: "uploading", label: "Installing skill", description: "Uploading skill files (~1s)" },
+  { key: "running", label: "Ready", description: "Your agent session is live" },
+];
+
+const HOTSWAP_WAKE_STEPS: { key: SandboxState; label: string; description: string }[] = [
+  { key: "starting", label: "Waking sandbox", description: "Resuming stopped sandbox (~5-10s)" },
+  { key: "uploading", label: "Installing skill", description: "Uploading skill files (~1s)" },
+  { key: "running", label: "Ready", description: "Your agent session is live" },
+];
+
+function getSteps(mode: LaunchMode, needsWake: boolean) {
+  if (mode === "hotswap") return needsWake ? HOTSWAP_WAKE_STEPS : HOTSWAP_STEPS;
+  if (mode === "cold") return FALLBACK_STEPS;
+  return STEPS;
+}
+
 export function LaunchProgress({
   state,
   error,
   onRetry,
   onCancel,
-  usedSnapshot = true,
+  mode = "snapshot",
+  needsWake = false,
 }: {
   state: SandboxState;
   error?: string;
   onRetry: () => void;
   onCancel: () => void;
-  usedSnapshot?: boolean;
+  mode?: LaunchMode;
+  needsWake?: boolean;
 }) {
-  const steps = usedSnapshot ? STEPS : FALLBACK_STEPS;
+  const steps = getSteps(mode, needsWake);
   const currentIdx = steps.findIndex((s) => s.key === state);
+
+  const modeLabel = mode === "hotswap" ? "hot-swap" : mode === "snapshot" ? "snapshot" : "cold";
+  const modeColor = mode === "hotswap"
+    ? "text-amber-400/60 bg-amber-500/10"
+    : mode === "snapshot"
+      ? "text-emerald-400/60 bg-emerald-500/10"
+      : "text-white/40 bg-white/5";
 
   return (
     <div className="animate-fade-in">
@@ -43,12 +71,18 @@ export function LaunchProgress({
           <h2 className="text-base font-semibold text-white/90">
             Launching Agent Session
           </h2>
-          {usedSnapshot && (
-            <span className="ml-auto text-[10px] font-mono text-emerald-400/60 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-              snapshot
-            </span>
-          )}
+          <span className={`ml-auto text-[10px] font-mono px-2 py-0.5 rounded-full ${modeColor}`}>
+            {modeLabel}
+          </span>
         </div>
+
+        {mode !== "hotswap" && (
+          <div className="mb-6 px-3 py-2 bg-white/[0.03] border border-white/8 rounded">
+            <p className="text-xs text-white/35">
+              First launch takes longer while the environment is set up. Subsequent launches reuse this sandbox and are near-instant.
+            </p>
+          </div>
+        )}
 
         <div className="relative ml-1 mb-8">
           {steps.map((step, i) => {

@@ -9,6 +9,8 @@ export type SandboxState =
   | "error"
   | "cleaning";
 
+export type PoolState = "active" | "installing" | "stopped";
+
 export interface SandboxConfig {
   daytonaApiKey: string;
   llmProvider: string;
@@ -19,6 +21,7 @@ export interface SandboxConfig {
 export interface SandboxSession {
   sandboxId: string;
   webuiUrl: string;
+  webuiBaseUrl: string;
   state: SandboxState;
   startedAt: number;
   cpu?: number;

@@ -14,15 +14,32 @@ describe("LaunchProgress", () => {
     expect(screen.getByText("Ready")).toBeInTheDocument();
   });
 
-  it("renders fallback step labels when usedSnapshot is false", () => {
+  it("renders fallback step labels when mode is cold", () => {
     const { container } = render(
-      <LaunchProgress state="creating" onRetry={() => {}} onCancel={() => {}} usedSnapshot={false} />,
+      <LaunchProgress state="creating" onRetry={() => {}} onCancel={() => {}} mode="cold" />,
     );
     expect(container.textContent).toContain("Creating sandbox");
     expect(container.textContent).toContain("Installing Hermes Agent");
     expect(container.textContent).toContain("Configuring environment");
     expect(container.textContent).toContain("Uploading skill");
     expect(container.textContent).toContain("Starting agent");
+    expect(container.textContent).toContain("Ready");
+  });
+
+  it("renders hotswap step labels", () => {
+    const { container } = render(
+      <LaunchProgress state="uploading" onRetry={() => {}} onCancel={() => {}} mode="hotswap" />,
+    );
+    expect(container.textContent).toContain("Installing skill");
+    expect(container.textContent).toContain("Ready");
+  });
+
+  it("renders hotswap wake steps when needsWake is true", () => {
+    const { container } = render(
+      <LaunchProgress state="starting" onRetry={() => {}} onCancel={() => {}} mode="hotswap" needsWake={true} />,
+    );
+    expect(container.textContent).toContain("Waking sandbox");
+    expect(container.textContent).toContain("Installing skill");
     expect(container.textContent).toContain("Ready");
   });
 
@@ -57,5 +74,12 @@ describe("LaunchProgress", () => {
       <LaunchProgress state="error" onRetry={() => {}} onCancel={() => {}} />,
     );
     expect(screen.getByText("Unknown error")).toBeInTheDocument();
+  });
+
+  it("shows mode badge", () => {
+    const { container } = render(
+      <LaunchProgress state="uploading" onRetry={() => {}} onCancel={() => {}} mode="hotswap" />,
+    );
+    expect(container.textContent).toContain("hot-swap");
   });
 });

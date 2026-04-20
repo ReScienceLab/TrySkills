@@ -5,7 +5,7 @@ const mockGet = vi.fn();
 const mockDelete = vi.fn();
 const mockUploadFile = vi.fn();
 const mockExecuteCommand = vi.fn();
-const mockGetPreviewLink = vi.fn();
+const mockGetSignedPreviewUrl = vi.fn();
 
 vi.mock("@daytona/sdk", () => {
   return {
@@ -18,7 +18,7 @@ vi.mock("@daytona/sdk", () => {
   };
 });
 
-import { createHermesSandbox, destroySandbox, type SkillFile } from "@/lib/sandbox/daytona";
+import { createHermesSandbox, destroySandbox, installSkill, type SkillFile } from "@/lib/sandbox/daytona";
 import type { SandboxConfig, SandboxState } from "@/lib/sandbox/types";
 
 describe("sandbox/daytona", () => {
@@ -26,7 +26,7 @@ describe("sandbox/daytona", () => {
     id: "sb-test-123",
     fs: { uploadFile: mockUploadFile },
     process: { executeCommand: mockExecuteCommand },
-    getPreviewLink: mockGetPreviewLink,
+    getSignedPreviewUrl: mockGetSignedPreviewUrl,
   };
 
   const testConfig: SandboxConfig = {
@@ -44,9 +44,11 @@ describe("sandbox/daytona", () => {
     vi.clearAllMocks();
     mockCreate.mockResolvedValue(mockSandbox);
     mockExecuteCommand.mockResolvedValue({ exitCode: 0 });
-    mockGetPreviewLink.mockResolvedValue({
-      url: "https://preview.daytona.io/sb-test-123",
-      token: "tok-abc",
+    mockGetSignedPreviewUrl.mockResolvedValue({
+      url: "https://8787-signedtoken.proxy.daytona.work",
+      token: "signedtoken",
+      sandboxId: "sb-test-123",
+      port: 8787,
     });
   });
 
@@ -60,12 +62,10 @@ describe("sandbox/daytona", () => {
       (step) => progress.push(step),
     );
 
-    // First call should use the snapshot param
     expect(mockCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         snapshot: "hermes-ready",
-        ephemeral: true,
-        autoStopInterval: 15,
+        autoStopInterval: 30,
         public: true,
         envVars: expect.objectContaining({
           OPENROUTER_API_KEY: "sk-or-test-key",
@@ -77,7 +77,28 @@ describe("sandbox/daytona", () => {
 
     expect(session.sandboxId).toBe("sb-test-123");
     expect(session.state).toBe("running");
-    expect(session.webuiUrl).toContain("preview.daytona.io");
+    expect(session.webuiUrl).toContain("proxy.daytona.work");
+    expect(session.webuiBaseUrl).toContain("proxy.daytona.work");
+  });
+
+  it("passes userId as label when provided", async () => {
+    await createHermesSandbox(
+      testConfig,
+      "test-skill",
+      testSkillFiles,
+      () => {},
+      "user-123",
+    );
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        labels: expect.objectContaining({
+          tryskills: "true",
+          userId: "user-123",
+        }),
+      }),
+      expect.anything(),
+    );
   });
 
   it("falls back to cold install when snapshot not available", async () => {
@@ -186,15 +207,17 @@ describe("sandbox/daytona", () => {
     expect(webuiCmd).toContain("8787");
   });
 
-  it("gets preview link on webui port 8787", async () => {
+  it("gets signed preview URL on webui port 8787", async () => {
     await createHermesSandbox(testConfig, "test", testSkillFiles, () => {});
-    expect(mockGetPreviewLink).toHaveBeenCalledWith(8787);
+    expect(mockGetSignedPreviewUrl).toHaveBeenCalledWith(8787, 3600);
   });
 
-  it("appends token to webui URL when present", async () => {
-    mockGetPreviewLink.mockResolvedValue({
-      url: "https://preview.daytona.io/sb-123",
-      token: "secret-token",
+  it("uses signed preview URL directly (no token query param)", async () => {
+    mockGetSignedPreviewUrl.mockResolvedValue({
+      url: "https://8787-signedtoken.proxy.daytona.work",
+      token: "signedtoken",
+      sandboxId: "sb-123",
+      port: 8787,
     });
 
     const session = await createHermesSandbox(
@@ -204,25 +227,12 @@ describe("sandbox/daytona", () => {
       () => {},
     );
 
+    expect(session.webuiBaseUrl).toBe(
+      "https://8787-signedtoken.proxy.daytona.work",
+    );
     expect(session.webuiUrl).toBe(
-      "https://preview.daytona.io/sb-123?token=secret-token",
+      "https://8787-signedtoken.proxy.daytona.work",
     );
-  });
-
-  it("handles webui URL without token", async () => {
-    mockGetPreviewLink.mockResolvedValue({
-      url: "https://preview.daytona.io/sb-123",
-      token: "",
-    });
-
-    const session = await createHermesSandbox(
-      testConfig,
-      "test",
-      testSkillFiles,
-      () => {},
-    );
-
-    expect(session.webuiUrl).toBe("https://preview.daytona.io/sb-123");
   });
 
   describe("destroySandbox", () => {
@@ -249,6 +259,39 @@ describe("sandbox/daytona", () => {
       await expect(
         destroySandbox("test-key", "sb-nonexistent"),
       ).rejects.toThrow("not found");
+    });
+  });
+
+  describe("installSkill", () => {
+    it("installs skill files in a running sandbox without cleanup", async () => {
+      mockGet.mockResolvedValue({ ...mockSandbox, state: "started" });
+
+      const progress: SandboxState[] = [];
+      const session = await installSkill(
+        testConfig,
+        "sb-test-123",
+        "new-skill",
+        [{ path: "SKILL.md", content: "# New" }],
+        (step) => progress.push(step),
+      );
+
+      expect(progress).toContain("uploading");
+      expect(session.sandboxId).toBe("sb-test-123");
+
+      const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
+      // Should NOT clean old skills (additive install)
+      expect(allCmds.every((c: string) => !c.includes("rm -rf"))).toBe(true);
+      // Should NOT restart WebUI or gateway
+      expect(allCmds.every((c: string) => !c.includes("pkill"))).toBe(true);
+      expect(allCmds.every((c: string) => !c.includes("hermes gateway"))).toBe(true);
+    });
+
+    it("throws on unexpected sandbox state", async () => {
+      mockGet.mockResolvedValue({ ...mockSandbox, state: "error" });
+
+      await expect(
+        installSkill(testConfig, "sb-test-123", "test", testSkillFiles, () => {}),
+      ).rejects.toThrow("unexpected state");
     });
   });
 });
