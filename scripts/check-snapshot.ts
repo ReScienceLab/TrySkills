@@ -51,7 +51,9 @@ async function main() {
       process.exit(1);
     }
 
-    console.log(`\nSnapshot is in state "${snapshot.state}" — it may still be building.`);
+    // Non-ready states (pending, building, pulling, removing) — exit non-zero
+    console.error(`\nSnapshot is in state "${snapshot.state}" — not yet ready.`);
+    process.exit(1);
   } catch {
     console.error(`Snapshot "${SNAPSHOT_NAME}" not found.`);
     console.error('Run "npx tsx scripts/build-snapshot.ts" to create it.');

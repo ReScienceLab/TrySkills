@@ -22,7 +22,11 @@ export function useHeartbeat(sandboxId: string | null, daytonaKey: string | null
 
   const sendHeartbeat = useCallback(() => {
     if (!sandboxId || !daytonaKey) return;
-    heartbeat({ sandboxId }).catch(() => {});
+    // Both calls are best-effort, but retry Convex heartbeat once on failure
+    // to reduce split-brain risk (Daytona alive but Convex record stale)
+    heartbeat({ sandboxId }).catch(() => {
+      setTimeout(() => heartbeat({ sandboxId }).catch(() => {}), 5000);
+    });
     fetch("/api/sandbox", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
