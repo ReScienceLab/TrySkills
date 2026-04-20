@@ -54,6 +54,7 @@ export default function SkillPage({
   const [sandboxState, setSandboxState] = useState<SandboxState>("idle");
   const [sandboxError, setSandboxError] = useState<string | undefined>();
   const [session, setSession] = useState<SandboxSession | null>(null);
+  const [usedSnapshot, setUsedSnapshot] = useState(true);
   const launchConfigRef = useRef<LaunchConfig | null>(null);
   const sessionRef = useRef<SandboxSession | null>(null);
   const autoLaunchFired = useRef(false);
@@ -69,14 +70,10 @@ export default function SkillPage({
     const abort = new AbortController();
     launchAbortRef.current = abort;
 
-    // Single-sandbox enforcement: destroy any existing running sandbox
-    const running = existingSandboxes?.find(
+    // Single-sandbox enforcement: note existing sandbox for deferred cleanup
+    const previousSandbox = existingSandboxes?.find(
       (s) => s.state === "running",
     );
-    if (running) {
-      destroySandbox(config.sandboxKey, running.sandboxId).catch(() => {});
-      removeSandboxRecord({ sandboxId: running.sandboxId }).catch(() => {});
-    }
 
     launchConfigRef.current = config;
     setPhase("launching");
@@ -130,12 +127,20 @@ export default function SkillPage({
       }
 
       setSession(result);
+      setUsedSnapshot(result.usedSnapshot);
       sessionRef.current = result;
       setSandboxState("running");
       setPhase("running");
       placeholderIdRef.current = null;
 
       await removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
+
+      // Deferred cleanup: destroy previous sandbox now that the new one is healthy
+      if (previousSandbox) {
+        destroySandbox(config.sandboxKey, previousSandbox.sandboxId).catch(() => {});
+        removeSandboxRecord({ sandboxId: previousSandbox.sandboxId }).catch(() => {});
+      }
+
       await createSandboxRecord({
         sandboxId: result.sandboxId,
         skillPath: skillPathStr,
@@ -318,6 +323,7 @@ export default function SkillPage({
                 error={sandboxError}
                 onRetry={handleRetryLaunch}
                 onCancel={handleCancel}
+                usedSnapshot={usedSnapshot}
               />
             </div>
           )}

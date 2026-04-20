@@ -54,10 +54,10 @@ function buildEnvFile(providerEnvVar: string, apiKey: string): string {
   ].join("\n");
 }
 
-function buildWebuiEnv(): string {
+function buildWebuiEnv(agentDir: string): string {
   return [
-    "HERMES_WEBUI_AGENT_DIR=/opt/hermes-agent",
-    "HERMES_WEBUI_PYTHON=/opt/hermes-agent/venv/bin/python3",
+    `HERMES_WEBUI_AGENT_DIR=${agentDir}`,
+    `HERMES_WEBUI_PYTHON=${agentDir}/venv/bin/python3`,
     "HERMES_WEBUI_HOST=0.0.0.0",
     `HERMES_WEBUI_PORT=${WEBUI_PORT}`,
     "HERMES_HOME=/home/daytona/.hermes",
@@ -76,7 +76,7 @@ export async function createHermesSandbox(
   skillName: string,
   skillFiles: SkillFile[],
   onProgress: (step: SandboxState) => void,
-): Promise<SandboxSession> {
+): Promise<SandboxSession & { usedSnapshot: boolean }> {
   const { Daytona } = await getDaytonaSDK();
 
   const daytona = new Daytona({
@@ -158,6 +158,7 @@ export async function createHermesSandbox(
   ).catch(() => {});
 
   // Write webui .env
+  const agentDir = usedSnapshot ? "/opt/hermes-agent" : "/home/daytona/.hermes/hermes-agent";
   const webuiDir = usedSnapshot ? "/opt/hermes-webui" : "/home/daytona/hermes-webui";
   if (!usedSnapshot) {
     await sandbox.process.executeCommand(
@@ -165,7 +166,7 @@ export async function createHermesSandbox(
     ).catch(() => {});
   }
   await sandbox.process.executeCommand(
-    `cat > ${webuiDir}/.env << 'WEOF'\n${buildWebuiEnv()}\nWEOF`,
+    `cat > ${webuiDir}/.env << 'WEOF'\n${buildWebuiEnv(agentDir)}\nWEOF`,
   ).catch(() => {});
 
   // Upload skill files
@@ -180,22 +181,17 @@ export async function createHermesSandbox(
   // Start services
   onProgress("starting");
 
-  const hermesCmd = usedSnapshot
-    ? "/opt/hermes-agent/venv/bin/hermes"
-    : "export PATH=$HOME/.local/bin:$PATH && hermes";
+  const hermesCmd = `${agentDir}/venv/bin/hermes`;
+  const pythonCmd = `${agentDir}/venv/bin/python3`;
 
   await sandbox.process.executeCommand(
     `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
   ).catch(() => {});
 
-  const pythonCmd = usedSnapshot
-    ? "/opt/hermes-agent/venv/bin/python3"
-    : "/home/daytona/.hermes/hermes-agent/venv/bin/python3";
-
   await sandbox.process.executeCommand(
     [
       `cd ${webuiDir}`,
-      `export HERMES_WEBUI_AGENT_DIR=/opt/hermes-agent`,
+      `export HERMES_WEBUI_AGENT_DIR=${agentDir}`,
       `export HERMES_WEBUI_PYTHON=${pythonCmd}`,
       "export HERMES_WEBUI_HOST=0.0.0.0",
       `export HERMES_WEBUI_PORT=${WEBUI_PORT}`,
@@ -218,6 +214,7 @@ export async function createHermesSandbox(
     memory: sandbox.memory,
     disk: sandbox.disk,
     region: sandbox.target,
+    usedSnapshot,
   };
 }
 
