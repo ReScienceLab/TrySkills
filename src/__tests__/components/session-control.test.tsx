@@ -43,7 +43,13 @@ describe("SessionControl", () => {
 
   it("shows auto-stop notice", () => {
     const { container } = render(<SessionControl {...defaultProps} />);
-    expect(container.textContent).toContain("auto-stop after 60 minutes");
+    expect(container.textContent).toContain("auto-stops after 15 minutes");
+  });
+
+  it("shows cost indicator", () => {
+    const { container } = render(<SessionControl {...defaultProps} />);
+    expect(container.textContent).toContain("Cost:");
+    expect(container.textContent).toContain("$0.000");
   });
 
   it("opens webui URL in new window", () => {

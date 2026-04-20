@@ -1,7 +1,7 @@
 import type { SandboxConfig, SandboxSession, SandboxState } from "./types";
 
 const SNAPSHOT_NAME = process.env.NEXT_PUBLIC_HERMES_SNAPSHOT || "hermes-ready";
-const AUTO_STOP_MINUTES = 60;
+const AUTO_STOP_MINUTES = 15;
 const HEALTH_TIMEOUT_MS = 120_000; // 2 min (snapshot-based is much faster)
 const HEALTH_POLL_INTERVAL_MS = 2_000;
 const GATEWAY_PORT = 8642;
@@ -99,6 +99,7 @@ export async function createHermesSandbox(
         ephemeral: true,
         autoStopInterval: AUTO_STOP_MINUTES,
         public: true,
+        labels: { tryskills: "true" },
         envVars: {
           [providerMapping.envVar]: config.llmApiKey,
           API_SERVER_ENABLED: "true",
@@ -116,6 +117,7 @@ export async function createHermesSandbox(
         ephemeral: true,
         autoStopInterval: AUTO_STOP_MINUTES,
         public: true,
+        labels: { tryskills: "true" },
         envVars: {
           [providerMapping.envVar]: config.llmApiKey,
           API_SERVER_ENABLED: "true",

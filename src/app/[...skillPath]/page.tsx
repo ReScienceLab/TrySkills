@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo, useRef, use } from "react";
 import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
+import { useConvexAuth } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { ConfigPanel, type LaunchConfig } from "@/components/config-panel";
 import { LaunchProgress } from "@/components/launch-progress";
@@ -15,6 +16,7 @@ import { SiteHeader } from "@/components/site-header";
 import { resolveSkillPath, fetchSkillDirectory } from "@/lib/skill/resolver";
 import { createHermesSandbox, destroySandbox } from "@/lib/sandbox/daytona";
 import { useKeyStore } from "@/hooks/use-key-store";
+import { useHeartbeat } from "@/hooks/use-heartbeat";
 import { getProvider } from "@/lib/providers/registry";
 import { OnboardingModal } from "@/components/onboarding-modal";
 import type { SandboxState, SandboxSession } from "@/lib/sandbox/types";
@@ -33,10 +35,15 @@ export default function SkillPage({
   const resolvedParams = use(params);
   const { skillPath } = resolvedParams;
   const { isSignedIn, isLoaded: authLoaded } = useAuth();
+  const { isAuthenticated } = useConvexAuth();
   const { config: savedConfig, loading: keysLoading, save } = useKeyStore();
   const createSandboxRecord = useMutation(api.sandboxes.create);
   const removeSandboxRecord = useMutation(api.sandboxes.remove);
   const updateSandboxState = useMutation(api.sandboxes.updateState);
+  const existingSandboxes = useQuery(
+    api.sandboxes.list,
+    isAuthenticated ? {} : "skip",
+  );
 
   const resolved = useMemo(() => resolveSkillPath(skillPath), [skillPath]);
   const { owner, repo, skillName } = resolved;
@@ -54,10 +61,22 @@ export default function SkillPage({
   const placeholderIdRef = useRef<string | null>(null);
   const userCancelled = useRef(false);
 
+  // Heartbeat: keeps sandbox alive while user is on page
+  useHeartbeat(session?.sandboxId ?? null);
+
   const handleLaunch = async (config: LaunchConfig) => {
     launchAbortRef.current?.abort();
     const abort = new AbortController();
     launchAbortRef.current = abort;
+
+    // Single-sandbox enforcement: destroy any existing running sandbox
+    const running = existingSandboxes?.find(
+      (s) => s.state === "running",
+    );
+    if (running) {
+      destroySandbox(config.sandboxKey, running.sandboxId).catch(() => {});
+      removeSandboxRecord({ sandboxId: running.sandboxId }).catch(() => {});
+    }
 
     launchConfigRef.current = config;
     setPhase("launching");

@@ -65,7 +65,7 @@ describe("sandbox/daytona", () => {
       expect.objectContaining({
         snapshot: "hermes-ready",
         ephemeral: true,
-        autoStopInterval: 60,
+        autoStopInterval: 15,
         public: true,
         envVars: expect.objectContaining({
           OPENROUTER_API_KEY: "sk-or-test-key",

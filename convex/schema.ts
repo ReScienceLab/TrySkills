@@ -19,6 +19,7 @@ export default defineSchema({
     memory: v.optional(v.number()),
     disk: v.optional(v.number()),
     region: v.optional(v.string()),
+    lastHeartbeat: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_token", ["tokenIdentifier"])
