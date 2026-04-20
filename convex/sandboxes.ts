@@ -149,7 +149,11 @@ export const claimWarm = mutation({
     if (!reusable) return null;
 
     await ctx.db.patch("sandboxes", reusable._id, { poolState: "swapping" });
-    return { sandboxId: reusable.sandboxId, webuiUrl: reusable.webuiUrl };
+    return {
+      sandboxId: reusable.sandboxId,
+      webuiUrl: reusable.webuiUrl,
+      currentSkillPath: reusable.currentSkillPath,
+    };
   },
 });
 

@@ -13,7 +13,7 @@ import { ChatPanel } from "@/components/chat/chat-panel";
 import { GlowMesh } from "@/components/glow-mesh";
 import { SiteHeader } from "@/components/site-header";
 import { resolveSkillPath, fetchSkillDirectory } from "@/lib/skill/resolver";
-import { createHermesSandbox, destroySandbox, hotSwapSkill } from "@/lib/sandbox/daytona";
+import { createHermesSandbox, destroySandbox, hotSwapSkill, reconnectSandbox } from "@/lib/sandbox/daytona";
 import { useKeyStore } from "@/hooks/use-key-store";
 import { useHeartbeat } from "@/hooks/use-heartbeat";
 import { getProvider } from "@/lib/providers/registry";
@@ -116,24 +116,43 @@ export default function SkillPage({
       }
 
       if (claimed && !abort.signal.aborted) {
+        const sameSkill = claimed.currentSkillPath === skillPathStr;
 
         try {
-          const result = await hotSwapSkill(
-            {
-              daytonaApiKey: config.sandboxKey,
-              llmProvider: config.provider.id,
-              llmApiKey: config.llmKey,
-              llmModel: config.model,
-            },
-            claimed.sandboxId,
-            skillName,
-            skillFiles,
-            (step) => {
-              if (abort.signal.aborted) return;
-              setSandboxState(step as SandboxState);
-            },
-            typeof window !== "undefined" ? window.location.origin : undefined,
-          );
+          let result;
+          if (sameSkill) {
+            // Same skill already loaded -- just reconnect, no swap needed
+            result = await reconnectSandbox(
+              {
+                daytonaApiKey: config.sandboxKey,
+                llmProvider: config.provider.id,
+                llmApiKey: config.llmKey,
+                llmModel: config.model,
+              },
+              claimed.sandboxId,
+              (step) => {
+                if (abort.signal.aborted) return;
+                setSandboxState(step as SandboxState);
+              },
+            );
+          } else {
+            result = await hotSwapSkill(
+              {
+                daytonaApiKey: config.sandboxKey,
+                llmProvider: config.provider.id,
+                llmApiKey: config.llmKey,
+                llmModel: config.model,
+              },
+              claimed.sandboxId,
+              skillName,
+              skillFiles,
+              (step) => {
+                if (abort.signal.aborted) return;
+                setSandboxState(step as SandboxState);
+              },
+              typeof window !== "undefined" ? window.location.origin : undefined,
+            );
+          }
 
           if (abort.signal.aborted) {
             await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "warm" }).catch(() => {});

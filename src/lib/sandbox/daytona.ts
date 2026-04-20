@@ -234,6 +234,55 @@ export async function createHermesSandbox(
 }
 
 /**
+ * Reconnect to an existing sandbox without swapping skills.
+ * Used when reopening the same skill that's already loaded.
+ * Starts the sandbox if stopped, then returns a fresh signed preview URL.
+ */
+export async function reconnectSandbox(
+  config: SandboxConfig,
+  sandboxId: string,
+  onProgress: (step: SandboxState) => void,
+): Promise<SandboxSession> {
+  const { Daytona } = await getDaytonaSDK();
+  const daytona = new Daytona({
+    apiKey: config.daytonaApiKey,
+    apiUrl: "https://app.daytona.io/api",
+  });
+
+  const sandbox = await daytona.get(sandboxId);
+  activeDaytona = daytona;
+  activeSandbox = sandbox;
+
+  if (sandbox.state !== "started") {
+    if (sandbox.state === "stopped") {
+      onProgress("starting");
+      await daytona.start(sandbox, 60);
+    } else {
+      throw new Error(`Sandbox in unexpected state: ${sandbox.state}`);
+    }
+  }
+
+  onProgress("starting");
+  await waitForHealth(sandbox);
+
+  const signedPreview = await sandbox.getSignedPreviewUrl(WEBUI_PORT, SIGNED_URL_TTL_SECONDS);
+  console.log("[daytona] reconnectSandbox signedPreview URL:", signedPreview.url);
+  const webuiUrl = signedPreview.url;
+
+  return {
+    sandboxId: sandbox.id,
+    webuiUrl,
+    webuiBaseUrl: webuiUrl,
+    state: "running",
+    startedAt: Date.now(),
+    cpu: sandbox.cpu,
+    memory: sandbox.memory,
+    disk: sandbox.disk,
+    region: sandbox.target,
+  };
+}
+
+/**
  * Hot-swap skill files in an existing running sandbox.
  * Cleans old skills, uploads new ones, and rewrites config.
  * Skills are loaded per-session by Hermes, so no gateway restart is needed.
