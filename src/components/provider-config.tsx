@@ -13,7 +13,9 @@ export function ProviderTabs({
 }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-1">
-      {PROVIDERS.map((p) => (
+      {PROVIDERS.map((p) => {
+        const Icon = p.Icon;
+        return (
         <button
           key={p.id}
           onClick={() => onChange(p.id)}
@@ -23,14 +25,11 @@ export function ProviderTabs({
               : "bg-white/5 text-white/60 hover:bg-white/10"
           }`}
         >
-          <img
-            src={p.iconUrl}
-            alt=""
-            className={`w-3.5 h-3.5 object-contain ${activeId === p.id ? "" : "opacity-60"}`}
-          />
+          <Icon size={14} className={`${activeId === p.id ? "text-black" : "text-white/60"}`} />
           {p.name}
         </button>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -178,6 +177,7 @@ export function ProviderSection({
   onApiKeyChange: (k: string) => void;
 }) {
   const hasKey = apiKey.length > 5;
+  const IconComponent = provider.Icon;
 
   return (
     <div className={`border transition-colors ${
@@ -204,11 +204,7 @@ export function ProviderSection({
               <div className="w-1.5 h-1.5 rounded-full bg-black" />
             )}
           </div>
-          <img
-            src={provider.iconUrl}
-            alt=""
-            className={`w-4 h-4 object-contain ${isActive ? "" : "opacity-50"}`}
-          />
+          <IconComponent size={16} className={isActive ? "text-white" : "text-white/50"} />
           <span className={`text-sm font-medium ${isActive ? "text-white" : "text-white/60"}`}>
             {provider.name}
           </span>

@@ -1,4 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+vi.mock("@lobehub/icons", () => ({
+  OpenRouter: () => null,
+  Anthropic: () => null,
+  OpenAI: () => null,
+  Google: () => null,
+}));
+
 import { PROVIDERS, getProvider } from "@/lib/providers/registry";
 
 describe("providers/registry", () => {

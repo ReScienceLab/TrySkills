@@ -1,7 +1,16 @@
+import type { ComponentType } from "react";
+import { OpenRouter, Anthropic, OpenAI, Google } from "@lobehub/icons";
+
+export interface IconProps {
+  size?: number;
+  className?: string;
+  style?: React.CSSProperties;
+}
+
 export interface Provider {
   id: string;
   name: string;
-  iconUrl: string;
+  Icon: ComponentType<IconProps>;
   keyPrefix: string;
   keyUrl: string;
   models: string[];
@@ -15,7 +24,7 @@ export const PROVIDERS: Provider[] = [
   {
     id: "openrouter",
     name: "OpenRouter",
-    iconUrl: "https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/light/openrouter.png",
+    Icon: OpenRouter,
     keyPrefix: "sk-or-",
     keyUrl: "https://openrouter.ai/keys",
     envVar: "OPENROUTER_API_KEY",
@@ -34,7 +43,7 @@ export const PROVIDERS: Provider[] = [
   {
     id: "anthropic",
     name: "Anthropic",
-    iconUrl: "https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/light/anthropic.png",
+    Icon: Anthropic,
     keyPrefix: "sk-ant-",
     keyUrl: "https://console.anthropic.com/settings/keys",
     envVar: "ANTHROPIC_API_KEY",
@@ -45,7 +54,7 @@ export const PROVIDERS: Provider[] = [
   {
     id: "openai",
     name: "OpenAI",
-    iconUrl: "https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/light/openai.png",
+    Icon: OpenAI,
     keyPrefix: "sk-",
     keyUrl: "https://platform.openai.com/api-keys",
     envVar: "OPENAI_API_KEY",
@@ -56,7 +65,7 @@ export const PROVIDERS: Provider[] = [
   {
     id: "google",
     name: "Google AI",
-    iconUrl: "https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/light/google-color.png",
+    Icon: Google,
     keyPrefix: "AI",
     keyUrl: "https://aistudio.google.com/apikey",
     envVar: "GOOGLE_API_KEY",
