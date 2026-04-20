@@ -220,7 +220,6 @@ export default function SkillPage({
         region: result.region,
       }).catch(() => {});
 
-      window.open(result.webuiUrl, "_blank", "noopener,noreferrer");
     } catch (err) {
       if (abort.signal.aborted) return;
       setSandboxState("error");

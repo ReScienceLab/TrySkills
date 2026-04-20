@@ -216,6 +216,7 @@ export async function createHermesSandbox(
   await waitForHealth(sandbox);
 
   const signedPreview = await sandbox.getSignedPreviewUrl(WEBUI_PORT, SIGNED_URL_TTL_SECONDS);
+  console.log("[daytona] createHermesSandbox signedPreview URL:", signedPreview.url);
   const webuiUrl = signedPreview.url;
 
   return {
@@ -310,6 +311,7 @@ export async function hotSwapSkill(
   await waitForHealth(sandbox);
 
   const signedPreview = await sandbox.getSignedPreviewUrl(WEBUI_PORT, SIGNED_URL_TTL_SECONDS);
+  console.log("[daytona] hotSwapSkill signedPreview URL:", signedPreview.url);
   const webuiUrl = signedPreview.url;
 
   return {
