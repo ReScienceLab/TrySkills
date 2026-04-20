@@ -12,20 +12,22 @@ export function ProviderTabs({
   onChange: (id: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-1">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-1" role="radiogroup" aria-label="LLM provider">
       {PROVIDERS.map((p) => {
         const Icon = p.Icon;
         return (
         <button
           key={p.id}
           onClick={() => onChange(p.id)}
+          role="radio"
+          aria-checked={activeId === p.id}
           className={`px-3 py-2 text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
             activeId === p.id
               ? "bg-white text-black"
               : "bg-white/5 text-white/60 hover:bg-white/10"
           }`}
         >
-          <Icon size={14} className={`${activeId === p.id ? "text-black" : "text-white/60"}`} />
+          <Icon size={14} className={`${activeId === p.id ? "text-black" : "text-white/60"}`} aria-hidden="true" />
           {p.name}
         </button>
         );
@@ -51,7 +53,7 @@ export function ModelSelector({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={`e.g. ${provider.models[0]}`}
-          className="w-full px-4 py-2.5 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors placeholder:text-white/20"
+          className="w-full px-4 py-2.5 bg-white/5 border border-white/10 text-white/90 text-sm font-mono focus:border-white/30 transition-colors placeholder:text-white/20"
         />
         <datalist id={`models-${provider.id}`}>
           {provider.models.map((m) => (
@@ -66,7 +68,7 @@ export function ModelSelector({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full px-4 py-2.5 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors appearance-none cursor-pointer"
+      className="w-full px-4 py-2.5 bg-white/5 border border-white/10 text-white/90 text-sm font-mono focus:border-white/30 transition-colors appearance-none cursor-pointer"
     >
       {provider.models.map((m) => (
         <option key={m} value={m} className="bg-[#111] text-white">{m}</option>
@@ -123,7 +125,7 @@ export function ApiKeyInput({
             value={value}
             onChange={(e) => { onChange(e.target.value); setResult(null); }}
             placeholder={`${provider.keyPrefix}...`}
-            className="w-full px-4 py-2.5 pr-12 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors placeholder:text-white/20"
+            className="w-full px-4 py-2.5 pr-12 bg-white/5 border border-white/10 text-white/90 text-sm font-mono focus:border-white/30 transition-colors placeholder:text-white/20"
           />
           <button
             onClick={() => setVisible(!visible)}
@@ -182,7 +184,7 @@ export function ProviderSection({
   return (
     <div className={`border transition-colors ${
       isActive ? "border-white/30" : "border-white/10"
-    } bg-black/40 backdrop-blur-sm`}>
+    } bg-black/40`}>
       <button
         onClick={onToggleExpand}
         className="w-full px-5 py-4 flex items-center justify-between"

@@ -37,19 +37,19 @@ export function SessionControl({
 
   return (
     <div className="animate-fade-in">
-      <div className="border border-white/20 bg-black/40 backdrop-blur-sm p-8">
+      <div className="border border-white/20 bg-black/40 p-8">
         <div className="flex items-center gap-4 mb-4">
-          <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
+          <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" aria-hidden="true" />
           <h2 className="text-lg font-semibold text-white/90">
             Sandbox Running
           </h2>
-          <span className="ml-auto font-mono text-sm text-white/40">
+          <span className="ml-auto font-mono text-sm text-white/40" role="timer" aria-label={`Elapsed time: ${formatTime(elapsed)}`}>
             {formatTime(elapsed)}
           </span>
         </div>
 
         {/* Cost + Auto-stop bar */}
-        <div className="flex items-center justify-between mb-6 px-3 py-2 bg-white/[0.03] border border-white/8 rounded text-xs">
+        <div className="flex items-center justify-between mb-6 px-3 py-2 bg-white/[0.03] border border-white/8 text-xs">
           <div className="flex items-center gap-3">
             <span className="text-white/40">
               Cost: <span className="text-white/70 font-mono">${cost}</span>

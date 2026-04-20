@@ -18,8 +18,8 @@ export default function SettingsPage() {
       <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
         <GlowMesh />
         <SiteHeader />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
+        <div className="flex-1 flex items-center justify-center" role="status" aria-label="Loading">
+          <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" aria-hidden="true" />
         </div>
       </main>
     );
@@ -31,7 +31,7 @@ export default function SettingsPage() {
         <GlowMesh />
         <SiteHeader />
         <div className="flex-1 flex items-center justify-center relative z-10 px-6">
-          <div className="border border-white/20 bg-black/40 backdrop-blur-sm p-8 text-center max-w-md">
+          <div className="border border-white/20 bg-black/40 p-8 text-center max-w-md">
             <h2 className="text-lg font-semibold text-white/90 mb-2">Sign in to manage settings</h2>
             <p className="text-sm text-white/50 mb-6">
               Your API keys will be encrypted and stored securely in your account.
@@ -137,7 +137,7 @@ function SettingsForm({
             </div>
           </div>
 
-          <div className="border border-white/20 bg-black/40 backdrop-blur-sm mb-4">
+          <div className="border border-white/20 bg-black/40 mb-4">
             <div className="px-6 py-5 border-b border-white/10">
               <div className="flex items-center gap-3">
                 <h2 className="text-base font-semibold text-white/90">Sandbox</h2>
@@ -157,7 +157,7 @@ function SettingsForm({
                   value={sandboxKey}
                   onChange={(e) => setSandboxKey(e.target.value)}
                   placeholder="dtn_..."
-                  className="w-full px-4 py-2.5 pr-12 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors placeholder:text-white/20"
+                  className="w-full px-4 py-2.5 pr-12 bg-white/5 border border-white/10 text-white/90 text-sm font-mono focus:border-white/30 transition-colors placeholder:text-white/20"
                 />
                 <button
                   onClick={() => setShowSandboxKey(!showSandboxKey)}
@@ -171,7 +171,7 @@ function SettingsForm({
 
           <div className="border border-green-500/20 bg-green-500/5 px-5 py-3 mb-4">
             <div className="flex items-center gap-2">
-              <svg className="w-4 h-4 text-green-400/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="w-4 h-4 text-green-400/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
               </svg>
               <span className="text-xs text-green-400/60">

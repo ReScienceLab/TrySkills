@@ -1,6 +1,19 @@
 "use client";
 
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useSyncExternalStore } from "react";
+
+const motionQuery = "(prefers-reduced-motion: reduce)";
+function subscribeMotion(cb: () => void) {
+  const mq = window.matchMedia(motionQuery);
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
+}
+function getMotionSnapshot() {
+  return window.matchMedia(motionQuery).matches;
+}
+function getMotionServerSnapshot() {
+  return false;
+}
 
 interface GlowNode {
   x: number;
@@ -23,6 +36,7 @@ export function GlowMesh() {
   const maskRef = useRef<HTMLImageElement | null>(null);
   const mouseRef = useRef<{ x: number; y: number }>({ x: -1000, y: -1000 });
   const rafRef = useRef<number>(0);
+  const reducedMotion = useSyncExternalStore(subscribeMotion, getMotionSnapshot, getMotionServerSnapshot);
 
   const init = useCallback(() => {
     const canvas = canvasRef.current;
@@ -72,6 +86,7 @@ export function GlowMesh() {
   }, []);
 
   useEffect(() => {
+    if (reducedMotion) return;
     init();
     window.addEventListener("resize", init);
 
@@ -172,7 +187,18 @@ export function GlowMesh() {
       window.removeEventListener("resize", init);
       cancelAnimationFrame(rafRef.current);
     };
-  }, [init]);
+  }, [init, reducedMotion]);
 
-  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />;
+  if (reducedMotion) {
+    return (
+      <div
+        className="absolute inset-0 w-full h-full"
+        style={{
+          background: "radial-gradient(ellipse at 50% 40%, rgba(40, 80, 140, 0.15) 0%, transparent 70%)",
+        }}
+      />
+    );
+  }
+
+  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" aria-hidden="true" />;
 }
