@@ -74,6 +74,7 @@ export default function SkillPage({
     setSandboxError(undefined);
 
     const skillPathStr = `${owner}/${repo}/${skillName}`;
+    const configHash = `${config.provider.id}:${config.model}:${config.llmKey}`;
 
     // Check for existing sandbox
     const claimed = await claimSandbox({}).catch(() => null);
@@ -81,9 +82,10 @@ export default function SkillPage({
     if (claimed && !abort.signal.aborted) {
       const isStopped = claimed.poolState === "stopped";
       const sameSkill = claimed.currentSkillPath === skillPathStr;
+      const sameConfig = claimed.configHash === configHash;
 
-      // INSTANT PATH: same skill + sandbox active = zero Daytona API calls
-      if (sameSkill && !isStopped) {
+      // INSTANT PATH: same skill + same config + sandbox active = zero Daytona API calls
+      if (sameSkill && sameConfig && !isStopped) {
         setSession({
           sandboxId: claimed.sandboxId,
           webuiUrl: claimed.webuiUrl,
@@ -104,6 +106,7 @@ export default function SkillPage({
           sandboxId: claimed.sandboxId,
           poolState: "active",
           currentSkillPath: skillPathStr,
+          configHash,
         }).catch(() => {});
         return;
       }
@@ -145,6 +148,7 @@ export default function SkillPage({
           poolState: "active",
           currentSkillPath: skillPathStr,
           webuiUrl: result.webuiUrl,
+          configHash,
         }).catch(() => {});
 
         return;

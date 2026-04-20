@@ -20,6 +20,7 @@ export default defineSchema({
       v.literal("stopped"),
     )),
     currentSkillPath: v.optional(v.string()),
+    configHash: v.optional(v.string()),
     cpu: v.optional(v.number()),
     memory: v.optional(v.number()),
     disk: v.optional(v.number()),

@@ -142,6 +142,7 @@ export const claimSandbox = mutation({
       webuiUrl: reusable.webuiUrl,
       currentSkillPath: reusable.currentSkillPath,
       poolState: reusable.poolState,
+      configHash: reusable.configHash,
     };
   },
 });
@@ -184,6 +185,7 @@ export const updatePoolState = mutation({
     ),
     currentSkillPath: v.optional(v.string()),
     webuiUrl: v.optional(v.string()),
+    configHash: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -202,6 +204,9 @@ export const updatePoolState = mutation({
       }
       if (args.webuiUrl !== undefined) {
         patch.webuiUrl = args.webuiUrl;
+      }
+      if (args.configHash !== undefined) {
+        patch.configHash = args.configHash;
       }
       await ctx.db.patch("sandboxes", sandbox._id, patch);
     }
