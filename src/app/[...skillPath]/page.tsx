@@ -143,6 +143,7 @@ export default function SkillPage({
             if (abort.signal.aborted) return;
             setSandboxState(step as SandboxState);
           },
+          { skipConfigWrite: sameConfig },
         );
 
         if (abort.signal.aborted) return;
