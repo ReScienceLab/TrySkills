@@ -45,6 +45,7 @@ export default function SkillPage({
   const updateSandboxState = useMutation(api.sandboxes.updateState);
   const acquireCreateLock = useMutation(api.sandboxes.acquireCreateLock);
   const updatePoolState = useMutation(api.sandboxes.updatePoolState);
+  const addInstalledSkillMut = useMutation(api.sandboxes.addInstalledSkill);
   const recordTrial = useMutation(api.skillTrials.record);
   const userSandbox = useQuery(
     api.sandboxes.getSandbox,
@@ -159,9 +160,9 @@ export default function SkillPage({
           currentSkillPath: skillPathStr,
           webuiUrl: result.webuiUrl,
           configHash,
-          installedSkills: [...new Set([...(sandbox.installedSkills ?? []), skillPathStr])],
           webuiUrlCreatedAt: Date.now(),
         }).catch(() => {});
+        addInstalledSkillMut({ sandboxId: sandbox.sandboxId, skillPath: skillPathStr }).catch(() => {});
         recordTrial({ sandboxId: sandbox.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
         return;
       } catch (err) {
@@ -270,12 +271,13 @@ export default function SkillPage({
     }
   };
 
-  // Re-trigger launch when userSandbox changes from "creating" to "found"
-  // (another tab finished creating the sandbox)
+  // Re-trigger launch when sandbox becomes available or stale lock expires
   useEffect(() => {
     if (phase !== "launching" || sandboxState !== "creating") return;
-    if (!userSandbox || userSandbox.status !== "found") return;
     if (!launchConfigRef.current) return;
+    // Retry when: sandbox found (another tab finished) OR null (stale lock expired)
+    if (userSandbox === undefined) return; // query still loading
+    if (userSandbox && userSandbox.status === "creating") return; // still creating, keep waiting
     void handleLaunch(launchConfigRef.current);
   }, [userSandbox, phase, sandboxState]); // eslint-disable-line react-hooks/exhaustive-deps
 

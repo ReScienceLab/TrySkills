@@ -291,6 +291,33 @@ export const updatePoolState = mutation({
   },
 });
 
+export const addInstalledSkill = mutation({
+  args: {
+    sandboxId: v.string(),
+    skillPath: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const sandbox = await ctx.db
+      .query("sandboxes")
+      .withIndex("by_sandbox", (q) => q.eq("sandboxId", args.sandboxId))
+      .unique();
+
+    if (sandbox && sandbox.tokenIdentifier === identity.tokenIdentifier) {
+      const current = sandbox.installedSkills ?? [];
+      if (!current.includes(args.skillPath)) {
+        await ctx.db.patch("sandboxes", sandbox._id, {
+          installedSkills: [...current, args.skillPath],
+        });
+      }
+    }
+    return null;
+  },
+});
+
 export const listStale = internalQuery({
   args: {
     staleThresholdMs: v.number(),
