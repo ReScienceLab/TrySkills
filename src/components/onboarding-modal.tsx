@@ -21,6 +21,7 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
     if (p) {
       setProvider(p);
       setModel(p.models[0]);
+      setLlmKey("");
     }
   };
 

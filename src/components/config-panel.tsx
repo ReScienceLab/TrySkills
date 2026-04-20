@@ -89,6 +89,7 @@ function ConfigPanelForm({
     if (p) {
       setProvider(p);
       setModel(p.models[0]);
+      setLlmKey("");
     }
   };
 
