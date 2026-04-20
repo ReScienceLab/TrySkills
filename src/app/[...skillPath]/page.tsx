@@ -177,7 +177,9 @@ export default function SkillPage({
         return;
       } catch (err) {
         console.error("[install] Failed, falling back to cold create:", err);
-        await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "active" }).catch(() => {});
+        // Destroy the old sandbox before cold-creating a new one to prevent orphans
+        destroySandbox(config.sandboxKey, claimed.sandboxId).catch(() => {});
+        removeSandboxRecord({ sandboxId: claimed.sandboxId }).catch(() => {});
       }
     }
 
