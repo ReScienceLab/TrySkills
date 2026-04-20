@@ -46,8 +46,16 @@ export function useKeyStore() {
   const [decryptedForId, setDecryptedForId] = useState<string | null>(null);
   const [localOverride, setLocalOverride] = useState<StoredConfig | null>(null);
   const [hasUserSaved, setHasUserSaved] = useState(false);
+  const [convexAuthTimedOut, setConvexAuthTimedOut] = useState(false);
 
   const inflightRef = useRef<string | null>(null);
+
+  // If Convex auth hasn't synced within 5s of Clerk sign-in, stop waiting
+  useEffect(() => {
+    if (!isSignedIn || isAuthenticated) return;
+    const timer = setTimeout(() => setConvexAuthTimedOut(true), 5000);
+    return () => clearTimeout(timer);
+  }, [isSignedIn, isAuthenticated]);
 
   const storedKeysId = storedKeys
     ? `${storedKeys.encryptedData}:${storedKeys.iv}`
@@ -118,12 +126,12 @@ export function useKeyStore() {
     }
 
     // Convex auth not yet synced — fall back to local cache if available
-    // (prevents infinite spinner if Convex auth stalls)
     if (user && readLocalCache(user.id)) return false;
 
-    // No local cache and Convex not ready — keep loading briefly
+    // No local cache — wait for Convex auth, but give up after 5s
+    if (convexAuthTimedOut) return false;
     return true;
-  }, [authLoaded, isSignedIn, hasUserSaved, isAuthenticated, storedKeys, isDecrypting, user]);
+  }, [authLoaded, isSignedIn, hasUserSaved, isAuthenticated, storedKeys, isDecrypting, user, convexAuthTimedOut]);
 
   const save = useCallback(
     async (newConfig: StoredConfig) => {
