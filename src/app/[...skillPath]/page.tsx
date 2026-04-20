@@ -4,8 +4,7 @@ import { useState, useEffect, useMemo, useRef, use } from "react";
 import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
-import { useMutation, useQuery } from "convex/react";
-import { useConvexAuth } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { ConfigPanel, type LaunchConfig } from "@/components/config-panel";
 import { LaunchProgress } from "@/components/launch-progress";
@@ -35,15 +34,10 @@ export default function SkillPage({
   const resolvedParams = use(params);
   const { skillPath } = resolvedParams;
   const { isSignedIn, isLoaded: authLoaded } = useAuth();
-  const { isAuthenticated } = useConvexAuth();
   const { config: savedConfig, loading: keysLoading, save } = useKeyStore();
   const createSandboxRecord = useMutation(api.sandboxes.create);
   const removeSandboxRecord = useMutation(api.sandboxes.remove);
   const updateSandboxState = useMutation(api.sandboxes.updateState);
-  const existingSandboxes = useQuery(
-    api.sandboxes.list,
-    isAuthenticated ? {} : "skip",
-  );
 
   const resolved = useMemo(() => resolveSkillPath(skillPath), [skillPath]);
   const { owner, repo, skillName } = resolved;
@@ -69,11 +63,6 @@ export default function SkillPage({
     launchAbortRef.current?.abort();
     const abort = new AbortController();
     launchAbortRef.current = abort;
-
-    // Single-sandbox enforcement: note existing sandbox for deferred cleanup
-    const previousSandbox = existingSandboxes?.find(
-      (s) => s.state === "running",
-    );
 
     launchConfigRef.current = config;
     setPhase("launching");
@@ -135,14 +124,6 @@ export default function SkillPage({
       placeholderIdRef.current = null;
 
       await removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
-
-      // Deferred cleanup: destroy previous sandbox now that the new one is healthy.
-      // destroySandbox is best-effort; if it fails, the cron will clean the record
-      // after heartbeat timeout, and Daytona auto-stops the sandbox after 15min idle.
-      if (previousSandbox) {
-        await destroySandbox(config.sandboxKey, previousSandbox.sandboxId);
-        await removeSandboxRecord({ sandboxId: previousSandbox.sandboxId }).catch(() => {});
-      }
 
       await createSandboxRecord({
         sandboxId: result.sandboxId,
