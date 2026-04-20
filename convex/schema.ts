@@ -21,6 +21,7 @@ export default defineSchema({
     )),
     currentSkillPath: v.optional(v.string()),
     configHash: v.optional(v.string()),
+    installedSkills: v.optional(v.array(v.string())),
     cpu: v.optional(v.number()),
     memory: v.optional(v.number()),
     disk: v.optional(v.number()),
@@ -42,5 +43,13 @@ export default defineSchema({
     errorReason: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
+  }).index("by_token", ["tokenIdentifier"]),
+
+  skillTrials: defineTable({
+    tokenIdentifier: v.string(),
+    sandboxId: v.string(),
+    skillPath: v.string(),
+    skillName: v.string(),
+    startedAt: v.number(),
   }).index("by_token", ["tokenIdentifier"]),
 });

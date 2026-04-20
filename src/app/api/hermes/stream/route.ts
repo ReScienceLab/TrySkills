@@ -2,6 +2,16 @@ import { auth } from "@clerk/nextjs/server";
 import { NextRequest } from "next/server";
 
 const DAYTONA_SKIP_HEADER = "X-Daytona-Skip-Preview-Warning";
+const ALLOWED_HOST_PATTERN = /^\d+-[a-z0-9]+\.daytonaproxy\d*\.net$/;
+
+function isAllowedHost(url: string): boolean {
+  try {
+    const { hostname } = new URL(url);
+    return ALLOWED_HOST_PATTERN.test(hostname);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * GET /api/hermes/stream?baseUrl=...&stream_id=...
@@ -19,6 +29,10 @@ export async function GET(request: NextRequest) {
 
   if (!baseUrl || !streamId) {
     return new Response("Missing baseUrl or stream_id", { status: 400 });
+  }
+
+  if (!isAllowedHost(baseUrl)) {
+    return new Response("Forbidden: invalid proxy target", { status: 403 });
   }
 
   const upstreamUrl = new URL(baseUrl);

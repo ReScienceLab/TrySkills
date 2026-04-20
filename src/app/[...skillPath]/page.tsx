@@ -4,6 +4,12 @@ import { useState, useEffect, useMemo, useRef, use } from "react";
 import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
+
+async function computeConfigHash(provider: string, model: string, key: string): Promise<string> {
+  const data = new TextEncoder().encode(`${provider}:${model}:${key}`);
+  const buf = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 16);
+}
 import { useMutation, useQuery } from "convex/react";
 import { useConvexAuth } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -39,6 +45,7 @@ export default function SkillPage({
   const updateSandboxState = useMutation(api.sandboxes.updateState);
   const claimSandbox = useMutation(api.sandboxes.claimSandbox);
   const updatePoolState = useMutation(api.sandboxes.updatePoolState);
+  const recordTrial = useMutation(api.skillTrials.record);
   const reusableSandbox = useQuery(
     api.sandboxes.findReusable,
     isAuthenticated ? {} : "skip",
@@ -74,18 +81,18 @@ export default function SkillPage({
     setSandboxError(undefined);
 
     const skillPathStr = `${owner}/${repo}/${skillName}`;
-    const configHash = `${config.provider.id}:${config.model}:${config.llmKey}`;
+    const configHash = await computeConfigHash(config.provider.id, config.model, config.llmKey);
 
     // Check for existing sandbox
     const claimed = await claimSandbox({}).catch(() => null);
 
     if (claimed && !abort.signal.aborted) {
       const isStopped = claimed.poolState === "stopped";
-      const sameSkill = claimed.currentSkillPath === skillPathStr;
+      const skillInstalled = claimed.installedSkills?.includes(skillPathStr) ?? false;
       const sameConfig = claimed.configHash === configHash;
 
-      // INSTANT PATH: same skill + same config + sandbox active = zero Daytona API calls
-      if (sameSkill && sameConfig && !isStopped) {
+      // INSTANT PATH: skill already installed + same config + sandbox active = zero Daytona API calls
+      if (skillInstalled && sameConfig && !isStopped) {
         setSession({
           sandboxId: claimed.sandboxId,
           webuiUrl: claimed.webuiUrl,
@@ -108,6 +115,7 @@ export default function SkillPage({
           currentSkillPath: skillPathStr,
           configHash,
         }).catch(() => {});
+        recordTrial({ sandboxId: claimed.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
         return;
       }
 
@@ -149,7 +157,9 @@ export default function SkillPage({
           currentSkillPath: skillPathStr,
           webuiUrl: result.webuiUrl,
           configHash,
+          installedSkills: [...new Set([...(claimed.installedSkills ?? []), skillPathStr])],
         }).catch(() => {});
+        recordTrial({ sandboxId: claimed.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
 
         return;
       } catch (err) {
@@ -219,11 +229,15 @@ export default function SkillPage({
         webuiUrl: result.webuiUrl,
         state: "running",
         poolState: "active",
+        currentSkillPath: skillPathStr,
+        configHash,
+        installedSkills: [skillPathStr],
         cpu: result.cpu,
         memory: result.memory,
         disk: result.disk,
         region: result.region,
       }).catch(() => {});
+      recordTrial({ sandboxId: result.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
     } catch (err) {
       if (abort.signal.aborted) return;
       setSandboxState("error");

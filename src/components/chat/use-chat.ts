@@ -42,6 +42,7 @@ export function useChat(
 
   const cancelRef = useRef<(() => void) | null>(null);
   const streamIdRef = useRef<string | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
   const initRef = useRef(false);
   const currentAssistantRef = useRef("");
   const currentReasoningRef = useRef("");
@@ -110,7 +111,7 @@ export function useChat(
         setApproval({
           command: event.data.command as string,
           description: event.data.description as string | undefined,
-          sessionId: sessionId ?? "",
+          sessionId: sessionIdRef.current ?? "",
         });
         break;
       }
@@ -127,7 +128,7 @@ export function useChat(
       case "cancel":
         break;
     }
-  }, [sessionId]);
+  }, []); // sessionId accessed via ref
 
   const startStream = useCallback(
     async (sid: string, message: string) => {
@@ -186,6 +187,7 @@ export function useChat(
     (async () => {
       try {
         const sid = await createSession(webuiBaseUrl, model);
+        sessionIdRef.current = sid;
         setSessionId(sid);
         await startStream(sid, `I want to try the ${skillName} skill`);
       } catch (err) {

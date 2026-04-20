@@ -11,6 +11,9 @@ export const create = mutation({
       v.literal("active"),
       v.literal("stopped"),
     )),
+    currentSkillPath: v.optional(v.string()),
+    configHash: v.optional(v.string()),
+    installedSkills: v.optional(v.array(v.string())),
     cpu: v.optional(v.number()),
     memory: v.optional(v.number()),
     disk: v.optional(v.number()),
@@ -28,6 +31,9 @@ export const create = mutation({
       webuiUrl: args.webuiUrl,
       state: args.state ?? "running",
       poolState: args.poolState,
+      currentSkillPath: args.currentSkillPath,
+      configHash: args.configHash,
+      installedSkills: args.installedSkills,
       cpu: args.cpu,
       memory: args.memory,
       disk: args.disk,
@@ -137,12 +143,14 @@ export const claimSandbox = mutation({
     });
     if (!reusable) return null;
 
+    await ctx.db.patch("sandboxes", reusable._id, { poolState: "active" });
     return {
       sandboxId: reusable.sandboxId,
       webuiUrl: reusable.webuiUrl,
       currentSkillPath: reusable.currentSkillPath,
       poolState: reusable.poolState,
       configHash: reusable.configHash,
+      installedSkills: reusable.installedSkills,
     };
   },
 });
@@ -186,6 +194,7 @@ export const updatePoolState = mutation({
     currentSkillPath: v.optional(v.string()),
     webuiUrl: v.optional(v.string()),
     configHash: v.optional(v.string()),
+    installedSkills: v.optional(v.array(v.string())),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -207,6 +216,9 @@ export const updatePoolState = mutation({
       }
       if (args.configHash !== undefined) {
         patch.configHash = args.configHash;
+      }
+      if (args.installedSkills !== undefined) {
+        patch.installedSkills = args.installedSkills;
       }
       await ctx.db.patch("sandboxes", sandbox._id, patch);
     }
