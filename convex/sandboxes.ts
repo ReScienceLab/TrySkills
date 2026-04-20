@@ -143,7 +143,11 @@ export const getSandbox = query({
 
     const sandbox = sandboxes.find((s) => !s.sandboxId.startsWith("pending-"));
     if (!sandbox) {
-      const pending = sandboxes.find((s) => s.sandboxId.startsWith("pending-"));
+      const STALE_PENDING_MS = 2 * 60 * 1000; // 2 min
+      const now = Date.now();
+      const pending = sandboxes.find(
+        (s) => s.sandboxId.startsWith("pending-") && now - s.createdAt < STALE_PENDING_MS,
+      );
       if (pending) return { status: "creating" as const };
       return null;
     }
@@ -180,8 +184,20 @@ export const acquireCreateLock = mutation({
       return { status: "exists" as const, sandboxId: real.sandboxId };
     }
 
-    const pending = sandboxes.find((s) => s.sandboxId.startsWith("pending-"));
-    if (pending) {
+    const STALE_PENDING_MS = 2 * 60 * 1000;
+    const now = Date.now();
+
+    // Clean up stale pending records from crashed tabs
+    for (const s of sandboxes) {
+      if (s.sandboxId.startsWith("pending-") && now - s.createdAt > STALE_PENDING_MS) {
+        await ctx.db.delete("sandboxes", s._id);
+      }
+    }
+
+    const freshPending = sandboxes.find(
+      (s) => s.sandboxId.startsWith("pending-") && now - s.createdAt <= STALE_PENDING_MS,
+    );
+    if (freshPending) {
       return { status: "creating" as const };
     }
 

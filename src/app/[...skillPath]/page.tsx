@@ -171,11 +171,12 @@ export default function SkillPage({
       }
     }
 
-    // Sandbox is being created by another tab
+    // Sandbox is being created by another tab -- wait for it
     if (sandbox && sandbox.status === "creating") {
       setSandboxState("creating");
-      setSandboxError("Another tab is creating your sandbox. Please wait...");
-      // Poll: the useQuery(getSandbox) will auto-update when the record changes
+      setPhase("launching");
+      // Don't return -- the useEffect below will re-trigger handleLaunch
+      // when userSandbox changes from "creating" to "found"
       return;
     }
 
@@ -184,15 +185,16 @@ export default function SkillPage({
     // COLD CREATE PATH: no sandbox exists, acquire create lock
     const lock = await acquireCreateLock({}).catch(() => null);
 
-    if (!lock || lock.status === "exists") {
-      // Sandbox appeared (race), retry launch
-      void handleLaunch(config);
+    if (!lock) {
+      setSandboxState("error");
+      setSandboxError("Failed to acquire sandbox. Please try again.");
       return;
     }
 
-    if (lock.status === "creating") {
+    if (lock.status === "exists" || lock.status === "creating") {
+      // Another tab created/is creating -- wait for userSandbox query to update
       setSandboxState("creating");
-      setSandboxError("Another tab is creating your sandbox. Please wait...");
+      setPhase("launching");
       return;
     }
 
@@ -266,6 +268,15 @@ export default function SkillPage({
       placeholderIdRef.current = null;
     }
   };
+
+  // Re-trigger launch when userSandbox changes from "creating" to "found"
+  // (another tab finished creating the sandbox)
+  useEffect(() => {
+    if (phase !== "launching" || sandboxState !== "creating") return;
+    if (!userSandbox || userSandbox.status !== "found") return;
+    if (!launchConfigRef.current) return;
+    void handleLaunch(launchConfigRef.current);
+  }, [userSandbox, phase, sandboxState]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCancel = () => {
     launchAbortRef.current?.abort();
