@@ -2,7 +2,7 @@ import { cronJobs } from "convex/server";
 import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 
-const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 min without heartbeat = stale
+const STALE_THRESHOLD_MS = 20 * 60 * 1000; // 20 min without heartbeat = stale (matches autoStop + buffer)
 const AGE_THRESHOLD_MS = 20 * 60 * 1000; // only consider sandboxes older than 20min
 
 /**

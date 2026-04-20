@@ -104,12 +104,8 @@ export function useKeyStore() {
 
     if (isAuthenticated && storedKeys !== undefined) {
       if (storedKeys === null) {
-        // Convex has no keys — but check local cache first (user may have
-        // saved during the pre-auth timeout window)
-        if (isSignedIn && user) {
-          const cached = readLocalCache(user.id);
-          if (cached) return cached;
-        }
+        // Convex explicitly has no keys — respect the backend state.
+        // Only keep localOverride if user just saved in this session.
         return null;
       }
       if (!isDecrypting) return decryptedConfig;
