@@ -243,12 +243,12 @@ describe("sandbox/daytona", () => {
       expect(mockGet).toHaveBeenCalledWith("sb-unknown-456");
     });
 
-    it("does not throw on cleanup errors", async () => {
+    it("re-throws on cleanup errors so callers can preserve dashboard records", async () => {
       mockGet.mockRejectedValue(new Error("not found"));
 
       await expect(
         destroySandbox("test-key", "sb-nonexistent"),
-      ).resolves.not.toThrow();
+      ).rejects.toThrow("not found");
     });
   });
 });
