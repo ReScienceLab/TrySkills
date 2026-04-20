@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { PROVIDERS, type Provider } from "@/lib/providers/registry";
 import { useKeyStore } from "@/hooks/use-key-store";
+import { ProviderTabs, ModelSelector, ApiKeyInput } from "@/components/provider-config";
 
 export interface LaunchConfig {
   provider: Provider;
@@ -38,6 +39,12 @@ export function ConfigPanel({
     [savedConfig, initialProvider],
   );
 
+  const initialProviderKeys = useMemo(() => {
+    return savedConfig?.providerKeys ?? (
+      savedConfig?.llmKey ? { [savedConfig.providerId]: savedConfig.llmKey } : {}
+    );
+  }, [savedConfig]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -51,7 +58,7 @@ export function ConfigPanel({
       key={configKey}
       initialProvider={initialProvider}
       initialModel={initialModel}
-      initialLlmKey={savedConfig?.llmKey ?? ""}
+      initialProviderKeys={initialProviderKeys}
       initialSandboxKey={savedConfig?.sandboxKey ?? ""}
       save={save}
       onLaunch={onLaunch}
@@ -63,7 +70,7 @@ export function ConfigPanel({
 function ConfigPanelForm({
   initialProvider,
   initialModel,
-  initialLlmKey,
+  initialProviderKeys,
   initialSandboxKey,
   save,
   onLaunch,
@@ -71,7 +78,7 @@ function ConfigPanelForm({
 }: {
   initialProvider: Provider;
   initialModel: string;
-  initialLlmKey: string;
+  initialProviderKeys: Record<string, string>;
   initialSandboxKey: string;
   save: (config: import("@/hooks/use-key-store").StoredConfig) => Promise<void>;
   onLaunch: (config: LaunchConfig) => void;
@@ -79,17 +86,17 @@ function ConfigPanelForm({
 }) {
   const [provider, setProvider] = useState<Provider>(initialProvider);
   const [model, setModel] = useState(initialModel);
-  const [llmKey, setLlmKey] = useState(initialLlmKey);
+  const [providerKeys, setProviderKeys] = useState<Record<string, string>>(initialProviderKeys);
   const [sandboxKey, setSandboxKey] = useState(initialSandboxKey);
-  const [showLlmKey, setShowLlmKey] = useState(false);
   const [showSandboxKey, setShowSandboxKey] = useState(false);
+
+  const llmKey = providerKeys[provider.id] ?? "";
 
   const handleProviderChange = (id: string) => {
     const p = PROVIDERS.find((p) => p.id === id);
     if (p) {
       setProvider(p);
       setModel(p.models[0]);
-      setLlmKey("");
     }
   };
 
@@ -99,6 +106,7 @@ function ConfigPanelForm({
       model,
       llmKey,
       sandboxKey,
+      providerKeys,
     });
     onLaunch({ provider, model, llmKey, sandboxKey });
   };
@@ -124,76 +132,19 @@ function ConfigPanelForm({
         <div className="px-6 py-5 space-y-5">
           <div>
             <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">Provider</label>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-1">
-              {PROVIDERS.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => handleProviderChange(p.id)}
-                  className={`px-3 py-2 text-xs font-medium transition-all ${
-                    provider.id === p.id
-                      ? "bg-white text-black"
-                      : "bg-white/5 text-white/60 hover:bg-white/10"
-                  }`}
-                >
-                  {p.name}
-                </button>
-              ))}
-            </div>
+            <ProviderTabs activeId={provider.id} onChange={handleProviderChange} />
           </div>
 
           <div>
             <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">Model</label>
-            {provider.allowCustomModel ? (
-              <>
-                <input
-                  list={`models-${provider.id}`}
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  placeholder="e.g. anthropic/claude-sonnet-4.6"
-                  className="w-full px-4 py-2.5 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors placeholder:text-white/20"
-                />
-                <datalist id={`models-${provider.id}`}>
-                  {provider.models.map((m) => (
-                    <option key={m} value={m} />
-                  ))}
-                </datalist>
-              </>
-            ) : (
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className="w-full px-4 py-2.5 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors appearance-none cursor-pointer"
-              >
-                {provider.models.map((m) => (
-                  <option key={m} value={m} className="bg-[#111] text-white">{m}</option>
-                ))}
-              </select>
-            )}
+            <ModelSelector provider={provider} value={model} onChange={setModel} />
           </div>
 
-          <div>
-            <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
-              API Key
-              <a href={provider.keyUrl} target="_blank" rel="noopener noreferrer" className="ml-2 text-blue-400 hover:underline normal-case tracking-normal">
-                Get a key &rarr;
-              </a>
-            </label>
-            <div className="relative">
-              <input
-                type={showLlmKey ? "text" : "password"}
-                value={llmKey}
-                onChange={(e) => setLlmKey(e.target.value)}
-                placeholder={`${provider.keyPrefix}...`}
-                className="w-full px-4 py-2.5 pr-12 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors placeholder:text-white/20"
-              />
-              <button
-                onClick={() => setShowLlmKey(!showLlmKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors text-xs"
-              >
-                {showLlmKey ? "Hide" : "Show"}
-              </button>
-            </div>
-          </div>
+          <ApiKeyInput
+            provider={provider}
+            value={llmKey}
+            onChange={(k) => setProviderKeys(prev => ({ ...prev, [provider.id]: k }))}
+          />
         </div>
       </div>
 

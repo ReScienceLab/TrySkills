@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { PROVIDERS, type Provider } from "@/lib/providers/registry";
 import { useKeyStore } from "@/hooks/use-key-store";
+import { ProviderTabs, ModelSelector, ApiKeyInput } from "@/components/provider-config";
 
 export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
   const { save } = useKeyStore();
@@ -11,7 +12,6 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
   const [model, setModel] = useState(PROVIDERS[0].models[0]);
   const [llmKey, setLlmKey] = useState("");
   const [sandboxKey, setSandboxKey] = useState("");
-  const [showLlmKey, setShowLlmKey] = useState(false);
   const [showSandboxKey, setShowSandboxKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -29,7 +29,13 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
     setSaving(true);
     setSaveError(null);
     try {
-      await save({ providerId: provider.id, model, llmKey, sandboxKey });
+      await save({
+        providerId: provider.id,
+        model,
+        llmKey,
+        sandboxKey,
+        providerKeys: { [provider.id]: llmKey },
+      });
       setStep(3);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Failed to save keys. Please try again.");
@@ -130,51 +136,12 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
 
               <div>
                 <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">Provider</label>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-1">
-                  {PROVIDERS.map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => handleProviderChange(p.id)}
-                      className={`px-3 py-2 text-xs font-medium transition-all ${
-                        provider.id === p.id
-                          ? "bg-white text-black"
-                          : "bg-white/5 text-white/60 hover:bg-white/10"
-                      }`}
-                    >
-                      {p.name}
-                    </button>
-                  ))}
-                </div>
+                <ProviderTabs activeId={provider.id} onChange={handleProviderChange} />
               </div>
 
               <div>
                 <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">Model</label>
-                {provider.allowCustomModel ? (
-                  <>
-                    <input
-                      list={`onboarding-models-${provider.id}`}
-                      value={model}
-                      onChange={(e) => setModel(e.target.value)}
-                      placeholder="e.g. anthropic/claude-sonnet-4.6"
-                      className="w-full px-4 py-2.5 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors placeholder:text-white/20"
-                    />
-                    <datalist id={`onboarding-models-${provider.id}`}>
-                      {provider.models.map((m) => (
-                        <option key={m} value={m} />
-                      ))}
-                    </datalist>
-                  </>
-                ) : (
-                  <select
-                    value={model}
-                    onChange={(e) => setModel(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors appearance-none cursor-pointer"
-                  >
-                    {provider.models.map((m) => (
-                      <option key={m} value={m} className="bg-[#111] text-white">{m}</option>
-                    ))}
-                  </select>
-                )}
+                <ModelSelector provider={provider} value={model} onChange={setModel} />
               </div>
 
               <a
@@ -195,27 +162,11 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
                 </svg>
               </a>
 
-              <div>
-                <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
-                  Paste your {provider.name} API Key
-                </label>
-                <div className="relative">
-                  <input
-                    type={showLlmKey ? "text" : "password"}
-                    value={llmKey}
-                    onChange={(e) => setLlmKey(e.target.value)}
-                    placeholder={`${provider.keyPrefix}...`}
-                    className="w-full px-4 py-2.5 pr-12 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors placeholder:text-white/20"
-                    autoFocus
-                  />
-                  <button
-                    onClick={() => setShowLlmKey(!showLlmKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors text-xs"
-                  >
-                    {showLlmKey ? "Hide" : "Show"}
-                  </button>
-                </div>
-              </div>
+              <ApiKeyInput
+                provider={provider}
+                value={llmKey}
+                onChange={setLlmKey}
+              />
 
               {saveError && (
                 <div className="p-3 bg-red-500/10 border border-red-500/20 text-xs text-red-400">
