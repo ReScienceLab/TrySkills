@@ -19,8 +19,22 @@ export default defineSchema({
     memory: v.optional(v.number()),
     disk: v.optional(v.number()),
     region: v.optional(v.string()),
+    lastHeartbeat: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_token", ["tokenIdentifier"])
     .index("by_sandbox", ["sandboxId"]),
+
+  userSnapshots: defineTable({
+    tokenIdentifier: v.string(),
+    snapshotName: v.string(),
+    state: v.union(
+      v.literal("building"),
+      v.literal("active"),
+      v.literal("error"),
+    ),
+    errorReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_token", ["tokenIdentifier"]),
 });

@@ -1,55 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
 import { PROVIDERS, type Provider } from "@/lib/providers/registry";
 import { useKeyStore } from "@/hooks/use-key-store";
+import { ProviderSection } from "@/components/provider-config";
 import { GlowMesh } from "@/components/glow-mesh";
 import { SiteHeader } from "@/components/site-header";
 
 export default function SettingsPage() {
   const { isSignedIn, isLoaded } = useAuth();
   const { config: savedConfig, loading, save, clear } = useKeyStore();
-
-  const [provider, setProvider] = useState<Provider>(PROVIDERS[0]);
-  const [model, setModel] = useState(PROVIDERS[0].models[0]);
-  const [llmKey, setLlmKey] = useState("");
-  const [sandboxKey, setSandboxKey] = useState("");
-  const [showLlmKey, setShowLlmKey] = useState(false);
-  const [showSandboxKey, setShowSandboxKey] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    if (!savedConfig) return;
-    const p = PROVIDERS.find((p) => p.id === savedConfig.providerId) || PROVIDERS[0];
-    setProvider(p);
-    setModel(savedConfig.model || p.models[0]);
-    setLlmKey(savedConfig.llmKey || "");
-    setSandboxKey(savedConfig.sandboxKey || "");
-  }, [savedConfig]);
-
-  const handleProviderChange = (id: string) => {
-    const p = PROVIDERS.find((p) => p.id === id);
-    if (p) {
-      setProvider(p);
-      setModel(p.models[0]);
-    }
-  };
-
-  const handleSave = async () => {
-    await save({ providerId: provider.id, model, llmKey, sandboxKey });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
-
-  const handleClear = async () => {
-    await clear();
-    setLlmKey("");
-    setSandboxKey("");
-    setProvider(PROVIDERS[0]);
-    setModel(PROVIDERS[0].models[0]);
-  };
 
   if (!isLoaded || loading) {
     return (
@@ -85,7 +47,66 @@ export default function SettingsPage() {
     );
   }
 
-  const hasKeys = llmKey.length > 5 && sandboxKey.length > 5;
+  return (
+    <SettingsForm
+      key={savedConfig ? `${savedConfig.providerId}:${savedConfig.sandboxKey}` : "empty"}
+      savedConfig={savedConfig}
+      save={save}
+      clear={clear}
+    />
+  );
+}
+
+function SettingsForm({
+  savedConfig,
+  save,
+  clear,
+}: {
+  savedConfig: import("@/hooks/use-key-store").StoredConfig | null;
+  save: (config: import("@/hooks/use-key-store").StoredConfig) => Promise<void>;
+  clear: () => Promise<void>;
+}) {
+  const initialActiveId = savedConfig?.providerId ?? PROVIDERS[0].id;
+  const initialProviderKeys = savedConfig?.providerKeys ?? (
+    savedConfig?.llmKey ? { [savedConfig.providerId]: savedConfig.llmKey } : {}
+  );
+  const initialModels: Record<string, string> = {};
+  for (const p of PROVIDERS) {
+    initialModels[p.id] = p.id === savedConfig?.providerId
+      ? savedConfig.model
+      : p.models[0];
+  }
+
+  const [activeProviderId, setActiveProviderId] = useState(initialActiveId);
+  const [expandedId, setExpandedId] = useState<string | null>(initialActiveId);
+  const [providerKeys, setProviderKeys] = useState<Record<string, string>>(initialProviderKeys);
+  const [providerModels, setProviderModels] = useState<Record<string, string>>(initialModels);
+  const [sandboxKey, setSandboxKey] = useState(savedConfig?.sandboxKey ?? "");
+  const [showSandboxKey, setShowSandboxKey] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const activeKey = providerKeys[activeProviderId] ?? "";
+  const hasKeys = activeKey.length > 5 && sandboxKey.length > 5;
+
+  const handleSave = async () => {
+    await save({
+      providerId: activeProviderId,
+      model: providerModels[activeProviderId] ?? PROVIDERS.find(p => p.id === activeProviderId)!.models[0],
+      llmKey: activeKey,
+      sandboxKey,
+      providerKeys,
+    });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleClear = async () => {
+    await clear();
+    setProviderKeys({});
+    setProviderModels(Object.fromEntries(PROVIDERS.map(p => [p.id, p.models[0]])));
+    setSandboxKey("");
+    setActiveProviderId(PROVIDERS[0].id);
+  };
 
   return (
     <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
@@ -96,66 +117,23 @@ export default function SettingsPage() {
         <div className="w-full max-w-[640px]">
           <h1 className="text-2xl font-semibold text-white/90 mb-8">Settings</h1>
 
-          <div className="border border-white/20 bg-black/40 backdrop-blur-sm mb-4">
-            <div className="px-6 py-5 border-b border-white/10">
-              <h2 className="text-base font-semibold text-white/90">LLM Provider</h2>
-            </div>
-            <div className="px-6 py-5 space-y-5">
-              <div>
-                <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">Provider</label>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-1">
-                  {PROVIDERS.map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => handleProviderChange(p.id)}
-                      className={`px-3 py-2 text-xs font-medium transition-all ${
-                        provider.id === p.id
-                          ? "bg-white text-black"
-                          : "bg-white/5 text-white/60 hover:bg-white/10"
-                      }`}
-                    >
-                      {p.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">Model</label>
-                <select
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors appearance-none cursor-pointer"
-                >
-                  {provider.models.map((m) => (
-                    <option key={m} value={m} className="bg-[#111] text-white">{m}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
-                  API Key
-                  <a href={provider.keyUrl} target="_blank" rel="noopener noreferrer" className="ml-2 text-blue-400 hover:underline normal-case tracking-normal">
-                    Get a key &rarr;
-                  </a>
-                </label>
-                <div className="relative">
-                  <input
-                    type={showLlmKey ? "text" : "password"}
-                    value={llmKey}
-                    onChange={(e) => setLlmKey(e.target.value)}
-                    placeholder={`${provider.keyPrefix}...`}
-                    className="w-full px-4 py-2.5 pr-12 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors placeholder:text-white/20"
-                  />
-                  <button
-                    onClick={() => setShowLlmKey(!showLlmKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors text-xs"
-                  >
-                    {showLlmKey ? "Hide" : "Show"}
-                  </button>
-                </div>
-              </div>
+          <div className="mb-6">
+            <h2 className="text-sm font-medium text-white/50 uppercase tracking-wider mb-3">LLM Providers</h2>
+            <div className="space-y-2">
+              {PROVIDERS.map((p) => (
+                <ProviderSection
+                  key={p.id}
+                  provider={p}
+                  isActive={activeProviderId === p.id}
+                  isExpanded={expandedId === p.id}
+                  onToggleActive={() => setActiveProviderId(p.id)}
+                  onToggleExpand={() => setExpandedId(expandedId === p.id ? null : p.id)}
+                  model={providerModels[p.id] ?? p.models[0]}
+                  onModelChange={(m) => setProviderModels(prev => ({ ...prev, [p.id]: m }))}
+                  apiKey={providerKeys[p.id] ?? ""}
+                  onApiKeyChange={(k) => setProviderKeys(prev => ({ ...prev, [p.id]: k }))}
+                />
+              ))}
             </div>
           </div>
 

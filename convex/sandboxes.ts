@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalQuery, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 
 export const create = mutation({
@@ -44,6 +44,7 @@ export const list = query({
         q.eq("tokenIdentifier", identity.tokenIdentifier),
       )
       .order("desc")
+      // eslint-disable-next-line @convex-dev/no-collect-in-query
       .collect();
   },
 });
@@ -64,7 +65,7 @@ export const updateState = mutation({
       .unique();
 
     if (sandbox && sandbox.tokenIdentifier === identity.tokenIdentifier) {
-      await ctx.db.patch(sandbox._id, { state: args.state });
+      await ctx.db.patch("sandboxes", sandbox._id, { state: args.state });
     }
     return null;
   },
@@ -85,7 +86,67 @@ export const remove = mutation({
       .unique();
 
     if (sandbox && sandbox.tokenIdentifier === identity.tokenIdentifier) {
-      await ctx.db.delete(sandbox._id);
+      await ctx.db.delete("sandboxes", sandbox._id);
+    }
+    return null;
+  },
+});
+
+export const heartbeat = mutation({
+  args: {
+    sandboxId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const sandbox = await ctx.db
+      .query("sandboxes")
+      .withIndex("by_sandbox", (q) => q.eq("sandboxId", args.sandboxId))
+      .unique();
+
+    if (sandbox && sandbox.tokenIdentifier === identity.tokenIdentifier) {
+      await ctx.db.patch("sandboxes", sandbox._id, { lastHeartbeat: Date.now() });
+    }
+    return null;
+  },
+});
+
+export const listStale = internalQuery({
+  args: {
+    staleThresholdMs: v.number(),
+    ageThresholdMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    // eslint-disable-next-line @convex-dev/no-collect-in-query
+    const all = await ctx.db.query("sandboxes").collect();
+    return all.filter((s) => {
+      // Skip terminal states — only clean non-terminal (active/in-flight) records
+      const terminal = ["error", "cleaning", "idle"];
+      if (terminal.includes(s.state)) return false;
+      const age = now - s.createdAt;
+      if (age < args.ageThresholdMs) return false;
+      const lastBeat = s.lastHeartbeat ?? s.createdAt;
+      return now - lastBeat > args.staleThresholdMs;
+    });
+  },
+});
+
+export const internalRemove = internalMutation({
+  args: {
+    sandboxId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const sandbox = await ctx.db
+      .query("sandboxes")
+      .withIndex("by_sandbox", (q) => q.eq("sandboxId", args.sandboxId))
+      .unique();
+
+    if (sandbox) {
+      await ctx.db.delete("sandboxes", sandbox._id);
     }
     return null;
   },

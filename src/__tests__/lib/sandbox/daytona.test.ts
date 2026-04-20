@@ -50,7 +50,7 @@ describe("sandbox/daytona", () => {
     });
   });
 
-  it("creates a sandbox with correct parameters", async () => {
+  it("creates a sandbox using snapshot (fast path)", async () => {
     const progress: SandboxState[] = [];
 
     const session = await createHermesSandbox(
@@ -60,18 +60,19 @@ describe("sandbox/daytona", () => {
       (step) => progress.push(step),
     );
 
+    // First call should use the snapshot param
     expect(mockCreate).toHaveBeenCalledWith(
       expect.objectContaining({
+        snapshot: "hermes-ready",
         ephemeral: true,
-        autoStopInterval: 60,
+        autoStopInterval: 15,
         public: true,
         envVars: expect.objectContaining({
           OPENROUTER_API_KEY: "sk-or-test-key",
           API_SERVER_ENABLED: "true",
-          GATEWAY_ALLOW_ALL_USERS: "true",
         }),
       }),
-      expect.objectContaining({ timeout: 300 }),
+      expect.objectContaining({ timeout: 120 }),
     );
 
     expect(session.sandboxId).toBe("sb-test-123");
@@ -79,7 +80,27 @@ describe("sandbox/daytona", () => {
     expect(session.webuiUrl).toContain("preview.daytona.io");
   });
 
-  it("reports progress through all stages", async () => {
+  it("falls back to cold install when snapshot not available", async () => {
+    // First call (snapshot) fails, second call (fallback) succeeds
+    mockCreate
+      .mockRejectedValueOnce(new Error("Snapshot not found"))
+      .mockResolvedValueOnce(mockSandbox);
+
+    const progress: SandboxState[] = [];
+
+    const session = await createHermesSandbox(
+      testConfig,
+      "test-skill",
+      testSkillFiles,
+      (step) => progress.push(step),
+    );
+
+    expect(mockCreate).toHaveBeenCalledTimes(2);
+    expect(progress).toContain("installing");
+    expect(session.sandboxId).toBe("sb-test-123");
+  });
+
+  it("reports progress through snapshot stages", async () => {
     const progress: SandboxState[] = [];
 
     await createHermesSandbox(
@@ -90,21 +111,25 @@ describe("sandbox/daytona", () => {
     );
 
     expect(progress).toContain("creating");
+    expect(progress).toContain("configuring");
     expect(progress).toContain("uploading");
     expect(progress).toContain("starting");
+    // Should NOT contain "installing" on snapshot path
+    expect(progress).not.toContain("installing");
   });
 
-  it("installs hermes-agent and hermes-webui via executeCommand", async () => {
+  it("links pre-installed agent from /opt on snapshot path", async () => {
     await createHermesSandbox(testConfig, "my-skill", testSkillFiles, () => {});
 
     const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
-    const installCmd = allCmds.find((c: string) => c.includes("hermes-agent/main/scripts/install.sh"));
-    expect(installCmd).toBeDefined();
-    const webuiCmd = allCmds.find((c: string) => c.includes("hermes-webui"));
-    expect(webuiCmd).toBeDefined();
+    const linkCmd = allCmds.find((c: string) => c.includes("/opt/hermes-agent"));
+    expect(linkCmd).toBeDefined();
+    // Should NOT call install.sh on snapshot path
+    const installCmd = allCmds.find((c: string) => c.includes("install.sh"));
+    expect(installCmd).toBeUndefined();
   });
 
-  it("uploads skill files to ~/.hermes/skills/", async () => {
+  it("uploads skill files to /home/daytona/.hermes/skills/", async () => {
     await createHermesSandbox(
       testConfig,
       "my-skill",
@@ -150,11 +175,11 @@ describe("sandbox/daytona", () => {
     }
   });
 
-  it("starts gateway and hermes-webui", async () => {
+  it("starts gateway and webui from /opt on snapshot path", async () => {
     await createHermesSandbox(testConfig, "test", testSkillFiles, () => {});
 
     const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
-    const gwCmd = allCmds.find((c: string) => c.includes("hermes gateway run"));
+    const gwCmd = allCmds.find((c: string) => c.includes("hermes") && c.includes("gateway"));
     const webuiCmd = allCmds.find((c: string) => c.includes("server.py"));
     expect(gwCmd).toBeDefined();
     expect(webuiCmd).toBeDefined();
@@ -218,12 +243,12 @@ describe("sandbox/daytona", () => {
       expect(mockGet).toHaveBeenCalledWith("sb-unknown-456");
     });
 
-    it("does not throw on cleanup errors", async () => {
+    it("re-throws on cleanup errors so callers can preserve dashboard records", async () => {
       mockGet.mockRejectedValue(new Error("not found"));
 
       await expect(
         destroySandbox("test-key", "sb-nonexistent"),
-      ).resolves.not.toThrow();
+      ).rejects.toThrow("not found");
     });
   });
 });

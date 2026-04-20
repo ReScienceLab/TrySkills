@@ -14,6 +14,7 @@ import { SiteHeader } from "@/components/site-header";
 import { resolveSkillPath, fetchSkillDirectory } from "@/lib/skill/resolver";
 import { createHermesSandbox, destroySandbox } from "@/lib/sandbox/daytona";
 import { useKeyStore } from "@/hooks/use-key-store";
+import { useHeartbeat } from "@/hooks/use-heartbeat";
 import { getProvider } from "@/lib/providers/registry";
 import { OnboardingModal } from "@/components/onboarding-modal";
 import type { SandboxState, SandboxSession } from "@/lib/sandbox/types";
@@ -32,7 +33,7 @@ export default function SkillPage({
   const resolvedParams = use(params);
   const { skillPath } = resolvedParams;
   const { isSignedIn, isLoaded: authLoaded } = useAuth();
-  const { config: savedConfig, loading: keysLoading, save } = useKeyStore();
+  const { config: savedConfig, loading: keysLoading } = useKeyStore();
   const createSandboxRecord = useMutation(api.sandboxes.create);
   const removeSandboxRecord = useMutation(api.sandboxes.remove);
   const updateSandboxState = useMutation(api.sandboxes.updateState);
@@ -46,12 +47,16 @@ export default function SkillPage({
   const [sandboxState, setSandboxState] = useState<SandboxState>("idle");
   const [sandboxError, setSandboxError] = useState<string | undefined>();
   const [session, setSession] = useState<SandboxSession | null>(null);
+  const [usedSnapshot, setUsedSnapshot] = useState(true);
   const launchConfigRef = useRef<LaunchConfig | null>(null);
   const sessionRef = useRef<SandboxSession | null>(null);
   const autoLaunchFired = useRef(false);
   const launchAbortRef = useRef<AbortController | null>(null);
   const placeholderIdRef = useRef<string | null>(null);
   const userCancelled = useRef(false);
+
+  // Heartbeat: keeps sandbox alive while user is on page
+  useHeartbeat(session?.sandboxId ?? null, savedConfig?.sandboxKey ?? null);
 
   const handleLaunch = async (config: LaunchConfig) => {
     launchAbortRef.current?.abort();
@@ -68,12 +73,8 @@ export default function SkillPage({
     placeholderIdRef.current = placeholderId;
 
     try {
-      await save({
-        providerId: config.provider.id,
-        model: config.model,
-        llmKey: config.llmKey,
-        sandboxKey: config.sandboxKey,
-      });
+      // Config is already saved by ConfigPanelForm.handleLaunch or auto-launch;
+      // do not save again here to avoid overwriting providerKeys with stale data.
 
       await createSandboxRecord({
         sandboxId: placeholderId,
@@ -96,9 +97,10 @@ export default function SkillPage({
         },
         skillName,
         skillFiles,
-        (step) => {
+        (step, meta) => {
           if (abort.signal.aborted) return;
           setSandboxState(step as SandboxState);
+          if (meta?.usedSnapshot !== undefined) setUsedSnapshot(meta.usedSnapshot);
           updateSandboxState({ sandboxId: placeholderId, state: step }).catch(() => {});
         },
       );
@@ -110,12 +112,14 @@ export default function SkillPage({
       }
 
       setSession(result);
+      setUsedSnapshot(result.usedSnapshot);
       sessionRef.current = result;
       setSandboxState("running");
       setPhase("running");
       placeholderIdRef.current = null;
 
       await removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
+
       await createSandboxRecord({
         sandboxId: result.sandboxId,
         skillPath: skillPathStr,
@@ -291,12 +295,15 @@ export default function SkillPage({
           )}
 
           {phase === "launching" && (
-            <LaunchProgress
-              state={sandboxState}
-              error={sandboxError}
-              onRetry={handleRetryLaunch}
-              onCancel={handleCancel}
-            />
+            <div className="space-y-6">
+              <LaunchProgress
+                state={sandboxState}
+                error={sandboxError}
+                onRetry={handleRetryLaunch}
+                onCancel={handleCancel}
+                usedSnapshot={usedSnapshot}
+              />
+            </div>
           )}
 
           {phase === "running" && session && (

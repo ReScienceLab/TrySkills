@@ -1,4 +1,4 @@
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
@@ -39,5 +39,41 @@ export async function GET(request: NextRequest) {
     });
   } catch {
     return NextResponse.json({ error: "Failed to fetch sandbox info" }, { status: 500 });
+  }
+}
+
+/**
+ * POST /api/sandbox — Heartbeat/keepalive.
+ * Calls Daytona's refreshActivity to reset the auto-stop idle timer.
+ */
+export async function POST(request: NextRequest) {
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
+  let body: { sandboxId?: string; daytonaKey?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const { sandboxId, daytonaKey } = body;
+  if (!sandboxId || !daytonaKey) {
+    return NextResponse.json({ error: "Missing sandboxId or daytonaKey" }, { status: 400 });
+  }
+
+  try {
+    const { Daytona } = await import("@daytona/sdk");
+    const daytona = new Daytona({
+      apiKey: daytonaKey,
+      apiUrl: "https://app.daytona.io/api",
+    });
+    const sandbox = await daytona.get(sandboxId);
+    await sandbox.refreshActivity();
+    return NextResponse.json({ ok: true });
+  } catch {
+    return NextResponse.json({ error: "Failed to refresh sandbox activity" }, { status: 500 });
   }
 }
