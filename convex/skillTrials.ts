@@ -34,7 +34,6 @@ export const list = query({
         q.eq("tokenIdentifier", identity.tokenIdentifier),
       )
       .order("desc")
-      // eslint-disable-next-line @convex-dev/no-collect-in-query
-      .collect();
+      .take(50);
   },
 });

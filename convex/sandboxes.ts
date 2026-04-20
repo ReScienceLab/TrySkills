@@ -26,14 +26,17 @@ export const create = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
 
-    // Enforce single sandbox per user: remove any existing non-pending records
-    const existing = await ctx.db
-      .query("sandboxes")
-      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-      .collect();
-    for (const old of existing) {
-      if (!old.sandboxId.startsWith("pending-") && old.sandboxId !== args.sandboxId) {
-        await ctx.db.delete("sandboxes", old._id);
+    // Enforce single sandbox per user: remove old non-pending records
+    // only when inserting a real (non-placeholder) sandbox record
+    if (!args.sandboxId.startsWith("pending-")) {
+      const existing = await ctx.db
+        .query("sandboxes")
+        .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
+        .collect();
+      for (const old of existing) {
+        if (!old.sandboxId.startsWith("pending-") && old.sandboxId !== args.sandboxId) {
+          await ctx.db.delete("sandboxes", old._id);
+        }
       }
     }
 
