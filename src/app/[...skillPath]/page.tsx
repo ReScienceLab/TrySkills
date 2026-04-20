@@ -221,6 +221,7 @@ export default function SkillPage({
     }
   };
 
+  // Invalid path
   if (!isValidPath) {
     return (
       <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
@@ -228,7 +229,7 @@ export default function SkillPage({
         <SiteHeader />
         <div className="flex-1 flex items-center justify-center relative z-10 px-6">
           <div className="flex flex-col items-center animate-fade-in">
-            <div className="text-white font-semibold mb-2">Invalid skill path</div>
+            <h1 className="text-white font-semibold mb-2">Invalid skill path</h1>
             <div className="text-white/50 text-sm mb-6">Expected format: /owner/repo/skill-name</div>
             <Link href="/" className="px-6 py-3 bg-white text-black text-sm font-medium hover:bg-white/90 transition-colors">Go home</Link>
           </div>
@@ -248,15 +249,15 @@ export default function SkillPage({
       <div className="flex-1 flex items-center justify-center relative z-10 px-6">
         <div className="w-full max-w-[640px]">
           {phase === "config" && !authLoaded && (
-            <div className="flex items-center justify-center py-20">
-              <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
+            <div className="flex items-center justify-center py-20" role="status" aria-label="Loading">
+              <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" aria-hidden="true" />
             </div>
           )}
 
           {phase === "config" && authLoaded && !isSignedIn && (
             <div className="animate-fade-in">
-              <div className="border border-white/20 bg-black/40 backdrop-blur-sm p-8 text-center">
-                <svg className="w-10 h-10 mx-auto mb-4 text-white/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <div className="border border-white/20 bg-black/40 p-8 text-center">
+                <svg className="w-10 h-10 mx-auto mb-4 text-white/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
                 </svg>
                 <h2 className="text-lg font-semibold text-white/90 mb-2">Sign in to continue</h2>
@@ -269,8 +270,8 @@ export default function SkillPage({
           )}
 
           {phase === "config" && isSignedIn && keysLoading && (
-            <div className="flex items-center justify-center py-20">
-              <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
+            <div className="flex items-center justify-center py-20" role="status" aria-label="Loading keys">
+              <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" aria-hidden="true" />
             </div>
           )}
 
@@ -289,8 +290,8 @@ export default function SkillPage({
           )}
 
           {phase === "config" && readyToAutoLaunch && (
-            <div className="flex items-center justify-center py-20">
-              <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
+            <div className="flex items-center justify-center py-20" role="status" aria-label="Preparing launch">
+              <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" aria-hidden="true" />
             </div>
           )}
 

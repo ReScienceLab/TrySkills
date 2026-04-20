@@ -37,20 +37,20 @@ export function LaunchProgress({
 
   return (
     <div className="animate-fade-in">
-      <div className="border border-white/20 bg-black/40 backdrop-blur-sm p-8">
+      <div className="border border-white/20 bg-black/40 p-8">
         <div className="flex items-center gap-3 mb-8">
-          <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+          <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" aria-hidden="true" />
           <h2 className="text-base font-semibold text-white/90">
             Launching Agent Session
           </h2>
           {usedSnapshot && (
-            <span className="ml-auto text-[10px] font-mono text-emerald-400/60 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+            <span className="ml-auto text-[10px] font-mono text-emerald-400/60 bg-emerald-500/10 px-2 py-0.5">
               snapshot
             </span>
           )}
         </div>
 
-        <div className="relative ml-1 mb-8">
+        <div className="relative ml-1 mb-8" role="status" aria-label={`Launch progress: ${steps[currentIdx]?.label ?? state}`}>
           {steps.map((step, i) => {
             const isActive = step.key === state;
             const isDone = currentIdx > i;
@@ -98,7 +98,7 @@ export function LaunchProgress({
         </div>
 
         {state === "error" && (
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20">
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20" role="alert">
             <div className="text-sm text-red-400 font-medium mb-1">Launch failed</div>
             <div className="text-sm text-white/60">{error || "Unknown error"}</div>
           </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { PROVIDERS, type Provider } from "@/lib/providers/registry";
 import { useKeyStore } from "@/hooks/use-key-store";
 import { ProviderTabs, ModelSelector, ApiKeyInput } from "@/components/provider-config";
@@ -15,6 +15,7 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
   const [showSandboxKey, setShowSandboxKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   const handleProviderChange = (id: string) => {
     const p = PROVIDERS.find((p) => p.id === id);
@@ -44,17 +45,44 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
     }
   };
 
+  const trapFocus = useCallback((e: KeyboardEvent) => {
+    if (e.key !== "Tab" || !modalRef.current) return;
+    const focusable = modalRef.current.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener("keydown", trapFocus);
+    return () => document.removeEventListener("keydown", trapFocus);
+  }, [trapFocus]);
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
-      <div className="w-full max-w-lg border border-white/20 bg-[#0a0a0a] shadow-2xl">
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="onboarding-title"
+    >
+      <div ref={modalRef} className="w-full max-w-lg border border-white/20 bg-[#0a0a0a] shadow-2xl">
         <div className="px-6 py-5 border-b border-white/10">
-          <h2 className="text-lg font-semibold text-white/90">Welcome to TrySkills.sh</h2>
+          <h2 id="onboarding-title" className="text-lg font-semibold text-white/90">Welcome to TrySkills.sh</h2>
           <p className="text-sm text-white/40 mt-1">
             Set up your API keys to start trying skills. Takes about 2 minutes.
           </p>
         </div>
 
-        <div className="px-6 py-2 border-b border-white/10">
+        <div className="px-6 py-2 border-b border-white/10" aria-hidden="true">
           <div className="flex items-center gap-1">
             {[1, 2, 3].map((s) => (
               <div key={s} className="flex items-center gap-1 flex-1">
@@ -75,9 +103,9 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
           {step === 1 && (
             <div className="space-y-4 animate-fade-in">
               <div className="flex items-center gap-3 mb-2">
-                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-sm font-semibold text-white/60">1</div>
+                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-sm font-semibold text-white/60" aria-hidden="true">1</div>
                 <div>
-                  <div className="text-sm font-medium text-white/90">Get a Daytona Sandbox Key</div>
+                  <h3 className="text-sm font-medium text-white/90">Get a Daytona Sandbox Key</h3>
                   <div className="text-xs text-white/40">Free $200 credits, no credit card needed</div>
                 </div>
               </div>
@@ -88,33 +116,35 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 px-4 py-3 bg-white/5 border border-white/10 hover:border-white/30 transition-all group"
               >
-                <svg className="w-5 h-5 text-white/40 group-hover:text-white/70 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <svg className="w-5 h-5 text-white/40 group-hover:text-white/70 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
                 </svg>
                 <div className="flex-1">
                   <div className="text-sm text-white/70 group-hover:text-white transition-colors">Open Daytona Dashboard</div>
                   <div className="text-xs text-white/30">app.daytona.io/dashboard/keys</div>
                 </div>
-                <svg className="w-4 h-4 text-white/20 group-hover:text-white/50 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-4 h-4 text-white/20 group-hover:text-white/50 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                 </svg>
               </a>
 
               <div>
-                <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
+                <label htmlFor="sandbox-key-input" className="block text-xs text-white/50 uppercase tracking-wider mb-2">
                   Paste your Daytona API Key
                 </label>
                 <div className="relative">
                   <input
+                    id="sandbox-key-input"
                     type={showSandboxKey ? "text" : "password"}
                     value={sandboxKey}
                     onChange={(e) => setSandboxKey(e.target.value)}
                     placeholder="dtn_..."
-                    className="w-full px-4 py-2.5 pr-12 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors placeholder:text-white/20"
+                    className="w-full px-4 py-2.5 pr-12 bg-white/5 border border-white/10 text-white/90 text-sm font-mono focus:border-white/30 transition-colors placeholder:text-white/20"
                     autoFocus
                   />
                   <button
                     onClick={() => setShowSandboxKey(!showSandboxKey)}
+                    aria-label={showSandboxKey ? "Hide API key" : "Show API key"}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors text-xs"
                   >
                     {showSandboxKey ? "Hide" : "Show"}
@@ -127,9 +157,9 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
           {step === 2 && (
             <div className="space-y-4 animate-fade-in">
               <div className="flex items-center gap-3 mb-2">
-                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-sm font-semibold text-white/60">2</div>
+                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-sm font-semibold text-white/60" aria-hidden="true">2</div>
                 <div>
-                  <div className="text-sm font-medium text-white/90">Configure your LLM Provider</div>
+                  <h3 className="text-sm font-medium text-white/90">Configure your LLM Provider</h3>
                   <div className="text-xs text-white/40">Choose a provider and paste your API key</div>
                 </div>
               </div>
@@ -150,14 +180,14 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 px-4 py-3 bg-white/5 border border-white/10 hover:border-white/30 transition-all group"
               >
-                <svg className="w-5 h-5 text-white/40 group-hover:text-white/70 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <svg className="w-5 h-5 text-white/40 group-hover:text-white/70 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
                 </svg>
                 <div className="flex-1">
                   <div className="text-sm text-white/70 group-hover:text-white transition-colors">Get {provider.name} API Key</div>
                   <div className="text-xs text-white/30">{provider.keyUrl.replace("https://", "")}</div>
                 </div>
-                <svg className="w-4 h-4 text-white/20 group-hover:text-white/50 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-4 h-4 text-white/20 group-hover:text-white/50 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                 </svg>
               </a>
@@ -169,7 +199,7 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
               />
 
               {saveError && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+                <div className="p-3 bg-red-500/10 border border-red-500/20 text-xs text-red-400" role="alert">
                   {saveError}
                 </div>
               )}
@@ -178,11 +208,11 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
 
           {step === 3 && (
             <div className="space-y-4 animate-fade-in text-center py-4">
-              <svg className="w-12 h-12 mx-auto text-green-400/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <svg className="w-12 h-12 mx-auto text-green-400/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <div>
-                <div className="text-lg font-semibold text-white/90 mb-1">You're all set!</div>
+                <div className="text-lg font-semibold text-white/90 mb-1">You&apos;re all set!</div>
                 <div className="text-sm text-white/50">
                   Your keys are encrypted and saved. You can now try any skill instantly.
                 </div>

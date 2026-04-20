@@ -72,25 +72,27 @@ export default function DashboardPage() {
     await removeSandbox({ sandboxId });
   };
 
+  // Loading state
   if (!isLoaded) {
     return (
       <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
         <GlowMesh />
         <SiteHeader />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
+        <div className="flex-1 flex items-center justify-center" role="status" aria-label="Loading">
+          <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" aria-hidden="true" />
         </div>
       </main>
     );
   }
 
+  // Not signed in
   if (!isSignedIn) {
     return (
       <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
         <GlowMesh />
         <SiteHeader />
         <div className="flex-1 flex items-center justify-center relative z-10 px-6">
-          <div className="border border-white/20 bg-black/40 backdrop-blur-sm p-8 text-center max-w-md">
+          <div className="border border-white/20 bg-black/40 p-8 text-center max-w-md">
             <h2 className="text-lg font-semibold text-white/90 mb-2">Sign in to view dashboard</h2>
             <p className="text-sm text-white/50 mb-6">Manage your active sandbox sessions.</p>
             <SignInButton mode="modal">
@@ -143,6 +145,7 @@ export default function DashboardPage() {
     return "text-yellow-400/70";
   };
 
+  // Main dashboard content
   return (
     <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
       <GlowMesh />
@@ -158,12 +161,12 @@ export default function DashboardPage() {
           </div>
 
           {sandboxList === undefined ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
+            <div className="flex items-center justify-center py-20" role="status" aria-label="Loading sandboxes">
+              <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" aria-hidden="true" />
             </div>
           ) : sandboxList.length === 0 ? (
-            <div className="border border-white/10 bg-black/40 backdrop-blur-sm p-12 text-center">
-              <svg className="w-12 h-12 mx-auto mb-4 text-white/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+            <div className="border border-white/10 bg-black/40 p-12 text-center">
+              <svg className="w-12 h-12 mx-auto mb-4 text-white/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1} aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
               </svg>
               <h2 className="text-lg font-semibold text-white/60 mb-2">No active sandboxes</h2>
@@ -173,7 +176,7 @@ export default function DashboardPage() {
               </a>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3" role="list" aria-label="Active sandboxes">
               {sandboxList.map((sb) => {
                 const live = liveInfo[sb.sandboxId];
                 const displayState = live?.state ?? sb.state;
@@ -186,11 +189,12 @@ export default function DashboardPage() {
                 return (
                   <div
                     key={sb._id}
-                    className="border border-white/10 bg-black/40 backdrop-blur-sm px-6 py-4"
+                    role="listitem"
+                    className="border border-white/10 bg-black/40 px-6 py-4"
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-4 min-w-0 flex-1">
-                        <div className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1.5 ${stateColor(displayState)}`} />
+                        <div className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1.5 ${stateColor(displayState)}`} aria-hidden="true" />
                         <div className="min-w-0 flex-1">
                           <div className="font-mono text-sm text-white/80 truncate">
                             {sb.skillPath}
