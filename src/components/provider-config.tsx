@@ -17,12 +17,17 @@ export function ProviderTabs({
         <button
           key={p.id}
           onClick={() => onChange(p.id)}
-          className={`px-3 py-2 text-xs font-medium transition-all ${
+          className={`px-3 py-2 text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
             activeId === p.id
               ? "bg-white text-black"
               : "bg-white/5 text-white/60 hover:bg-white/10"
           }`}
         >
+          <img
+            src={p.iconUrl}
+            alt=""
+            className={`w-3.5 h-3.5 object-contain ${activeId === p.id ? "" : "opacity-60"}`}
+          />
           {p.name}
         </button>
       ))}
@@ -190,6 +195,11 @@ export function ProviderSection({
               <div className="w-1.5 h-1.5 rounded-full bg-black" />
             )}
           </button>
+          <img
+            src={provider.iconUrl}
+            alt=""
+            className={`w-4 h-4 object-contain ${isActive ? "" : "opacity-50"}`}
+          />
           <span className={`text-sm font-medium ${isActive ? "text-white" : "text-white/60"}`}>
             {provider.name}
           </span>
