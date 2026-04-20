@@ -133,12 +133,19 @@ export const claimWarm = mutation({
       )
       .collect();
 
-    // Match warm OR active, skip placeholders and records without poolState
-    const reusable = sandboxes.find(
-      (s) =>
-        !s.sandboxId.startsWith("pending-") &&
-        (s.poolState === "warm" || s.poolState === "active"),
-    );
+    const now = Date.now();
+    const STALE_MS = 2 * 60 * 1000; // 2 min without heartbeat = stale session
+
+    const reusable = sandboxes.find((s) => {
+      if (s.sandboxId.startsWith("pending-")) return false;
+      if (s.poolState === "warm" || s.poolState === "stopped") return true;
+      // Only claim active if the session is stale (no heartbeat = user left)
+      if (s.poolState === "active") {
+        const lastBeat = s.lastHeartbeat ?? s.createdAt;
+        return now - lastBeat > STALE_MS;
+      }
+      return false;
+    });
     if (!reusable) return null;
 
     await ctx.db.patch("sandboxes", reusable._id, { poolState: "swapping" });
@@ -262,6 +269,24 @@ export const internalRemove = internalMutation({
 
     if (sandbox) {
       await ctx.db.delete("sandboxes", sandbox._id);
+    }
+    return null;
+  },
+});
+
+export const internalMarkStopped = internalMutation({
+  args: {
+    sandboxId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const sandbox = await ctx.db
+      .query("sandboxes")
+      .withIndex("by_sandbox", (q) => q.eq("sandboxId", args.sandboxId))
+      .unique();
+
+    if (sandbox) {
+      await ctx.db.patch("sandboxes", sandbox._id, { poolState: "stopped" });
     }
     return null;
   },

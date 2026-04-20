@@ -99,10 +99,21 @@ export default function SkillPage({
         state: "creating",
       }).catch(() => {});
 
-      if (abort.signal.aborted) return;
+      if (abort.signal.aborted) {
+        // Restore sandbox state if user cancelled after claiming
+        if (claimed) {
+          await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "warm" }).catch(() => {});
+        }
+        return;
+      }
 
       const skillFiles = await fetchSkillDirectory(resolved);
-      if (abort.signal.aborted) return;
+      if (abort.signal.aborted) {
+        if (claimed) {
+          await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "warm" }).catch(() => {});
+        }
+        return;
+      }
 
       if (claimed && !abort.signal.aborted) {
 
@@ -123,7 +134,10 @@ export default function SkillPage({
             },
           );
 
-          if (abort.signal.aborted) return;
+          if (abort.signal.aborted) {
+            await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "warm" }).catch(() => {});
+            return;
+          }
 
           setSession(result);
           sessionRef.current = result;
@@ -146,9 +160,10 @@ export default function SkillPage({
           return;
         } catch (swapErr) {
           console.error("[hot-swap] Failed, falling back to cold create:", swapErr);
+          // Restore to warm so it can be retried, not permanently stranded
           await updatePoolState({
             sandboxId: claimed.sandboxId,
-            poolState: "stopped",
+            poolState: "warm",
           }).catch(() => {});
         }
       }
