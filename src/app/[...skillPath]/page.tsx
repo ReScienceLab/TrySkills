@@ -93,9 +93,12 @@ export default function SkillPage({
       const urlFresh = claimed.webuiUrlCreatedAt
         ? Date.now() - claimed.webuiUrlCreatedAt < 50 * 60 * 1000 // 50min buffer before 1h TTL
         : false;
+      const heartbeatRecent = claimed.lastHeartbeat
+        ? Date.now() - claimed.lastHeartbeat < 30 * 60 * 1000 // must match Daytona auto-stop
+        : false;
 
-      // INSTANT PATH: skill already installed + same config + sandbox active + URL not expired
-      if (skillInstalled && sameConfig && !isStopped && urlFresh) {
+      // INSTANT PATH: skill installed + same config + active + URL fresh + heartbeat recent
+      if (skillInstalled && sameConfig && !isStopped && urlFresh && heartbeatRecent) {
         setSession({
           sandboxId: claimed.sandboxId,
           webuiUrl: claimed.webuiUrl,
