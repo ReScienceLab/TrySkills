@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useConvexAuth } from "convex/react";
 import { useAuth, useUser } from "@clerk/nextjs";
 import { useMutation, useQuery } from "convex/react";
@@ -18,15 +18,22 @@ function lsKey(userId: string): string {
   return `tryskills-config-${userId}`;
 }
 
-const CONVEX_SYNC_TIMEOUT_MS = 10_000;
+function readLocalCache(userId: string): StoredConfig | null {
+  try {
+    const raw = localStorage.getItem(lsKey(userId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredConfig;
+    if (parsed.llmKey && parsed.sandboxKey) return parsed;
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 export function useKeyStore() {
   const { isAuthenticated } = useConvexAuth();
   const { isSignedIn, isLoaded: authLoaded } = useAuth();
   const { user } = useUser();
-  const [config, setConfig] = useState<StoredConfig | null>(null);
-  const [loading, setLoading] = useState(true);
-  const loadedRef = useRef(false);
 
   const saveToConvex = useMutation(api.apiKeys.save);
   const removeFromConvex = useMutation(api.apiKeys.remove);
@@ -35,68 +42,87 @@ export function useKeyStore() {
     isAuthenticated ? {} : "skip",
   );
 
+  const [decryptedConfig, setDecryptedConfig] = useState<StoredConfig | null>(null);
+  const [decryptedForId, setDecryptedForId] = useState<string | null>(null);
+  const [localOverride, setLocalOverride] = useState<StoredConfig | null>(null);
+  const [hasUserSaved, setHasUserSaved] = useState(false);
+
+  const inflightRef = useRef<string | null>(null);
+
+  const storedKeysId = storedKeys
+    ? `${storedKeys.encryptedData}:${storedKeys.iv}`
+    : storedKeys === null
+      ? "empty"
+      : null;
+
   useEffect(() => {
-    if (loadedRef.current) return;
-    if (!authLoaded) return;
+    if (!isAuthenticated || !user || storedKeys === undefined || !storedKeys) return;
 
-    if (!isSignedIn) {
-      loadedRef.current = true;
-      setLoading(false);
-      return;
+    const id = `${storedKeys.encryptedData}:${storedKeys.iv}`;
+    if (inflightRef.current === id || decryptedForId === id) return;
+    inflightRef.current = id;
+
+    const data = storedKeys;
+    const userId = user.id;
+    let cancelled = false;
+
+    deriveKey(userId)
+      .then((key) => decrypt(data.encryptedData, data.iv, key))
+      .then((plaintext) => {
+        if (cancelled) return;
+        const parsed = JSON.parse(plaintext) as StoredConfig;
+        localStorage.setItem(lsKey(userId), JSON.stringify(parsed));
+        setDecryptedConfig(parsed);
+        setDecryptedForId(id);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDecryptedConfig(null);
+        setDecryptedForId(id);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, user, storedKeysId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const isDecrypting = useMemo(() => {
+    if (!storedKeysId || storedKeysId === "empty") return false;
+    return storedKeysId !== decryptedForId;
+  }, [storedKeysId, decryptedForId]);
+
+  const config: StoredConfig | null = useMemo(() => {
+    if (hasUserSaved && localOverride) return localOverride;
+
+    if (isAuthenticated && storedKeys !== undefined) {
+      if (storedKeys === null) return null;
+      if (!isDecrypting) return decryptedConfig;
+      return null;
     }
 
-    // Convex synced + query resolved -> authoritative source
-    if (isAuthenticated && user && storedKeys !== undefined) {
-      loadedRef.current = true;
-      if (storedKeys) {
-        deriveKey(user.id)
-          .then((key) => decrypt(storedKeys.encryptedData, storedKeys.iv, key))
-          .then((plaintext) => {
-            const parsed = JSON.parse(plaintext) as StoredConfig;
-            setConfig(parsed);
-            localStorage.setItem(lsKey(user.id), JSON.stringify(parsed));
-          })
-          .catch(() => {})
-          .finally(() => setLoading(false));
-      } else {
-        setLoading(false);
-      }
-      return;
+    if (isSignedIn && user) {
+      return readLocalCache(user.id);
     }
 
-    // Convex not synced yet -- use per-user cache while waiting
-    if (isSignedIn && user && !isAuthenticated) {
-      try {
-        const raw = localStorage.getItem(lsKey(user.id));
-        if (raw) {
-          const parsed = JSON.parse(raw) as StoredConfig;
-          if (parsed.llmKey && parsed.sandboxKey) {
-            setConfig(parsed);
-            loadedRef.current = true;
-            setLoading(false);
-            return;
-          }
-        }
-      } catch {}
-    }
-  }, [authLoaded, isSignedIn, isAuthenticated, user, storedKeys]);
+    return null;
+  }, [hasUserSaved, localOverride, isAuthenticated, storedKeys, isDecrypting, decryptedConfig, isSignedIn, user]);
 
-  // Timeout fallback: stop loading if Convex never syncs but Clerk user is ready
-  useEffect(() => {
-    if (!authLoaded || !isSignedIn || !user || loadedRef.current) return;
-    const timer = setTimeout(() => {
-      if (!loadedRef.current) {
-        loadedRef.current = true;
-        setLoading(false);
-        // config stays null -> onboarding will show, and save() will work because user exists
-      }
-    }, CONVEX_SYNC_TIMEOUT_MS);
-    return () => clearTimeout(timer);
-  }, [authLoaded, isSignedIn, user]);
+  const loading: boolean = useMemo(() => {
+    if (!authLoaded) return true;
+    if (!isSignedIn) return false;
+    if (hasUserSaved) return false;
+
+    if (isAuthenticated) {
+      return storedKeys === undefined || isDecrypting;
+    }
+
+    return false;
+  }, [authLoaded, isSignedIn, hasUserSaved, isAuthenticated, storedKeys, isDecrypting]);
 
   const save = useCallback(
     async (newConfig: StoredConfig) => {
-      setConfig(newConfig);
+      setLocalOverride(newConfig);
+      setHasUserSaved(true);
       if (user) {
         localStorage.setItem(lsKey(user.id), JSON.stringify(newConfig));
       }
@@ -110,7 +136,11 @@ export function useKeyStore() {
   );
 
   const clear = useCallback(async () => {
-    setConfig(null);
+    setLocalOverride(null);
+    setHasUserSaved(false);
+    setDecryptedConfig(null);
+    setDecryptedForId(null);
+    inflightRef.current = null;
     if (user) {
       localStorage.removeItem(lsKey(user.id));
     }

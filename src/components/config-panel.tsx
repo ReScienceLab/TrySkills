@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { PROVIDERS, type Provider } from "@/lib/providers/registry";
 import { useKeyStore } from "@/hooks/use-key-store";
 
@@ -20,22 +20,69 @@ export function ConfigPanel({
 }) {
   const { config: savedConfig, loading, save } = useKeyStore();
 
-  const [provider, setProvider] = useState<Provider>(PROVIDERS[0]);
-  const [model, setModel] = useState(PROVIDERS[0].models[0]);
-  const [llmKey, setLlmKey] = useState("");
-  const [sandboxKey, setSandboxKey] = useState("");
+  const configKey = useMemo(
+    () =>
+      savedConfig
+        ? `${savedConfig.providerId}:${savedConfig.model}:${savedConfig.llmKey}:${savedConfig.sandboxKey}`
+        : "empty",
+    [savedConfig],
+  );
+
+  const initialProvider = useMemo(() => {
+    if (!savedConfig) return PROVIDERS[0];
+    return PROVIDERS.find((p) => p.id === savedConfig.providerId) || PROVIDERS[0];
+  }, [savedConfig]);
+
+  const initialModel = useMemo(
+    () => (savedConfig?.model ? savedConfig.model : initialProvider.models[0]),
+    [savedConfig, initialProvider],
+  );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <ConfigPanelForm
+      key={configKey}
+      initialProvider={initialProvider}
+      initialModel={initialModel}
+      initialLlmKey={savedConfig?.llmKey ?? ""}
+      initialSandboxKey={savedConfig?.sandboxKey ?? ""}
+      save={save}
+      onLaunch={onLaunch}
+      onBack={onBack}
+    />
+  );
+}
+
+function ConfigPanelForm({
+  initialProvider,
+  initialModel,
+  initialLlmKey,
+  initialSandboxKey,
+  save,
+  onLaunch,
+  onBack,
+}: {
+  initialProvider: Provider;
+  initialModel: string;
+  initialLlmKey: string;
+  initialSandboxKey: string;
+  save: (config: import("@/hooks/use-key-store").StoredConfig) => Promise<void>;
+  onLaunch: (config: LaunchConfig) => void;
+  onBack: () => void;
+}) {
+  const [provider, setProvider] = useState<Provider>(initialProvider);
+  const [model, setModel] = useState(initialModel);
+  const [llmKey, setLlmKey] = useState(initialLlmKey);
+  const [sandboxKey, setSandboxKey] = useState(initialSandboxKey);
   const [showLlmKey, setShowLlmKey] = useState(false);
   const [showSandboxKey, setShowSandboxKey] = useState(false);
-
-  // Hydrate from saved config
-  useEffect(() => {
-    if (!savedConfig) return;
-    const p = PROVIDERS.find((p) => p.id === savedConfig.providerId) || PROVIDERS[0];
-    setProvider(p);
-    setModel(savedConfig.model || p.models[0]);
-    setLlmKey(savedConfig.llmKey || "");
-    setSandboxKey(savedConfig.sandboxKey || "");
-  }, [savedConfig]);
 
   const handleProviderChange = (id: string) => {
     const p = PROVIDERS.find((p) => p.id === id);
@@ -56,14 +103,6 @@ export function ConfigPanel({
   };
 
   const isReady = llmKey.length > 5 && sandboxKey.length > 5;
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <div className="animate-fade-in">
