@@ -103,7 +103,15 @@ export function useKeyStore() {
     if (hasUserSaved && localOverride) return localOverride;
 
     if (isAuthenticated && storedKeys !== undefined) {
-      if (storedKeys === null) return null;
+      if (storedKeys === null) {
+        // Convex has no keys — but check local cache first (user may have
+        // saved during the pre-auth timeout window)
+        if (isSignedIn && user) {
+          const cached = readLocalCache(user.id);
+          if (cached) return cached;
+        }
+        return null;
+      }
       if (!isDecrypting) return decryptedConfig;
       return null;
     }
@@ -148,6 +156,17 @@ export function useKeyStore() {
     },
     [isAuthenticated, user, saveToConvex],
   );
+
+  // Replay locally saved keys to Convex once auth becomes available
+  useEffect(() => {
+    if (!isAuthenticated || !user || !hasUserSaved || !localOverride) return;
+    // Check if Convex already has keys — if so, skip replay
+    if (storedKeys !== undefined && storedKeys !== null) return;
+    deriveKey(user.id)
+      .then((key) => encrypt(JSON.stringify(localOverride), key))
+      .then(({ ciphertext, iv }) => saveToConvex({ encryptedData: ciphertext, iv }))
+      .catch(() => {});
+  }, [isAuthenticated, user, hasUserSaved, localOverride, storedKeys, saveToConvex]);
 
   const clear = useCallback(async () => {
     setLocalOverride(null);
