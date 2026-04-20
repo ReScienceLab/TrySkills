@@ -244,8 +244,7 @@ export default function SkillPage({
       setPhase("running");
       placeholderIdRef.current = null;
 
-      await removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
-
+      // Insert real record BEFORE deleting placeholder to avoid null window
       await createSandboxRecord({
         sandboxId: result.sandboxId,
         skillPath: skillPathStr,
@@ -261,6 +260,8 @@ export default function SkillPage({
         disk: result.disk,
         region: result.region,
       }).catch(() => {});
+
+      await removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
       recordTrial({ sandboxId: result.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
     } catch (err) {
       if (abort.signal.aborted) return;

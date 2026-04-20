@@ -143,7 +143,7 @@ export const getSandbox = query({
 
     const sandbox = sandboxes.find((s) => !s.sandboxId.startsWith("pending-"));
     if (!sandbox) {
-      const STALE_PENDING_MS = 2 * 60 * 1000; // 2 min
+      const STALE_PENDING_MS = 5 * 60 * 1000; // 5 min (covers slow/fallback cold creates)
       const now = Date.now();
       const pending = sandboxes.find(
         (s) => s.sandboxId.startsWith("pending-") && now - s.createdAt < STALE_PENDING_MS,
@@ -184,7 +184,7 @@ export const acquireCreateLock = mutation({
       return { status: "exists" as const, sandboxId: real.sandboxId };
     }
 
-    const STALE_PENDING_MS = 2 * 60 * 1000;
+    const STALE_PENDING_MS = 5 * 60 * 1000;
     const now = Date.now();
 
     // Clean up stale pending records from crashed tabs
