@@ -142,15 +142,32 @@ function ConfigPanelForm({
 
           <div>
             <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">Model</label>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="w-full px-4 py-2.5 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors appearance-none cursor-pointer"
-            >
-              {provider.models.map((m) => (
-                <option key={m} value={m} className="bg-[#111] text-white">{m}</option>
-              ))}
-            </select>
+            {provider.allowCustomModel ? (
+              <>
+                <input
+                  list={`models-${provider.id}`}
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  placeholder="e.g. anthropic/claude-sonnet-4.6"
+                  className="w-full px-4 py-2.5 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors placeholder:text-white/20"
+                />
+                <datalist id={`models-${provider.id}`}>
+                  {provider.models.map((m) => (
+                    <option key={m} value={m} />
+                  ))}
+                </datalist>
+              </>
+            ) : (
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="w-full px-4 py-2.5 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors appearance-none cursor-pointer"
+              >
+                {provider.models.map((m) => (
+                  <option key={m} value={m} className="bg-[#111] text-white">{m}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div>

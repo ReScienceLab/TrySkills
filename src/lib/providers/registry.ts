@@ -5,6 +5,7 @@ export interface Provider {
   keyUrl: string;
   models: string[];
   envVar: string;
+  allowCustomModel?: boolean;
 }
 
 export const PROVIDERS: Provider[] = [
@@ -14,12 +15,14 @@ export const PROVIDERS: Provider[] = [
     keyPrefix: "sk-or-",
     keyUrl: "https://openrouter.ai/keys",
     envVar: "OPENROUTER_API_KEY",
+    allowCustomModel: true,
     models: [
-      "anthropic/claude-sonnet-4",
-      "anthropic/claude-haiku-4",
-      "openai/gpt-4o",
-      "google/gemini-2.0-flash",
-      "meta-llama/llama-3.3-70b",
+      "anthropic/claude-sonnet-4.6",
+      "anthropic/claude-opus-4.7",
+      "anthropic/claude-haiku-4.5",
+      "openai/gpt-5.4",
+      "openai/gpt-5.4-mini",
+      "google/gemini-2.5-flash",
     ],
   },
   {
@@ -28,7 +31,7 @@ export const PROVIDERS: Provider[] = [
     keyPrefix: "sk-ant-",
     keyUrl: "https://console.anthropic.com/settings/keys",
     envVar: "ANTHROPIC_API_KEY",
-    models: ["claude-sonnet-4-20250514", "claude-haiku-4-20250414"],
+    models: ["claude-sonnet-4-6", "claude-opus-4-7", "claude-haiku-4-5"],
   },
   {
     id: "openai",
@@ -36,7 +39,7 @@ export const PROVIDERS: Provider[] = [
     keyPrefix: "sk-",
     keyUrl: "https://platform.openai.com/api-keys",
     envVar: "OPENAI_API_KEY",
-    models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
+    models: ["gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"],
   },
   {
     id: "google",
@@ -44,7 +47,7 @@ export const PROVIDERS: Provider[] = [
     keyPrefix: "AI",
     keyUrl: "https://aistudio.google.com/apikey",
     envVar: "GOOGLE_API_KEY",
-    models: ["gemini-2.0-flash", "gemini-2.0-pro", "gemini-1.5-flash"],
+    models: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"],
   },
 ];
 
