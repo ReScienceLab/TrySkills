@@ -4,16 +4,22 @@ import { useState, useEffect, useMemo, useRef, use } from "react";
 import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
+
+async function computeConfigHash(provider: string, model: string, key: string): Promise<string> {
+  const data = new TextEncoder().encode(`${provider}:${model}:${key}`);
+  const buf = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 16);
+}
 import { useMutation, useQuery } from "convex/react";
 import { useConvexAuth } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { ConfigPanel, type LaunchConfig } from "@/components/config-panel";
 import { LaunchProgress, type LaunchMode } from "@/components/launch-progress";
-import { SessionControl } from "@/components/session-control";
+import { ChatPanel } from "@/components/chat/chat-panel";
 import { GlowMesh } from "@/components/glow-mesh";
 import { SiteHeader } from "@/components/site-header";
 import { resolveSkillPath, fetchSkillDirectory } from "@/lib/skill/resolver";
-import { createHermesSandbox, destroySandbox, hotSwapSkill } from "@/lib/sandbox/daytona";
+import { createHermesSandbox, destroySandbox, installSkill } from "@/lib/sandbox/daytona";
 import { useKeyStore } from "@/hooks/use-key-store";
 import { useHeartbeat } from "@/hooks/use-heartbeat";
 import { getProvider } from "@/lib/providers/registry";
@@ -37,9 +43,9 @@ export default function SkillPage({
   const createSandboxRecord = useMutation(api.sandboxes.create);
   const removeSandboxRecord = useMutation(api.sandboxes.remove);
   const updateSandboxState = useMutation(api.sandboxes.updateState);
-  const claimWarm = useMutation(api.sandboxes.claimWarm);
-  const markWarmMut = useMutation(api.sandboxes.markWarm);
+  const claimSandbox = useMutation(api.sandboxes.claimSandbox);
   const updatePoolState = useMutation(api.sandboxes.updatePoolState);
+  const recordTrial = useMutation(api.skillTrials.record);
   const reusableSandbox = useQuery(
     api.sandboxes.findReusable,
     isAuthenticated ? {} : "skip",
@@ -74,20 +80,126 @@ export default function SkillPage({
     setPhase("launching");
     setSandboxError(undefined);
 
-    // Check for reusable sandbox before showing any UI
-    const claimed = await claimWarm({}).catch(() => null);
+    const skillPathStr = `${owner}/${repo}/${skillName}`;
+    const configHash = await computeConfigHash(config.provider.id, config.model, config.llmKey);
+
+    // Check for existing sandbox
+    const claimed = await claimSandbox({}).catch(() => null);
 
     if (claimed && !abort.signal.aborted) {
-      const isStopped = reusableSandbox?.poolState === "stopped";
+      const isStopped = claimed.poolState === "stopped";
+      const skillInstalled = claimed.installedSkills?.includes(skillPathStr) ?? false;
+      const sameConfig = claimed.configHash === configHash;
+      const urlFresh = claimed.webuiUrlCreatedAt
+        ? Date.now() - claimed.webuiUrlCreatedAt < 50 * 60 * 1000 // 50min buffer before 1h TTL
+        : false;
+      const heartbeatRecent = claimed.lastHeartbeat
+        ? Date.now() - claimed.lastHeartbeat < 30 * 60 * 1000 // must match Daytona auto-stop
+        : false;
+
+      // INSTANT PATH: skill installed + same config + active + URL fresh + heartbeat recent
+      if (skillInstalled && sameConfig && !isStopped && urlFresh && heartbeatRecent) {
+        setSession({
+          sandboxId: claimed.sandboxId,
+          webuiUrl: claimed.webuiUrl,
+          webuiBaseUrl: claimed.webuiUrl,
+          state: "running",
+          startedAt: Date.now(),
+        });
+        sessionRef.current = {
+          sandboxId: claimed.sandboxId,
+          webuiUrl: claimed.webuiUrl,
+          webuiBaseUrl: claimed.webuiUrl,
+          state: "running",
+          startedAt: Date.now(),
+        };
+        setSandboxState("running");
+        setPhase("running");
+        await updatePoolState({
+          sandboxId: claimed.sandboxId,
+          poolState: "active",
+          currentSkillPath: skillPathStr,
+          configHash,
+        }).catch(() => {});
+        recordTrial({ sandboxId: claimed.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
+        return;
+      }
+
+      // INSTALL PATH: different skill or stopped sandbox
       setLaunchMode("hotswap");
       setNeedsWake(isStopped);
-      setSandboxState(isStopped ? "starting" : "swapping");
-    } else {
-      setLaunchMode("snapshot");
-      setSandboxState("creating");
+      setSandboxState(isStopped ? "starting" : "uploading");
+
+      let skillFiles;
+      try {
+        skillFiles = await fetchSkillDirectory(resolved);
+      } catch (fetchErr) {
+        console.error("[install] Failed to fetch skill files:", fetchErr);
+        await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "active" }).catch(() => {});
+        // Fall through to cold create which will retry the fetch
+        skillFiles = null;
+      }
+
+      if (abort.signal.aborted) {
+        await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "active" }).catch(() => {});
+        return;
+      }
+
+      if (skillFiles) {
+        try {
+          const result = await installSkill(
+            {
+              daytonaApiKey: config.sandboxKey,
+              llmProvider: config.provider.id,
+              llmApiKey: config.llmKey,
+              llmModel: config.model,
+            },
+            claimed.sandboxId,
+            skillPathStr,
+            skillFiles,
+            (step) => {
+              if (abort.signal.aborted) return;
+              setSandboxState(step as SandboxState);
+            },
+          );
+
+          if (abort.signal.aborted) {
+            await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "active" }).catch(() => {});
+            return;
+          }
+
+          setSession(result);
+          sessionRef.current = result;
+          setSandboxState("running");
+          setPhase("running");
+
+          await updatePoolState({
+            sandboxId: claimed.sandboxId,
+            poolState: "active",
+            currentSkillPath: skillPathStr,
+            webuiUrl: result.webuiUrl,
+            configHash,
+            installedSkills: [...new Set([...(claimed.installedSkills ?? []), skillPathStr])],
+            webuiUrlCreatedAt: Date.now(),
+          }).catch(() => {});
+          recordTrial({ sandboxId: claimed.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
+
+          return;
+        } catch (err) {
+          console.error("[install] installSkill failed, destroying sandbox:", err);
+          destroySandbox(config.sandboxKey, claimed.sandboxId).catch(() => {});
+          removeSandboxRecord({ sandboxId: claimed.sandboxId }).catch(() => {});
+        }
+      }
     }
 
-    const skillPathStr = `${owner}/${repo}/${skillName}`;
+    if (abort.signal.aborted) return;
+
+    // COLD CREATE PATH: no existing sandbox
+    setLaunchMode("snapshot");
+    setNeedsWake(false);
+    setSandboxState("creating");
+
     const placeholderId = `pending-${Date.now()}`;
     placeholderIdRef.current = placeholderId;
 
@@ -99,81 +211,11 @@ export default function SkillPage({
         state: "creating",
       }).catch(() => {});
 
-      if (abort.signal.aborted) {
-        // Restore sandbox state if user cancelled after claiming
-        if (claimed) {
-          await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "warm" }).catch(() => {});
-        }
-        return;
-      }
-
       const skillFiles = await fetchSkillDirectory(resolved);
       if (abort.signal.aborted) {
-        if (claimed) {
-          await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "warm" }).catch(() => {});
-        }
+        removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
         return;
       }
-
-      if (claimed && !abort.signal.aborted) {
-
-        try {
-          const result = await hotSwapSkill(
-            {
-              daytonaApiKey: config.sandboxKey,
-              llmProvider: config.provider.id,
-              llmApiKey: config.llmKey,
-              llmModel: config.model,
-            },
-            claimed.sandboxId,
-            skillName,
-            skillFiles,
-            (step) => {
-              if (abort.signal.aborted) return;
-              setSandboxState(step as SandboxState);
-            },
-          );
-
-          if (abort.signal.aborted) {
-            await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "warm" }).catch(() => {});
-            return;
-          }
-
-          setSession(result);
-          sessionRef.current = result;
-          setSandboxState("running");
-          setPhase("running");
-          placeholderIdRef.current = null;
-
-          await removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
-          await updatePoolState({
-            sandboxId: claimed.sandboxId,
-            poolState: "active",
-            currentSkillPath: skillPathStr,
-          }).catch(() => {});
-          await updateSandboxState({
-            sandboxId: claimed.sandboxId,
-            state: "running",
-          }).catch(() => {});
-
-          window.open(result.webuiUrl, "_blank", "noopener,noreferrer");
-          return;
-        } catch (swapErr) {
-          console.error("[hot-swap] Failed, falling back to cold create:", swapErr);
-          // Restore to warm so it can be retried, not permanently stranded
-          await updatePoolState({
-            sandboxId: claimed.sandboxId,
-            poolState: "warm",
-          }).catch(() => {});
-        }
-      }
-
-      if (abort.signal.aborted) return;
-
-      // Cold create path
-      setLaunchMode("snapshot");
-      setNeedsWake(false);
-      setSandboxState("creating");
 
       const result = await createHermesSandbox(
         {
@@ -182,7 +224,7 @@ export default function SkillPage({
           llmApiKey: config.llmKey,
           llmModel: config.model,
         },
-        skillName,
+        skillPathStr,
         skillFiles,
         (step, meta) => {
           if (abort.signal.aborted) return;
@@ -213,22 +255,21 @@ export default function SkillPage({
         webuiUrl: result.webuiUrl,
         state: "running",
         poolState: "active",
+        currentSkillPath: skillPathStr,
+        configHash,
+        installedSkills: [skillPathStr],
+        webuiUrlCreatedAt: Date.now(),
         cpu: result.cpu,
         memory: result.memory,
         disk: result.disk,
         region: result.region,
       }).catch(() => {});
-
-      window.open(result.webuiUrl, "_blank", "noopener,noreferrer");
+      recordTrial({ sandboxId: result.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
     } catch (err) {
       if (abort.signal.aborted) return;
       setSandboxState("error");
       setSandboxError(err instanceof Error ? err.message : "Launch failed");
       await removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
-      // Restore claimed sandbox if it was stranded in swapping
-      if (claimed) {
-        await updatePoolState({ sandboxId: claimed.sandboxId, poolState: "warm" }).catch(() => {});
-      }
       placeholderIdRef.current = null;
     }
   };
@@ -275,9 +316,9 @@ export default function SkillPage({
     const cleanup = () => {
       launchAbortRef.current?.abort();
       autoLaunchLock.delete(skillKey);
-      // Mark sandbox as warm instead of destroying it
+      // Sandbox stays active for instant reuse
       if (sessionRef.current) {
-        markWarmMut({ sandboxId: sessionRef.current.sandboxId }).catch(() => {});
+        // no-op: sandbox remains active
       }
     };
     window.addEventListener("beforeunload", cleanup);
@@ -285,9 +326,9 @@ export default function SkillPage({
       window.removeEventListener("beforeunload", cleanup);
       launchAbortRef.current?.abort();
       autoLaunchLock.delete(skillKey);
-      // Also mark warm on SPA navigation (React cleanup)
+      // Also cleanup on SPA navigation (React cleanup)
       if (sessionRef.current) {
-        markWarmMut({ sandboxId: sessionRef.current.sandboxId }).catch(() => {});
+        // no-op: sandbox remains active
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -311,10 +352,7 @@ export default function SkillPage({
   };
 
   const handleTryAnother = () => {
-    // Mark current sandbox as warm and navigate to homepage
-    if (session) {
-      markWarmMut({ sandboxId: session.sandboxId }).catch(() => {});
-    }
+    // Sandbox stays active for reuse on next skill page
     setSession(null);
     sessionRef.current = null;
     setSandboxState("idle");
@@ -415,8 +453,11 @@ export default function SkillPage({
           )}
 
           {phase === "running" && session && (
-            <SessionControl
-              webuiUrl={session.webuiBaseUrl || session.webuiUrl}
+            <ChatPanel
+              webuiBaseUrl={session.webuiBaseUrl || session.webuiUrl}
+              webuiUrl={session.webuiUrl}
+              model={savedConfig?.model || "anthropic/claude-sonnet-4"}
+              skillName={skillName}
               startedAt={session.startedAt}
               onStop={handleStop}
               onTryAnother={handleTryAnother}

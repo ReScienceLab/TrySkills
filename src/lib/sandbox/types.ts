@@ -5,13 +5,11 @@ export type SandboxState =
   | "installing"
   | "uploading"
   | "starting"
-  | "swapping"
-  | "restarting"
   | "running"
   | "error"
   | "cleaning";
 
-export type PoolState = "warm" | "active" | "swapping" | "stopped";
+export type PoolState = "active" | "installing" | "stopped";
 
 export interface SandboxConfig {
   daytonaApiKey: string;

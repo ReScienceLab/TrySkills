@@ -8,6 +8,7 @@ const HEALTH_TIMEOUT_MS = 120_000;
 const HEALTH_POLL_INTERVAL_MS = 2_000;
 const GATEWAY_PORT = 8642;
 const WEBUI_PORT = 8787;
+const SIGNED_URL_TTL_SECONDS = 3600; // 1 hour signed preview URL
 
 export interface SkillFile {
   path: string;
@@ -67,29 +68,7 @@ function buildWebuiEnv(agentDir: string): string {
   ].join("\n");
 }
 
-const PREFILL_SCRIPT = `
-(function(){
-  var p=new URLSearchParams(location.search).get('prompt');
-  if(!p)return;
-  var poll=setInterval(function(){
-    var ta=document.getElementById('msg');
-    if(!ta)return;
-    clearInterval(poll);
-    ta.value=p;
-    ta.dispatchEvent(new Event('input',{bubbles:true}));
-  },200);
-  setTimeout(function(){clearInterval(poll)},10000);
-})();
-`.trim();
-
-function buildWebuiUrl(baseUrl: string, skillName: string): { webuiUrl: string; webuiBaseUrl: string } {
-  const prompt = encodeURIComponent(`I want to try the ${skillName} skill`);
-  const separator = baseUrl.includes("?") ? "&" : "?";
-  return {
-    webuiUrl: `${baseUrl}${separator}prompt=${prompt}`,
-    webuiBaseUrl: baseUrl,
-  };
-}
+const BASE_ALLOWED_ORIGINS = "https://tryskills.sh,https://www.tryskills.sh";
 
 /**
  * Create a sandbox from the pre-baked "hermes-ready" snapshot.
@@ -97,12 +76,17 @@ function buildWebuiUrl(baseUrl: string, skillName: string): { webuiUrl: string; 
  *
  * Fallback: if snapshot is unavailable, falls back to cold-start install.
  */
+function sanitizeSkillDir(skillName: string): string {
+  return skillName.replace(/\//g, "--");
+}
+
 export async function createHermesSandbox(
   config: SandboxConfig,
   skillName: string,
   skillFiles: SkillFile[],
   onProgress: (step: SandboxState, meta?: { usedSnapshot?: boolean }) => void,
   userId?: string,
+  callerOrigin?: string,
 ): Promise<SandboxSession & { usedSnapshot: boolean }> {
   const { Daytona } = await getDaytonaSDK();
 
@@ -135,6 +119,9 @@ export async function createHermesSandbox(
           API_SERVER_ENABLED: "true",
           API_SERVER_CORS_ORIGINS: "*",
           GATEWAY_ALLOW_ALL_USERS: "true",
+          HERMES_WEBUI_ALLOWED_ORIGINS: callerOrigin
+            ? `${BASE_ALLOWED_ORIGINS},${callerOrigin}`
+            : BASE_ALLOWED_ORIGINS,
         },
       },
       { timeout: 120 },
@@ -157,6 +144,9 @@ export async function createHermesSandbox(
           API_SERVER_ENABLED: "true",
           API_SERVER_CORS_ORIGINS: "*",
           GATEWAY_ALLOW_ALL_USERS: "true",
+          HERMES_WEBUI_ALLOWED_ORIGINS: callerOrigin
+            ? `${BASE_ALLOWED_ORIGINS},${callerOrigin}`
+            : BASE_ALLOWED_ORIGINS,
         },
       } as unknown as Parameters<typeof daytona.create>[0],
       { timeout: 300 },
@@ -198,14 +188,9 @@ export async function createHermesSandbox(
     `cat > ${webuiDir}/.env << 'WEOF'\n${buildWebuiEnv(agentDir)}\nWEOF`,
   ).catch(() => {});
 
-  // Inject prompt prefill script into WebUI
-  await sandbox.process.executeCommand(
-    `cat >> ${webuiDir}/static/boot.js << 'JSEOF'\n${PREFILL_SCRIPT}\nJSEOF`,
-  ).catch(() => {});
-
   onProgress("uploading");
   for (const file of skillFiles) {
-    const destPath = `/home/daytona/.hermes/skills/${skillName}/${file.path}`;
+    const destPath = `/home/daytona/.hermes/skills/${sanitizeSkillDir(skillName)}/${file.path}`;
     const dir = destPath.substring(0, destPath.lastIndexOf("/"));
     await sandbox.process.executeCommand(`mkdir -p "${dir}"`).catch(() => {});
     await sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
@@ -234,14 +219,14 @@ export async function createHermesSandbox(
 
   await waitForHealth(sandbox);
 
-  const preview = await sandbox.getPreviewLink(WEBUI_PORT);
-  const baseUrl = preview.url + (preview.token ? `?token=${preview.token}` : "");
-  const { webuiUrl, webuiBaseUrl } = buildWebuiUrl(baseUrl, skillName);
+  const signedPreview = await sandbox.getSignedPreviewUrl(WEBUI_PORT, SIGNED_URL_TTL_SECONDS);
+  console.log("[daytona] createHermesSandbox signedPreview URL:", signedPreview.url);
+  const webuiUrl = signedPreview.url;
 
   return {
     sandboxId: sandbox.id,
     webuiUrl,
-    webuiBaseUrl,
+    webuiBaseUrl: webuiUrl,
     state: "running",
     startedAt: Date.now(),
     cpu: sandbox.cpu,
@@ -253,11 +238,12 @@ export async function createHermesSandbox(
 }
 
 /**
- * Hot-swap skill files in an existing running sandbox.
- * Cleans old skills, uploads new ones, and rewrites config.
- * Skills are loaded per-session by Hermes, so no gateway restart is needed.
+ * Install a skill into an existing sandbox.
+ * Starts the sandbox if stopped, uploads skill files (additive, no cleanup),
+ * and returns a fresh signed preview URL.
+ * Skills accumulate on disk -- Hermes loads the requested skill per-session.
  */
-export async function hotSwapSkill(
+export async function installSkill(
   config: SandboxConfig,
   sandboxId: string,
   skillName: string,
@@ -285,36 +271,42 @@ export async function hotSwapSkill(
 
   const providerMapping = PROVIDER_ENV_MAP[config.llmProvider] || PROVIDER_ENV_MAP.openrouter;
 
-  onProgress("swapping");
+  onProgress("uploading");
 
-  await sandbox.process.executeCommand("rm -rf /home/daytona/.hermes/skills/*").catch(() => {});
+  // Write config and upload skill files in parallel (no cleanup of old skills)
+  const skillDirs = [...new Set(skillFiles.map((f) => {
+    const destPath = `/home/daytona/.hermes/skills/${sanitizeSkillDir(skillName)}/${f.path}`;
+    return destPath.substring(0, destPath.lastIndexOf("/"));
+  }))];
 
-  await sandbox.process.executeCommand(
-    `mkdir -p /home/daytona/.hermes && cat > /home/daytona/.hermes/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
-  ).catch(() => {});
-  await sandbox.process.executeCommand(
-    `cat > /home/daytona/.hermes/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider)}\nCFGEOF`,
-  ).catch(() => {});
+  await Promise.all([
+    sandbox.process.executeCommand(
+      `mkdir -p /home/daytona/.hermes && cat > /home/daytona/.hermes/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
+    ).catch(() => {}),
+    sandbox.process.executeCommand(
+      `cat > /home/daytona/.hermes/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider)}\nCFGEOF`,
+    ).catch(() => {}),
+    skillDirs.length > 0
+      ? sandbox.process.executeCommand(`mkdir -p ${skillDirs.map((d) => `"${d}"`).join(" ")}`).catch(() => {})
+      : Promise.resolve(),
+  ]);
 
-  for (const file of skillFiles) {
-    const destPath = `/home/daytona/.hermes/skills/${skillName}/${file.path}`;
-    const dir = destPath.substring(0, destPath.lastIndexOf("/"));
-    await sandbox.process.executeCommand(`mkdir -p "${dir}"`).catch(() => {});
-    await sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
-  }
+  await Promise.all(
+    skillFiles.map((file) => {
+      const destPath = `/home/daytona/.hermes/skills/${sanitizeSkillDir(skillName)}/${file.path}`;
+      return sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
+    }),
+  );
 
-  // No gateway restart needed -- Hermes loads skills per-session from disk.
-  // Just verify the gateway is still healthy.
   await waitForHealth(sandbox);
 
-  const preview = await sandbox.getPreviewLink(WEBUI_PORT);
-  const baseUrl = preview.url + (preview.token ? `?token=${preview.token}` : "");
-  const { webuiUrl, webuiBaseUrl } = buildWebuiUrl(baseUrl, skillName);
+  const signedPreview = await sandbox.getSignedPreviewUrl(WEBUI_PORT, SIGNED_URL_TTL_SECONDS);
+  const webuiUrl = signedPreview.url;
 
   return {
     sandboxId: sandbox.id,
     webuiUrl,
-    webuiBaseUrl,
+    webuiBaseUrl: webuiUrl,
     state: "running",
     startedAt: Date.now(),
     cpu: sandbox.cpu,

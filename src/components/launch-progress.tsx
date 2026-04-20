@@ -22,13 +22,13 @@ const FALLBACK_STEPS: { key: SandboxState; label: string; description: string }[
 ];
 
 const HOTSWAP_STEPS: { key: SandboxState; label: string; description: string }[] = [
-  { key: "swapping", label: "Swapping skill", description: "Uploading new skill files (~1s)" },
+  { key: "uploading", label: "Installing skill", description: "Uploading skill files (~1s)" },
   { key: "running", label: "Ready", description: "Your agent session is live" },
 ];
 
 const HOTSWAP_WAKE_STEPS: { key: SandboxState; label: string; description: string }[] = [
   { key: "starting", label: "Waking sandbox", description: "Resuming stopped sandbox (~5-10s)" },
-  { key: "swapping", label: "Swapping skill", description: "Uploading new skill files (~1s)" },
+  { key: "uploading", label: "Installing skill", description: "Uploading skill files (~1s)" },
   { key: "running", label: "Ready", description: "Your agent session is live" },
 ];
 

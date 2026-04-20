@@ -11,6 +11,7 @@
 import type * as apiKeys from "../apiKeys.js";
 import type * as crons from "../crons.js";
 import type * as sandboxes from "../sandboxes.js";
+import type * as skillTrials from "../skillTrials.js";
 import type * as userSnapshots from "../userSnapshots.js";
 
 import type {
@@ -23,6 +24,7 @@ declare const fullApi: ApiFromModules<{
   apiKeys: typeof apiKeys;
   crons: typeof crons;
   sandboxes: typeof sandboxes;
+  skillTrials: typeof skillTrials;
   userSnapshots: typeof userSnapshots;
 }>;
 

@@ -8,11 +8,14 @@ export const create = mutation({
     webuiUrl: v.string(),
     state: v.optional(v.string()),
     poolState: v.optional(v.union(
-      v.literal("warm"),
       v.literal("active"),
-      v.literal("swapping"),
+      v.literal("installing"),
       v.literal("stopped"),
     )),
+    currentSkillPath: v.optional(v.string()),
+    configHash: v.optional(v.string()),
+    installedSkills: v.optional(v.array(v.string())),
+    webuiUrlCreatedAt: v.optional(v.number()),
     cpu: v.optional(v.number()),
     memory: v.optional(v.number()),
     disk: v.optional(v.number()),
@@ -23,6 +26,20 @@ export const create = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
 
+    // Enforce single sandbox per user: remove old non-pending records
+    // only when inserting a real (non-placeholder) sandbox record
+    if (!args.sandboxId.startsWith("pending-")) {
+      const existing = await ctx.db
+        .query("sandboxes")
+        .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
+        .collect();
+      for (const old of existing) {
+        if (!old.sandboxId.startsWith("pending-") && old.sandboxId !== args.sandboxId) {
+          await ctx.db.delete("sandboxes", old._id);
+        }
+      }
+    }
+
     return await ctx.db.insert("sandboxes", {
       tokenIdentifier: identity.tokenIdentifier,
       sandboxId: args.sandboxId,
@@ -30,6 +47,10 @@ export const create = mutation({
       webuiUrl: args.webuiUrl,
       state: args.state ?? "running",
       poolState: args.poolState,
+      currentSkillPath: args.currentSkillPath,
+      configHash: args.configHash,
+      installedSkills: args.installedSkills,
+      webuiUrlCreatedAt: args.webuiUrlCreatedAt,
       cpu: args.cpu,
       memory: args.memory,
       disk: args.disk,
@@ -120,7 +141,7 @@ export const heartbeat = mutation({
   },
 });
 
-export const claimWarm = mutation({
+export const claimSandbox = mutation({
   args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -133,23 +154,23 @@ export const claimWarm = mutation({
       )
       .collect();
 
-    const now = Date.now();
-    const STALE_MS = 2 * 60 * 1000; // 2 min without heartbeat = stale session
-
     const reusable = sandboxes.find((s) => {
       if (s.sandboxId.startsWith("pending-")) return false;
-      if (s.poolState === "warm" || s.poolState === "stopped") return true;
-      // Only claim active if the session is stale (no heartbeat = user left)
-      if (s.poolState === "active") {
-        const lastBeat = s.lastHeartbeat ?? s.createdAt;
-        return now - lastBeat > STALE_MS;
-      }
-      return false;
+      return s.poolState === "active" || s.poolState === "stopped";
     });
     if (!reusable) return null;
 
-    await ctx.db.patch("sandboxes", reusable._id, { poolState: "swapping" });
-    return { sandboxId: reusable.sandboxId, webuiUrl: reusable.webuiUrl };
+    await ctx.db.patch("sandboxes", reusable._id, { poolState: "installing" });
+    return {
+      sandboxId: reusable.sandboxId,
+      webuiUrl: reusable.webuiUrl,
+      currentSkillPath: reusable.currentSkillPath,
+      poolState: reusable.poolState,
+      configHash: reusable.configHash,
+      installedSkills: reusable.installedSkills,
+      webuiUrlCreatedAt: reusable.webuiUrlCreatedAt,
+      lastHeartbeat: reusable.lastHeartbeat,
+    };
   },
 });
 
@@ -170,7 +191,7 @@ export const findReusable = query({
     const reusable = sandboxes.find(
       (s) =>
         !s.sandboxId.startsWith("pending-") &&
-        (s.poolState === "warm" || s.poolState === "stopped"),
+        (s.poolState === "active" || s.poolState === "stopped"),
     );
     if (!reusable) return null;
 
@@ -182,37 +203,19 @@ export const findReusable = query({
   },
 });
 
-export const markWarm = mutation({
-  args: {
-    sandboxId: v.string(),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
-
-    const sandbox = await ctx.db
-      .query("sandboxes")
-      .withIndex("by_sandbox", (q) => q.eq("sandboxId", args.sandboxId))
-      .unique();
-
-    if (sandbox && sandbox.tokenIdentifier === identity.tokenIdentifier) {
-      await ctx.db.patch("sandboxes", sandbox._id, { poolState: "warm" });
-    }
-    return null;
-  },
-});
-
 export const updatePoolState = mutation({
   args: {
     sandboxId: v.string(),
     poolState: v.union(
-      v.literal("warm"),
       v.literal("active"),
-      v.literal("swapping"),
+      v.literal("installing"),
       v.literal("stopped"),
     ),
     currentSkillPath: v.optional(v.string()),
+    webuiUrl: v.optional(v.string()),
+    configHash: v.optional(v.string()),
+    installedSkills: v.optional(v.array(v.string())),
+    webuiUrlCreatedAt: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -228,6 +231,18 @@ export const updatePoolState = mutation({
       const patch: Record<string, unknown> = { poolState: args.poolState };
       if (args.currentSkillPath !== undefined) {
         patch.currentSkillPath = args.currentSkillPath;
+      }
+      if (args.webuiUrl !== undefined) {
+        patch.webuiUrl = args.webuiUrl;
+      }
+      if (args.configHash !== undefined) {
+        patch.configHash = args.configHash;
+      }
+      if (args.installedSkills !== undefined) {
+        patch.installedSkills = args.installedSkills;
+      }
+      if (args.webuiUrlCreatedAt !== undefined) {
+        patch.webuiUrlCreatedAt = args.webuiUrlCreatedAt;
       }
       await ctx.db.patch("sandboxes", sandbox._id, patch);
     }
