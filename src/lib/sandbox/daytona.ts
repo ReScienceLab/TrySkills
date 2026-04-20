@@ -234,66 +234,17 @@ export async function createHermesSandbox(
 }
 
 /**
- * Reconnect to an existing sandbox without swapping skills.
- * Used when reopening the same skill that's already loaded.
- * Starts the sandbox if stopped, then returns a fresh signed preview URL.
+ * Install a skill into an existing sandbox.
+ * Starts the sandbox if stopped, uploads skill files (additive, no cleanup),
+ * and returns a fresh signed preview URL.
+ * Skills accumulate on disk -- Hermes loads the requested skill per-session.
  */
-export async function reconnectSandbox(
-  config: SandboxConfig,
-  sandboxId: string,
-  onProgress: (step: SandboxState) => void,
-): Promise<SandboxSession> {
-  const { Daytona } = await getDaytonaSDK();
-  const daytona = new Daytona({
-    apiKey: config.daytonaApiKey,
-    apiUrl: "https://app.daytona.io/api",
-  });
-
-  const sandbox = await daytona.get(sandboxId);
-  activeDaytona = daytona;
-  activeSandbox = sandbox;
-
-  if (sandbox.state !== "started") {
-    if (sandbox.state === "stopped") {
-      onProgress("starting");
-      await daytona.start(sandbox, 60);
-    } else {
-      throw new Error(`Sandbox in unexpected state: ${sandbox.state}`);
-    }
-  }
-
-  onProgress("starting");
-  await waitForHealth(sandbox);
-
-  const signedPreview = await sandbox.getSignedPreviewUrl(WEBUI_PORT, SIGNED_URL_TTL_SECONDS);
-  console.log("[daytona] reconnectSandbox signedPreview URL:", signedPreview.url);
-  const webuiUrl = signedPreview.url;
-
-  return {
-    sandboxId: sandbox.id,
-    webuiUrl,
-    webuiBaseUrl: webuiUrl,
-    state: "running",
-    startedAt: Date.now(),
-    cpu: sandbox.cpu,
-    memory: sandbox.memory,
-    disk: sandbox.disk,
-    region: sandbox.target,
-  };
-}
-
-/**
- * Hot-swap skill files in an existing running sandbox.
- * Cleans old skills, uploads new ones, and rewrites config.
- * Skills are loaded per-session by Hermes, so no gateway restart is needed.
- */
-export async function hotSwapSkill(
+export async function installSkill(
   config: SandboxConfig,
   sandboxId: string,
   skillName: string,
   skillFiles: SkillFile[],
   onProgress: (step: SandboxState) => void,
-  callerOrigin?: string,
 ): Promise<SandboxSession> {
   const { Daytona } = await getDaytonaSDK();
   const daytona = new Daytona({
@@ -316,51 +267,36 @@ export async function hotSwapSkill(
 
   const providerMapping = PROVIDER_ENV_MAP[config.llmProvider] || PROVIDER_ENV_MAP.openrouter;
 
-  onProgress("swapping");
+  onProgress("uploading");
 
-  // Update CORS allowed origins and restart WebUI so cross-origin chat API works
-  const allowedOrigins = callerOrigin
-    ? `${BASE_ALLOWED_ORIGINS},${callerOrigin}`
-    : BASE_ALLOWED_ORIGINS;
-  const webuiDir = "/opt/hermes-webui";
-  const agentDir = "/opt/hermes-agent";
-  const pythonCmd = `${agentDir}/venv/bin/python3`;
-  await sandbox.process.executeCommand(
-    [
-      `pkill -f "server.py" 2>/dev/null; sleep 0.5`,
-      `cd ${webuiDir}`,
-      `export HERMES_WEBUI_ALLOWED_ORIGINS="${allowedOrigins}"`,
-      `export HERMES_WEBUI_AGENT_DIR=${agentDir}`,
-      `export HERMES_WEBUI_PYTHON=${pythonCmd}`,
-      `export HERMES_WEBUI_HOST=0.0.0.0`,
-      `export HERMES_WEBUI_PORT=${WEBUI_PORT}`,
-      `export HERMES_HOME=/home/daytona/.hermes`,
-      `nohup ${pythonCmd} server.py > /tmp/hermes-webui.log 2>&1 &`,
-    ].join(" && "),
-  ).catch(() => {});
+  // Write config and upload skill files in parallel (no cleanup of old skills)
+  const skillDirs = [...new Set(skillFiles.map((f) => {
+    const destPath = `/home/daytona/.hermes/skills/${skillName}/${f.path}`;
+    return destPath.substring(0, destPath.lastIndexOf("/"));
+  }))];
 
-  await sandbox.process.executeCommand("rm -rf /home/daytona/.hermes/skills/*").catch(() => {});
+  await Promise.all([
+    sandbox.process.executeCommand(
+      `mkdir -p /home/daytona/.hermes && cat > /home/daytona/.hermes/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
+    ).catch(() => {}),
+    sandbox.process.executeCommand(
+      `cat > /home/daytona/.hermes/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider)}\nCFGEOF`,
+    ).catch(() => {}),
+    skillDirs.length > 0
+      ? sandbox.process.executeCommand(`mkdir -p ${skillDirs.map((d) => `"${d}"`).join(" ")}`).catch(() => {})
+      : Promise.resolve(),
+  ]);
 
-  await sandbox.process.executeCommand(
-    `mkdir -p /home/daytona/.hermes && cat > /home/daytona/.hermes/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
-  ).catch(() => {});
-  await sandbox.process.executeCommand(
-    `cat > /home/daytona/.hermes/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider)}\nCFGEOF`,
-  ).catch(() => {});
+  await Promise.all(
+    skillFiles.map((file) => {
+      const destPath = `/home/daytona/.hermes/skills/${skillName}/${file.path}`;
+      return sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
+    }),
+  );
 
-  for (const file of skillFiles) {
-    const destPath = `/home/daytona/.hermes/skills/${skillName}/${file.path}`;
-    const dir = destPath.substring(0, destPath.lastIndexOf("/"));
-    await sandbox.process.executeCommand(`mkdir -p "${dir}"`).catch(() => {});
-    await sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
-  }
-
-  // No gateway restart needed -- Hermes loads skills per-session from disk.
-  // Just verify the gateway is still healthy.
   await waitForHealth(sandbox);
 
   const signedPreview = await sandbox.getSignedPreviewUrl(WEBUI_PORT, SIGNED_URL_TTL_SECONDS);
-  console.log("[daytona] hotSwapSkill signedPreview URL:", signedPreview.url);
   const webuiUrl = signedPreview.url;
 
   return {

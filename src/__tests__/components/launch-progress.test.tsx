@@ -28,10 +28,9 @@ describe("LaunchProgress", () => {
 
   it("renders hotswap step labels", () => {
     const { container } = render(
-      <LaunchProgress state="swapping" onRetry={() => {}} onCancel={() => {}} mode="hotswap" />,
+      <LaunchProgress state="uploading" onRetry={() => {}} onCancel={() => {}} mode="hotswap" />,
     );
-    expect(container.textContent).toContain("Swapping skill");
-    expect(container.textContent).not.toContain("Restarting gateway");
+    expect(container.textContent).toContain("Installing skill");
     expect(container.textContent).toContain("Ready");
   });
 
@@ -40,8 +39,7 @@ describe("LaunchProgress", () => {
       <LaunchProgress state="starting" onRetry={() => {}} onCancel={() => {}} mode="hotswap" needsWake={true} />,
     );
     expect(container.textContent).toContain("Waking sandbox");
-    expect(container.textContent).toContain("Swapping skill");
-    expect(container.textContent).not.toContain("Restarting gateway");
+    expect(container.textContent).toContain("Installing skill");
     expect(container.textContent).toContain("Ready");
   });
 
@@ -80,7 +78,7 @@ describe("LaunchProgress", () => {
 
   it("shows mode badge", () => {
     const { container } = render(
-      <LaunchProgress state="swapping" onRetry={() => {}} onCancel={() => {}} mode="hotswap" />,
+      <LaunchProgress state="uploading" onRetry={() => {}} onCancel={() => {}} mode="hotswap" />,
     );
     expect(container.textContent).toContain("hot-swap");
   });

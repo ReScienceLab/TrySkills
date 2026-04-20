@@ -16,9 +16,7 @@ export default defineSchema({
     webuiUrl: v.string(),
     state: v.string(),
     poolState: v.optional(v.union(
-      v.literal("warm"),
       v.literal("active"),
-      v.literal("swapping"),
       v.literal("stopped"),
     )),
     currentSkillPath: v.optional(v.string()),

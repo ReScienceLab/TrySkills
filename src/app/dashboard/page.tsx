@@ -71,7 +71,7 @@ export default function DashboardPage() {
 
   const handleWakeUp = async (sandboxId: string) => {
     if (!config?.sandboxKey) return;
-    await updatePoolState({ sandboxId, poolState: "warm" });
+    await updatePoolState({ sandboxId, poolState: "active" });
     // The actual Daytona start happens when user launches a skill
   };
 
@@ -121,7 +121,7 @@ export default function DashboardPage() {
   };
 
   const stateColor = (state: string, poolState?: string) => {
-    if (poolState === "warm") return "bg-amber-500 animate-pulse";
+    if (poolState === "active") return "bg-green-500 animate-pulse";
     if (poolState === "stopped") return "bg-white/20";
     if (state === "running" || state === "started") return "bg-green-500 animate-pulse";
     if (state === "stopping") return "bg-yellow-500";
@@ -131,8 +131,8 @@ export default function DashboardPage() {
   };
 
   const stateLabel = (state: string, poolState?: string) => {
-    if (poolState === "warm") return "warm (reusable)";
-    if (poolState === "swapping") return "swapping skill...";
+    if (poolState === "active") return "active (reusable)";
+    if (poolState === "stopped") return "stopped";
     if (poolState === "stopped") return "stopped (restartable)";
     const labels: Record<string, string> = {
       creating: "Creating sandbox...",
@@ -149,7 +149,7 @@ export default function DashboardPage() {
   };
 
   const stateTextColor = (state: string, poolState?: string) => {
-    if (poolState === "warm") return "text-amber-400/70";
+    if (poolState === "active") return "text-green-400/70";
     if (poolState === "stopped") return "text-white/30";
     if (state === "running" || state === "started") return "text-green-400/70";
     if (state === "creating" || state === "installing" || state === "uploading" || state === "starting") return "text-blue-400/70";
@@ -219,8 +219,8 @@ export default function DashboardPage() {
                               <>
                                 <span className="text-[10px] text-white/20">&middot;</span>
                                 <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${
-                                  poolState === "warm" ? "text-amber-400/60 bg-amber-500/10"
-                                    : poolState === "active" ? "text-blue-400/60 bg-blue-500/10"
+                                  poolState === "active" ? "text-green-400/60 bg-green-500/10"
+                                    : poolState === "stopped" ? "text-orange-400/60 bg-orange-500/10"
                                     : "text-white/30 bg-white/5"
                                 }`}>
                                   {poolState}
@@ -302,7 +302,7 @@ export default function DashboardPage() {
                             Wake Up
                           </button>
                         )}
-                        {(displayState === "running" || displayState === "started" || poolState === "warm") && (
+                        {(displayState === "running" || displayState === "started" || poolState === "active") && (
                           <button
                             onClick={() => handleStop(sb.sandboxId)}
                             className="px-4 py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 text-xs font-medium transition-all"
@@ -312,7 +312,7 @@ export default function DashboardPage() {
                         )}
                         {displayState !== "running" && displayState !== "started" && displayState !== "stopping" &&
                          displayState !== "creating" && displayState !== "installing" && displayState !== "uploading" && displayState !== "starting" &&
-                         poolState !== "warm" && (
+                         poolState !== "active" && (
                           <button
                             onClick={() => handleRemove(sb.sandboxId)}
                             className="px-4 py-2 bg-white/5 text-white/40 hover:bg-white/10 text-xs font-medium transition-all"

@@ -26,13 +26,12 @@ export const cleanupStaleSandboxes = internalMutation({
 
     const now = Date.now();
     for (const sandbox of staleSandboxes) {
-      // Stale warm/active sandboxes: mark as stopped (Daytona likely auto-stopped them)
-      // so they remain discoverable for the wake-up flow
-      if (sandbox.poolState === "warm" || sandbox.poolState === "active") {
+      // Stale active sandboxes: mark as stopped (Daytona likely auto-stopped them)
+      if (sandbox.poolState === "active") {
         await ctx.runMutation(internal.sandboxes.internalMarkStopped, {
           sandboxId: sandbox.sandboxId,
         });
-        console.log(`[cleanup] Marked stopped: ${sandbox.sandboxId} (was ${sandbox.poolState})`);
+        console.log(`[cleanup] Marked stopped: ${sandbox.sandboxId}`);
         continue;
       }
       // Remove stopped sandboxes older than 2 days

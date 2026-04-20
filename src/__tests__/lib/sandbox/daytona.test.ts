@@ -18,7 +18,7 @@ vi.mock("@daytona/sdk", () => {
   };
 });
 
-import { createHermesSandbox, destroySandbox, hotSwapSkill, type SkillFile } from "@/lib/sandbox/daytona";
+import { createHermesSandbox, destroySandbox, installSkill, type SkillFile } from "@/lib/sandbox/daytona";
 import type { SandboxConfig, SandboxState } from "@/lib/sandbox/types";
 
 describe("sandbox/daytona", () => {
@@ -262,12 +262,12 @@ describe("sandbox/daytona", () => {
     });
   });
 
-  describe("hotSwapSkill", () => {
-    it("swaps skill files in a running sandbox", async () => {
+  describe("installSkill", () => {
+    it("installs skill files in a running sandbox without cleanup", async () => {
       mockGet.mockResolvedValue({ ...mockSandbox, state: "started" });
 
       const progress: SandboxState[] = [];
-      const session = await hotSwapSkill(
+      const session = await installSkill(
         testConfig,
         "sb-test-123",
         "new-skill",
@@ -275,14 +275,14 @@ describe("sandbox/daytona", () => {
         (step) => progress.push(step),
       );
 
-      expect(progress).toContain("swapping");
-      expect(progress).not.toContain("restarting");
+      expect(progress).toContain("uploading");
       expect(session.sandboxId).toBe("sb-test-123");
 
       const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
-      expect(allCmds.some((c: string) => c.includes("rm -rf /home/daytona/.hermes/skills/*"))).toBe(true);
-      // WebUI restart for CORS, but no hermes gateway restart
-      expect(allCmds.some((c: string) => c.includes("server.py"))).toBe(true);
+      // Should NOT clean old skills (additive install)
+      expect(allCmds.every((c: string) => !c.includes("rm -rf"))).toBe(true);
+      // Should NOT restart WebUI or gateway
+      expect(allCmds.every((c: string) => !c.includes("pkill"))).toBe(true);
       expect(allCmds.every((c: string) => !c.includes("hermes gateway"))).toBe(true);
     });
 
@@ -290,7 +290,7 @@ describe("sandbox/daytona", () => {
       mockGet.mockResolvedValue({ ...mockSandbox, state: "error" });
 
       await expect(
-        hotSwapSkill(testConfig, "sb-test-123", "test", testSkillFiles, () => {}),
+        installSkill(testConfig, "sb-test-123", "test", testSkillFiles, () => {}),
       ).rejects.toThrow("unexpected state");
     });
   });

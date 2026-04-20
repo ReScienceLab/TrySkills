@@ -10,18 +10,16 @@ describe("sandbox/types", () => {
       "installing",
       "uploading",
       "starting",
-      "swapping",
-      "restarting",
       "running",
       "error",
       "cleaning",
     ];
-    expect(states).toHaveLength(11);
+    expect(states).toHaveLength(9);
   });
 
   it("PoolState covers all pool states", () => {
-    const states: PoolState[] = ["warm", "active", "swapping", "stopped"];
-    expect(states).toHaveLength(4);
+    const states: PoolState[] = ["active", "stopped"];
+    expect(states).toHaveLength(2);
   });
 
   it("SandboxConfig is structurally valid", () => {
