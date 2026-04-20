@@ -45,11 +45,17 @@ const image = Image.base("ubuntu:22.04").runCommands(
   // Symlink hermes binary to PATH
   "ln -sf /opt/hermes-agent/venv/bin/hermes /usr/local/bin/hermes",
 
+  // Install Node-side dependencies for browser tooling (mirrors install.sh install_node_deps)
+  "cd /opt/hermes-agent && npm install --silent 2>/dev/null || true",
+
   // Install Playwright chromium for browser-based skills
   "cd /opt/hermes-agent && npx playwright install --with-deps chromium 2>/dev/null || true",
 
   // Install TUI dependencies (if present)
   "cd /opt/hermes-agent && if [ -f ui-tui/package.json ]; then cd ui-tui && npm install --silent 2>/dev/null || true; fi",
+
+  // Install WhatsApp bridge dependencies (if present)
+  "cd /opt/hermes-agent && if [ -f scripts/whatsapp-bridge/package.json ]; then cd scripts/whatsapp-bridge && npm install --silent 2>/dev/null || true; fi",
 
   // Clone and install hermes-webui
   "git clone --depth 1 https://github.com/nesquena/hermes-webui.git /opt/hermes-webui",
