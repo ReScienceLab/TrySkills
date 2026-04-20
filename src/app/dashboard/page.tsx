@@ -34,6 +34,7 @@ export default function DashboardPage() {
   );
   const removeSandbox = useMutation(api.sandboxes.remove);
   const updateState = useMutation(api.sandboxes.updateState);
+  const updatePoolState = useMutation(api.sandboxes.updatePoolState);
 
   const sandboxList = sandboxes ?? (isSignedIn && !isAuthenticated ? [] : undefined);
 
@@ -66,6 +67,12 @@ export default function DashboardPage() {
       await destroySandbox(config.sandboxKey, sandboxId);
     } catch {}
     await removeSandbox({ sandboxId });
+  };
+
+  const handleWakeUp = async (sandboxId: string) => {
+    if (!config?.sandboxKey) return;
+    await updatePoolState({ sandboxId, poolState: "warm" });
+    // The actual Daytona start happens when user launches a skill
   };
 
   const handleRemove = async (sandboxId: string) => {
@@ -113,7 +120,9 @@ export default function DashboardPage() {
     return `${h}h ${m % 60}m`;
   };
 
-  const stateColor = (state: string) => {
+  const stateColor = (state: string, poolState?: string) => {
+    if (poolState === "warm") return "bg-amber-500 animate-pulse";
+    if (poolState === "stopped") return "bg-white/20";
     if (state === "running" || state === "started") return "bg-green-500 animate-pulse";
     if (state === "stopping") return "bg-yellow-500";
     if (state === "creating" || state === "installing" || state === "uploading" || state === "starting") return "bg-blue-400 animate-pulse";
@@ -121,7 +130,10 @@ export default function DashboardPage() {
     return "bg-white/20";
   };
 
-  const stateLabel = (state: string) => {
+  const stateLabel = (state: string, poolState?: string) => {
+    if (poolState === "warm") return "warm (reusable)";
+    if (poolState === "swapping") return "swapping skill...";
+    if (poolState === "stopped") return "stopped (restartable)";
     const labels: Record<string, string> = {
       creating: "Creating sandbox...",
       installing: "Installing agent...",
@@ -136,7 +148,9 @@ export default function DashboardPage() {
     return labels[state] ?? state;
   };
 
-  const stateTextColor = (state: string) => {
+  const stateTextColor = (state: string, poolState?: string) => {
+    if (poolState === "warm") return "text-amber-400/70";
+    if (poolState === "stopped") return "text-white/30";
     if (state === "running" || state === "started") return "text-green-400/70";
     if (state === "creating" || state === "installing" || state === "uploading" || state === "starting") return "text-blue-400/70";
     if (state === "stopped" || state === "archived") return "text-white/30";
@@ -177,6 +191,7 @@ export default function DashboardPage() {
               {sandboxList.map((sb) => {
                 const live = liveInfo[sb.sandboxId];
                 const displayState = live?.state ?? sb.state;
+                const poolState = sb.poolState;
                 const cpu = sb.cpu ?? live?.cpu;
                 const memory = sb.memory ?? live?.memory;
                 const disk = sb.disk ?? live?.disk;
@@ -190,16 +205,28 @@ export default function DashboardPage() {
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-4 min-w-0 flex-1">
-                        <div className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1.5 ${stateColor(displayState)}`} />
+                        <div className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1.5 ${stateColor(displayState, poolState ?? undefined)}`} />
                         <div className="min-w-0 flex-1">
                           <div className="font-mono text-sm text-white/80 truncate">
-                            {sb.skillPath}
+                            {sb.currentSkillPath ?? sb.skillPath}
                           </div>
 
                           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                            <span className={`text-xs font-medium ${stateTextColor(displayState)}`}>
-                              {stateLabel(displayState)}
+                            <span className={`text-xs font-medium ${stateTextColor(displayState, poolState ?? undefined)}`}>
+                              {stateLabel(displayState, poolState ?? undefined)}
                             </span>
+                            {poolState && (
+                              <>
+                                <span className="text-[10px] text-white/20">&middot;</span>
+                                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${
+                                  poolState === "warm" ? "text-amber-400/60 bg-amber-500/10"
+                                    : poolState === "active" ? "text-blue-400/60 bg-blue-500/10"
+                                    : "text-white/30 bg-white/5"
+                                }`}>
+                                  {poolState}
+                                </span>
+                              </>
+                            )}
                             <span className="text-[10px] text-white/20">&middot;</span>
                             <span className="text-xs text-white/30">
                               {formatElapsed(sb.createdAt)}
@@ -267,7 +294,15 @@ export default function DashboardPage() {
                             Open WebUI
                           </button>
                         )}
-                        {(displayState === "running" || displayState === "started") && (
+                        {poolState === "stopped" && (
+                          <button
+                            onClick={() => handleWakeUp(sb.sandboxId)}
+                            className="px-4 py-2 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 text-xs font-medium transition-all"
+                          >
+                            Wake Up
+                          </button>
+                        )}
+                        {(displayState === "running" || displayState === "started" || poolState === "warm") && (
                           <button
                             onClick={() => handleStop(sb.sandboxId)}
                             className="px-4 py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 text-xs font-medium transition-all"
@@ -276,7 +311,8 @@ export default function DashboardPage() {
                           </button>
                         )}
                         {displayState !== "running" && displayState !== "started" && displayState !== "stopping" &&
-                         displayState !== "creating" && displayState !== "installing" && displayState !== "uploading" && displayState !== "starting" && (
+                         displayState !== "creating" && displayState !== "installing" && displayState !== "uploading" && displayState !== "starting" &&
+                         poolState !== "warm" && (
                           <button
                             onClick={() => handleRemove(sb.sandboxId)}
                             className="px-4 py-2 bg-white/5 text-white/40 hover:bg-white/10 text-xs font-medium transition-all"

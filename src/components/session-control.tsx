@@ -2,17 +2,19 @@
 
 import { useState, useEffect } from "react";
 
-const COST_PER_HOUR = 0.167; // 2 vCPU ($0.1008) + 4GiB RAM ($0.0648) + 10GiB disk ($0.00108)
-const AUTO_STOP_MINUTES = 15;
+const COST_PER_HOUR = 0.167;
+const AUTO_STOP_MINUTES = 30;
 
 export function SessionControl({
   webuiUrl,
   startedAt,
   onStop,
+  onTryAnother,
 }: {
   webuiUrl: string;
   startedAt: number;
   onStop: () => void;
+  onTryAnother?: () => void;
 }) {
   const [elapsed, setElapsed] = useState(0);
 
@@ -79,6 +81,18 @@ export function SessionControl({
             Open Hermes WebUI
           </button>
 
+          {onTryAnother && (
+            <button
+              onClick={onTryAnother}
+              className="w-full py-3 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 font-medium text-sm transition-all flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
+              </svg>
+              Try Another Skill
+            </button>
+          )}
+
           <button
             onClick={onStop}
             className="w-full py-3 bg-red-500/10 text-red-400 hover:bg-red-500/20 font-medium text-sm transition-all"
@@ -89,6 +103,7 @@ export function SessionControl({
 
         <div className="text-xs text-white/25 text-center">
           Sandbox auto-stops after {AUTO_STOP_MINUTES} minutes if you close this page.
+          {onTryAnother && " Use \"Try Another Skill\" to reuse this sandbox."}
         </div>
       </div>
     </div>

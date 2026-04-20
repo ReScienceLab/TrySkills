@@ -4,15 +4,16 @@ import { useState, useEffect, useMemo, useRef, use } from "react";
 import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
+import { useConvexAuth } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { ConfigPanel, type LaunchConfig } from "@/components/config-panel";
-import { LaunchProgress } from "@/components/launch-progress";
+import { LaunchProgress, type LaunchMode } from "@/components/launch-progress";
 import { SessionControl } from "@/components/session-control";
 import { GlowMesh } from "@/components/glow-mesh";
 import { SiteHeader } from "@/components/site-header";
 import { resolveSkillPath, fetchSkillDirectory } from "@/lib/skill/resolver";
-import { createHermesSandbox, destroySandbox } from "@/lib/sandbox/daytona";
+import { createHermesSandbox, destroySandbox, hotSwapSkill } from "@/lib/sandbox/daytona";
 import { useKeyStore } from "@/hooks/use-key-store";
 import { useHeartbeat } from "@/hooks/use-heartbeat";
 import { getProvider } from "@/lib/providers/registry";
@@ -21,8 +22,6 @@ import type { SandboxState, SandboxSession } from "@/lib/sandbox/types";
 
 type AppPhase = "config" | "launching" | "running";
 
-// Per-skill-path lock to prevent double-launch from React Strict Mode
-// Map<skillPath, boolean> -- scoped so different skills can each auto-launch
 const autoLaunchLock = new Map<string, boolean>();
 
 export default function SkillPage({
@@ -32,11 +31,19 @@ export default function SkillPage({
 }) {
   const resolvedParams = use(params);
   const { skillPath } = resolvedParams;
-  const { isSignedIn, isLoaded: authLoaded } = useAuth();
+  const { isSignedIn, isLoaded: authLoaded, userId } = useAuth();
+  const { isAuthenticated } = useConvexAuth();
   const { config: savedConfig, loading: keysLoading } = useKeyStore();
   const createSandboxRecord = useMutation(api.sandboxes.create);
   const removeSandboxRecord = useMutation(api.sandboxes.remove);
   const updateSandboxState = useMutation(api.sandboxes.updateState);
+  const claimWarm = useMutation(api.sandboxes.claimWarm);
+  const markWarmMut = useMutation(api.sandboxes.markWarm);
+  const updatePoolState = useMutation(api.sandboxes.updatePoolState);
+  const reusableSandbox = useQuery(
+    api.sandboxes.findReusable,
+    isAuthenticated ? {} : "skip",
+  );
 
   const resolved = useMemo(() => resolveSkillPath(skillPath), [skillPath]);
   const { owner, repo, skillName } = resolved;
@@ -47,7 +54,8 @@ export default function SkillPage({
   const [sandboxState, setSandboxState] = useState<SandboxState>("idle");
   const [sandboxError, setSandboxError] = useState<string | undefined>();
   const [session, setSession] = useState<SandboxSession | null>(null);
-  const [usedSnapshot, setUsedSnapshot] = useState(true);
+  const [launchMode, setLaunchMode] = useState<LaunchMode>("snapshot");
+  const [needsWake, setNeedsWake] = useState(false);
   const launchConfigRef = useRef<LaunchConfig | null>(null);
   const sessionRef = useRef<SandboxSession | null>(null);
   const autoLaunchFired = useRef(false);
@@ -55,7 +63,6 @@ export default function SkillPage({
   const placeholderIdRef = useRef<string | null>(null);
   const userCancelled = useRef(false);
 
-  // Heartbeat: keeps sandbox alive while user is on page
   useHeartbeat(session?.sandboxId ?? null, savedConfig?.sandboxKey ?? null);
 
   const handleLaunch = async (config: LaunchConfig) => {
@@ -73,9 +80,6 @@ export default function SkillPage({
     placeholderIdRef.current = placeholderId;
 
     try {
-      // Config is already saved by ConfigPanelForm.handleLaunch or auto-launch;
-      // do not save again here to avoid overwriting providerKeys with stale data.
-
       await createSandboxRecord({
         sandboxId: placeholderId,
         skillPath: skillPathStr,
@@ -87,6 +91,73 @@ export default function SkillPage({
 
       const skillFiles = await fetchSkillDirectory(resolved);
       if (abort.signal.aborted) return;
+
+      // Try hot-swap path: reuse existing warm/stopped sandbox
+      const claimed = await claimWarm({}).catch(() => null);
+
+      if (claimed && !abort.signal.aborted) {
+        const isStopped = reusableSandbox?.poolState === "stopped";
+        setLaunchMode("hotswap");
+        setNeedsWake(isStopped);
+        if (isStopped) {
+          setSandboxState("starting");
+        } else {
+          setSandboxState("swapping");
+        }
+
+        try {
+          const result = await hotSwapSkill(
+            {
+              daytonaApiKey: config.sandboxKey,
+              llmProvider: config.provider.id,
+              llmApiKey: config.llmKey,
+              llmModel: config.model,
+            },
+            claimed.sandboxId,
+            skillName,
+            skillFiles,
+            (step) => {
+              if (abort.signal.aborted) return;
+              setSandboxState(step as SandboxState);
+            },
+          );
+
+          if (abort.signal.aborted) return;
+
+          setSession(result);
+          sessionRef.current = result;
+          setSandboxState("running");
+          setPhase("running");
+          placeholderIdRef.current = null;
+
+          await removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
+          await updatePoolState({
+            sandboxId: claimed.sandboxId,
+            poolState: "active",
+            currentSkillPath: skillPathStr,
+          }).catch(() => {});
+          await updateSandboxState({
+            sandboxId: claimed.sandboxId,
+            state: "running",
+          }).catch(() => {});
+
+          window.open(result.webuiUrl, "_blank", "noopener,noreferrer");
+          return;
+        } catch {
+          // Hot-swap failed, fall through to cold create
+          await updatePoolState({
+            sandboxId: claimed.sandboxId,
+            poolState: "stopped",
+          }).catch(() => {});
+        }
+      }
+
+      if (abort.signal.aborted) return;
+
+      // Cold create path
+      setLaunchMode("snapshot");
+      setNeedsWake(false);
+      setSandboxState("creating");
 
       const result = await createHermesSandbox(
         {
@@ -100,9 +171,10 @@ export default function SkillPage({
         (step, meta) => {
           if (abort.signal.aborted) return;
           setSandboxState(step as SandboxState);
-          if (meta?.usedSnapshot !== undefined) setUsedSnapshot(meta.usedSnapshot);
+          if (meta?.usedSnapshot === false) setLaunchMode("cold");
           updateSandboxState({ sandboxId: placeholderId, state: step }).catch(() => {});
         },
+        userId ?? undefined,
       );
 
       if (abort.signal.aborted) {
@@ -112,7 +184,6 @@ export default function SkillPage({
       }
 
       setSession(result);
-      setUsedSnapshot(result.usedSnapshot);
       sessionRef.current = result;
       setSandboxState("running");
       setPhase("running");
@@ -131,6 +202,12 @@ export default function SkillPage({
         region: result.region,
       }).catch(() => {});
 
+      await updatePoolState({
+        sandboxId: result.sandboxId,
+        poolState: "active",
+        currentSkillPath: skillPathStr,
+      }).catch(() => {});
+
       window.open(result.webuiUrl, "_blank", "noopener,noreferrer");
     } catch (err) {
       if (abort.signal.aborted) return;
@@ -145,7 +222,6 @@ export default function SkillPage({
     launchAbortRef.current?.abort();
     launchAbortRef.current = null;
 
-    // Clean up placeholder dashboard record
     if (placeholderIdRef.current) {
       removeSandboxRecord({ sandboxId: placeholderIdRef.current }).catch(() => {});
       placeholderIdRef.current = null;
@@ -184,15 +260,15 @@ export default function SkillPage({
     const cleanup = () => {
       launchAbortRef.current?.abort();
       autoLaunchLock.delete(skillKey);
+      // Mark sandbox as warm instead of destroying it
       if (sessionRef.current && launchConfigRef.current) {
-        destroySandbox(launchConfigRef.current.sandboxKey, sessionRef.current.sandboxId).catch(() => {});
+        markWarmMut({ sandboxId: sessionRef.current.sandboxId }).catch(() => {});
       }
     };
     window.addEventListener("beforeunload", cleanup);
     return () => {
       window.removeEventListener("beforeunload", cleanup);
       launchAbortRef.current?.abort();
-      // Clear the lock for this skill so a fresh visit can auto-launch
       autoLaunchLock.delete(skillKey);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -213,6 +289,18 @@ export default function SkillPage({
     setSandboxState("idle");
     setPhase("config");
     userCancelled.current = true;
+  };
+
+  const handleTryAnother = () => {
+    // Mark current sandbox as warm and navigate to homepage
+    if (session) {
+      markWarmMut({ sandboxId: session.sandboxId }).catch(() => {});
+    }
+    setSession(null);
+    sessionRef.current = null;
+    setSandboxState("idle");
+    setPhase("config");
+    window.location.href = "/";
   };
 
   const handleRetryLaunch = () => {
@@ -301,7 +389,8 @@ export default function SkillPage({
                 error={sandboxError}
                 onRetry={handleRetryLaunch}
                 onCancel={handleCancel}
-                usedSnapshot={usedSnapshot}
+                mode={launchMode}
+                needsWake={needsWake}
               />
             </div>
           )}
@@ -311,6 +400,7 @@ export default function SkillPage({
               webuiUrl={session.webuiUrl}
               startedAt={session.startedAt}
               onStop={handleStop}
+              onTryAnother={handleTryAnother}
             />
           )}
         </div>

@@ -113,6 +113,107 @@ export const heartbeat = mutation({
   },
 });
 
+export const claimWarm = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const sandboxes = await ctx.db
+      .query("sandboxes")
+      .withIndex("by_token", (q) =>
+        q.eq("tokenIdentifier", identity.tokenIdentifier),
+      )
+      .collect();
+
+    const warm = sandboxes.find((s) => s.poolState === "warm");
+    if (!warm) return null;
+
+    await ctx.db.patch("sandboxes", warm._id, { poolState: "swapping" });
+    return { sandboxId: warm.sandboxId, webuiUrl: warm.webuiUrl };
+  },
+});
+
+export const findReusable = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    const sandboxes = await ctx.db
+      .query("sandboxes")
+      .withIndex("by_token", (q) =>
+        q.eq("tokenIdentifier", identity.tokenIdentifier),
+      )
+      // eslint-disable-next-line @convex-dev/no-collect-in-query
+      .collect();
+
+    const reusable = sandboxes.find(
+      (s) => s.poolState === "warm" || s.poolState === "stopped",
+    );
+    if (!reusable) return null;
+
+    return {
+      sandboxId: reusable.sandboxId,
+      poolState: reusable.poolState,
+      webuiUrl: reusable.webuiUrl,
+    };
+  },
+});
+
+export const markWarm = mutation({
+  args: {
+    sandboxId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const sandbox = await ctx.db
+      .query("sandboxes")
+      .withIndex("by_sandbox", (q) => q.eq("sandboxId", args.sandboxId))
+      .unique();
+
+    if (sandbox && sandbox.tokenIdentifier === identity.tokenIdentifier) {
+      await ctx.db.patch("sandboxes", sandbox._id, { poolState: "warm" });
+    }
+    return null;
+  },
+});
+
+export const updatePoolState = mutation({
+  args: {
+    sandboxId: v.string(),
+    poolState: v.union(
+      v.literal("warm"),
+      v.literal("active"),
+      v.literal("swapping"),
+      v.literal("stopped"),
+    ),
+    currentSkillPath: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const sandbox = await ctx.db
+      .query("sandboxes")
+      .withIndex("by_sandbox", (q) => q.eq("sandboxId", args.sandboxId))
+      .unique();
+
+    if (sandbox && sandbox.tokenIdentifier === identity.tokenIdentifier) {
+      const patch: Record<string, unknown> = { poolState: args.poolState };
+      if (args.currentSkillPath !== undefined) {
+        patch.currentSkillPath = args.currentSkillPath;
+      }
+      await ctx.db.patch("sandboxes", sandbox._id, patch);
+    }
+    return null;
+  },
+});
+
 export const listStale = internalQuery({
   args: {
     staleThresholdMs: v.number(),

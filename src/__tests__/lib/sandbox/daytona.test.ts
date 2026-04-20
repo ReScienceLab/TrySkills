@@ -18,7 +18,7 @@ vi.mock("@daytona/sdk", () => {
   };
 });
 
-import { createHermesSandbox, destroySandbox, type SkillFile } from "@/lib/sandbox/daytona";
+import { createHermesSandbox, destroySandbox, hotSwapSkill, type SkillFile } from "@/lib/sandbox/daytona";
 import type { SandboxConfig, SandboxState } from "@/lib/sandbox/types";
 
 describe("sandbox/daytona", () => {
@@ -60,12 +60,10 @@ describe("sandbox/daytona", () => {
       (step) => progress.push(step),
     );
 
-    // First call should use the snapshot param
     expect(mockCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         snapshot: "hermes-ready",
-        ephemeral: true,
-        autoStopInterval: 15,
+        autoStopInterval: 30,
         public: true,
         envVars: expect.objectContaining({
           OPENROUTER_API_KEY: "sk-or-test-key",
@@ -78,6 +76,26 @@ describe("sandbox/daytona", () => {
     expect(session.sandboxId).toBe("sb-test-123");
     expect(session.state).toBe("running");
     expect(session.webuiUrl).toContain("preview.daytona.io");
+  });
+
+  it("passes userId as label when provided", async () => {
+    await createHermesSandbox(
+      testConfig,
+      "test-skill",
+      testSkillFiles,
+      () => {},
+      "user-123",
+    );
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        labels: expect.objectContaining({
+          tryskills: "true",
+          userId: "user-123",
+        }),
+      }),
+      expect.anything(),
+    );
   });
 
   it("falls back to cold install when snapshot not available", async () => {
@@ -249,6 +267,37 @@ describe("sandbox/daytona", () => {
       await expect(
         destroySandbox("test-key", "sb-nonexistent"),
       ).rejects.toThrow("not found");
+    });
+  });
+
+  describe("hotSwapSkill", () => {
+    it("swaps skill files in a running sandbox", async () => {
+      mockGet.mockResolvedValue({ ...mockSandbox, state: "started" });
+
+      const progress: SandboxState[] = [];
+      const session = await hotSwapSkill(
+        testConfig,
+        "sb-test-123",
+        "new-skill",
+        [{ path: "SKILL.md", content: "# New" }],
+        (step) => progress.push(step),
+      );
+
+      expect(progress).toContain("swapping");
+      expect(progress).toContain("restarting");
+      expect(session.sandboxId).toBe("sb-test-123");
+
+      const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
+      expect(allCmds.some((c: string) => c.includes("rm -rf /home/daytona/.hermes/skills/*"))).toBe(true);
+      expect(allCmds.some((c: string) => c.includes("pkill -f"))).toBe(true);
+    });
+
+    it("throws on unexpected sandbox state", async () => {
+      mockGet.mockResolvedValue({ ...mockSandbox, state: "error" });
+
+      await expect(
+        hotSwapSkill(testConfig, "sb-test-123", "test", testSkillFiles, () => {}),
+      ).rejects.toThrow("unexpected state");
     });
   });
 });

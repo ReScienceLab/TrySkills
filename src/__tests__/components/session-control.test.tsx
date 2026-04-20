@@ -43,7 +43,7 @@ describe("SessionControl", () => {
 
   it("shows auto-stop notice", () => {
     const { container } = render(<SessionControl {...defaultProps} />);
-    expect(container.textContent).toContain("auto-stops after 15 minutes");
+    expect(container.textContent).toContain("auto-stops after 30 minutes");
   });
 
   it("shows cost indicator", () => {
@@ -69,5 +69,33 @@ describe("SessionControl", () => {
   it("displays timer starting at 0:00", () => {
     const { container } = render(<SessionControl {...defaultProps} startedAt={Date.now()} />);
     expect(container.textContent).toContain("0:00");
+  });
+
+  it("renders Try Another Skill button when onTryAnother provided", () => {
+    const mockTryAnother = vi.fn();
+    const { container } = render(
+      <SessionControl {...defaultProps} onTryAnother={mockTryAnother} />,
+    );
+    const buttons = container.querySelectorAll("button");
+    const tryBtn = Array.from(buttons).find((b) => b.textContent?.includes("Try Another Skill"));
+    expect(tryBtn).toBeDefined();
+  });
+
+  it("does not render Try Another Skill button when onTryAnother not provided", () => {
+    const { container } = render(<SessionControl {...defaultProps} />);
+    const buttons = container.querySelectorAll("button");
+    const tryBtn = Array.from(buttons).find((b) => b.textContent?.includes("Try Another Skill"));
+    expect(tryBtn).toBeUndefined();
+  });
+
+  it("calls onTryAnother when Try Another Skill is clicked", () => {
+    const mockTryAnother = vi.fn();
+    const { container } = render(
+      <SessionControl {...defaultProps} onTryAnother={mockTryAnother} />,
+    );
+    const buttons = container.querySelectorAll("button");
+    const tryBtn = Array.from(buttons).find((b) => b.textContent?.includes("Try Another Skill"))!;
+    fireEvent.click(tryBtn);
+    expect(mockTryAnother).toHaveBeenCalledTimes(1);
   });
 });

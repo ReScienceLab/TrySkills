@@ -15,6 +15,13 @@ export default defineSchema({
     skillPath: v.string(),
     webuiUrl: v.string(),
     state: v.string(),
+    poolState: v.optional(v.union(
+      v.literal("warm"),
+      v.literal("active"),
+      v.literal("swapping"),
+      v.literal("stopped"),
+    )),
+    currentSkillPath: v.optional(v.string()),
     cpu: v.optional(v.number()),
     memory: v.optional(v.number()),
     disk: v.optional(v.number()),

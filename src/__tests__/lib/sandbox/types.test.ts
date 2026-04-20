@@ -1,18 +1,27 @@
 import { describe, it, expect } from "vitest";
-import type { SandboxState, SandboxConfig, SandboxSession } from "@/lib/sandbox/types";
+import type { SandboxState, SandboxConfig, SandboxSession, PoolState } from "@/lib/sandbox/types";
 
 describe("sandbox/types", () => {
   it("SandboxState covers all lifecycle states", () => {
     const states: SandboxState[] = [
       "idle",
       "creating",
+      "configuring",
+      "installing",
       "uploading",
       "starting",
+      "swapping",
+      "restarting",
       "running",
       "error",
       "cleaning",
     ];
-    expect(states).toHaveLength(7);
+    expect(states).toHaveLength(11);
+  });
+
+  it("PoolState covers all pool states", () => {
+    const states: PoolState[] = ["warm", "active", "swapping", "stopped"];
+    expect(states).toHaveLength(4);
   });
 
   it("SandboxConfig is structurally valid", () => {

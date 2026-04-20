@@ -1,8 +1,10 @@
 import type { SandboxConfig, SandboxSession, SandboxState } from "./types";
 
 const SNAPSHOT_NAME = process.env.NEXT_PUBLIC_HERMES_SNAPSHOT || "hermes-ready";
-const AUTO_STOP_MINUTES = 15;
-const HEALTH_TIMEOUT_MS = 120_000; // 2 min (snapshot-based is much faster)
+const AUTO_STOP_MINUTES = 30;
+const AUTO_ARCHIVE_MINUTES = 60 * 24 * 2; // 2 days
+const AUTO_DELETE_MINUTES = 60 * 24 * 7; // 7 days
+const HEALTH_TIMEOUT_MS = 120_000;
 const HEALTH_POLL_INTERVAL_MS = 2_000;
 const GATEWAY_PORT = 8642;
 const WEBUI_PORT = 8787;
@@ -76,6 +78,7 @@ export async function createHermesSandbox(
   skillName: string,
   skillFiles: SkillFile[],
   onProgress: (step: SandboxState, meta?: { usedSnapshot?: boolean }) => void,
+  userId?: string,
 ): Promise<SandboxSession & { usedSnapshot: boolean }> {
   const { Daytona } = await getDaytonaSDK();
 
@@ -89,17 +92,20 @@ export async function createHermesSandbox(
 
   onProgress("creating");
 
-  // Try snapshot-based fast path first
+  const labels: Record<string, string> = { tryskills: "true" };
+  if (userId) labels.userId = userId;
+
   let sandbox;
   let usedSnapshot = false;
   try {
     sandbox = await daytona.create(
       {
         snapshot: SNAPSHOT_NAME,
-        ephemeral: true,
         autoStopInterval: AUTO_STOP_MINUTES,
+        autoArchiveInterval: AUTO_ARCHIVE_MINUTES,
+        autoDeleteInterval: AUTO_DELETE_MINUTES,
         public: true,
-        labels: { tryskills: "true" },
+        labels,
         envVars: {
           [providerMapping.envVar]: config.llmApiKey,
           API_SERVER_ENABLED: "true",
@@ -111,19 +117,17 @@ export async function createHermesSandbox(
     );
     usedSnapshot = true;
   } catch (err) {
-    // Only fall back to cold install if snapshot is truly unavailable (not found/invalid).
-    // If it's a timeout or other error, the sandbox may already be created — re-throw
-    // to avoid orphaning a half-started sandbox.
     const msg = err instanceof Error ? err.message.toLowerCase() : "";
     const isSnapshotMissing = msg.includes("not found") || msg.includes("404") || msg.includes("unprocessable") || msg.includes("does not exist");
     if (!isSnapshotMissing) throw err;
 
     sandbox = await daytona.create(
       {
-        ephemeral: true,
         autoStopInterval: AUTO_STOP_MINUTES,
+        autoArchiveInterval: AUTO_ARCHIVE_MINUTES,
+        autoDeleteInterval: AUTO_DELETE_MINUTES,
         public: true,
-        labels: { tryskills: "true" },
+        labels,
         envVars: {
           [providerMapping.envVar]: config.llmApiKey,
           API_SERVER_ENABLED: "true",
@@ -137,7 +141,6 @@ export async function createHermesSandbox(
   activeSandbox = sandbox;
 
   if (usedSnapshot) {
-    // Fast path: hermes-agent and webui are pre-installed at /opt/
     onProgress("configuring", { usedSnapshot: true });
     await sandbox.process.executeCommand([
       "mkdir -p /home/daytona/.hermes/skills /home/daytona/.hermes/logs",
@@ -146,7 +149,6 @@ export async function createHermesSandbox(
       "ln -sf /opt/hermes-agent/venv/bin/hermes /home/daytona/.local/bin/hermes",
     ].join(" && ")).catch(() => {});
   } else {
-    // Cold path: install from scratch (fallback)
     onProgress("installing", { usedSnapshot: false });
     await sandbox.process.executeCommand(
       "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup 2>&1 || true",
@@ -154,7 +156,6 @@ export async function createHermesSandbox(
     onProgress("configuring", { usedSnapshot: false });
   }
 
-  // Write config files
   await sandbox.process.executeCommand(
     `mkdir -p /home/daytona/.hermes && cat > /home/daytona/.hermes/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
   ).catch(() => {});
@@ -162,7 +163,6 @@ export async function createHermesSandbox(
     `cat > /home/daytona/.hermes/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider)}\nCFGEOF`,
   ).catch(() => {});
 
-  // Write webui .env
   const agentDir = usedSnapshot ? "/opt/hermes-agent" : "/home/daytona/.hermes/hermes-agent";
   const webuiDir = usedSnapshot ? "/opt/hermes-webui" : "/home/daytona/hermes-webui";
   if (!usedSnapshot) {
@@ -174,7 +174,6 @@ export async function createHermesSandbox(
     `cat > ${webuiDir}/.env << 'WEOF'\n${buildWebuiEnv(agentDir)}\nWEOF`,
   ).catch(() => {});
 
-  // Upload skill files
   onProgress("uploading");
   for (const file of skillFiles) {
     const destPath = `/home/daytona/.hermes/skills/${skillName}/${file.path}`;
@@ -183,7 +182,6 @@ export async function createHermesSandbox(
     await sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
   }
 
-  // Start services
   onProgress("starting");
 
   const hermesCmd = `${agentDir}/venv/bin/hermes`;
@@ -221,6 +219,107 @@ export async function createHermesSandbox(
     region: sandbox.target,
     usedSnapshot,
   };
+}
+
+/**
+ * Hot-swap skill files in an existing running sandbox.
+ * Cleans old skills, uploads new ones, rewrites config, and restarts the gateway.
+ */
+export async function hotSwapSkill(
+  config: SandboxConfig,
+  sandboxId: string,
+  skillName: string,
+  skillFiles: SkillFile[],
+  onProgress: (step: SandboxState) => void,
+): Promise<SandboxSession> {
+  const { Daytona } = await getDaytonaSDK();
+  const daytona = new Daytona({
+    apiKey: config.daytonaApiKey,
+    apiUrl: "https://app.daytona.io/api",
+  });
+
+  const sandbox = await daytona.get(sandboxId);
+  activeDaytona = daytona;
+  activeSandbox = sandbox;
+
+  if (sandbox.state !== "started") {
+    if (sandbox.state === "stopped") {
+      onProgress("starting");
+      await daytona.start(sandbox, 60);
+    } else {
+      throw new Error(`Sandbox in unexpected state: ${sandbox.state}`);
+    }
+  }
+
+  const providerMapping = PROVIDER_ENV_MAP[config.llmProvider] || PROVIDER_ENV_MAP.openrouter;
+
+  onProgress("swapping");
+
+  await sandbox.process.executeCommand("rm -rf /home/daytona/.hermes/skills/*").catch(() => {});
+
+  await sandbox.process.executeCommand(
+    `mkdir -p /home/daytona/.hermes && cat > /home/daytona/.hermes/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
+  ).catch(() => {});
+  await sandbox.process.executeCommand(
+    `cat > /home/daytona/.hermes/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider)}\nCFGEOF`,
+  ).catch(() => {});
+
+  for (const file of skillFiles) {
+    const destPath = `/home/daytona/.hermes/skills/${skillName}/${file.path}`;
+    const dir = destPath.substring(0, destPath.lastIndexOf("/"));
+    await sandbox.process.executeCommand(`mkdir -p "${dir}"`).catch(() => {});
+    await sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
+  }
+
+  onProgress("restarting");
+
+  const agentDir = "/opt/hermes-agent";
+  const hermesCmd = `${agentDir}/venv/bin/hermes`;
+
+  await sandbox.process.executeCommand(
+    `pkill -f "hermes gateway" 2>/dev/null; sleep 1; nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
+  ).catch(() => {});
+
+  await waitForHealth(sandbox);
+
+  const preview = await sandbox.getPreviewLink(WEBUI_PORT);
+  const webuiUrl = preview.url + (preview.token ? `?token=${preview.token}` : "");
+
+  return {
+    sandboxId: sandbox.id,
+    webuiUrl,
+    state: "running",
+    startedAt: Date.now(),
+    cpu: sandbox.cpu,
+    memory: sandbox.memory,
+    disk: sandbox.disk,
+    region: sandbox.target,
+  };
+}
+
+/**
+ * Find an existing reusable sandbox for the given user via Daytona labels.
+ */
+export async function findReusableSandbox(
+  daytonaApiKey: string,
+  userId: string,
+): Promise<{ sandboxId: string; state: string } | null> {
+  const { Daytona } = await getDaytonaSDK();
+  const daytona = new Daytona({
+    apiKey: daytonaApiKey,
+    apiUrl: "https://app.daytona.io/api",
+  });
+
+  try {
+    const result = await daytona.list({ tryskills: "true", userId });
+    const reusable = result.items.find(
+      (s) => s.state === "started" || s.state === "stopped",
+    );
+    if (!reusable) return null;
+    return { sandboxId: reusable.id, state: reusable.state ?? "unknown" };
+  } catch {
+    return null;
+  }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
