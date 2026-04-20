@@ -3,34 +3,28 @@ export interface SSEEvent {
   data: Record<string, unknown>;
 }
 
-function buildUrl(baseUrl: string, path: string): string {
-  const url = new URL(baseUrl);
-  url.pathname = path;
-  return url.toString();
-}
+async function proxyPost(path: string, webuiBaseUrl: string, body?: Record<string, unknown>) {
+  const res = await fetch("/api/hermes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ baseUrl: webuiBaseUrl, path, body }),
+  });
 
-const DAYTONA_HEADERS = {
-  "X-Daytona-Skip-Preview-Warning": "true",
-};
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    console.error(`[hermes-api] proxy ${path} failed:`, data);
+    throw new Error(data.error || `Proxy request failed: ${res.status}`);
+  }
+
+  return res.json();
+}
 
 export async function createSession(
   webuiBaseUrl: string,
   model?: string,
 ): Promise<string> {
-  const url = buildUrl(webuiBaseUrl, "/api/session/new");
-  console.log("[hermes-api] createSession URL:", url);
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...DAYTONA_HEADERS },
-    body: JSON.stringify({ model }),
-  });
-  const ct = res.headers.get("content-type") || "";
-  if (!res.ok || !ct.includes("json")) {
-    const text = await res.text().catch(() => "");
-    console.error(`[hermes-api] createSession failed: status=${res.status} ct=${ct} url=${url}`, text.slice(0, 300));
-    throw new Error(`Failed to create session: ${res.status} (${ct.includes("html") ? "got HTML instead of JSON - CSRF or auth issue" : text.slice(0, 100)})`);
-  }
-  const data = await res.json();
+  console.log("[hermes-api] createSession via proxy, baseUrl:", webuiBaseUrl);
+  const data = await proxyPost("/api/session/new", webuiBaseUrl, { model });
   return data.session.session_id;
 }
 
@@ -40,18 +34,11 @@ export async function sendMessage(
   message: string,
   model?: string,
 ): Promise<string> {
-  const url = buildUrl(webuiBaseUrl, "/api/chat/start");
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...DAYTONA_HEADERS },
-    body: JSON.stringify({ session_id: sessionId, message, model }),
+  const data = await proxyPost("/api/chat/start", webuiBaseUrl, {
+    session_id: sessionId,
+    message,
+    model,
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    console.error(`[hermes-api] sendMessage failed: ${res.status} ${url}`, text.slice(0, 200));
-    throw new Error(text.includes('"error"') ? JSON.parse(text).error : `Failed to send: ${res.status}`);
-  }
-  const data = await res.json();
   return data.stream_id;
 }
 
@@ -62,8 +49,8 @@ export function streamResponse(
   onError: (error: Error) => void,
   onEnd: () => void,
 ): () => void {
-  const streamUrl = new URL(webuiBaseUrl);
-  streamUrl.pathname = "/api/chat/stream";
+  const streamUrl = new URL("/api/hermes/stream", window.location.origin);
+  streamUrl.searchParams.set("baseUrl", webuiBaseUrl);
   streamUrl.searchParams.set("stream_id", streamId);
   const es = new EventSource(streamUrl.toString());
 
@@ -103,10 +90,11 @@ export async function cancelStream(
   webuiBaseUrl: string,
   streamId: string,
 ): Promise<void> {
-  const cancelUrl = new URL(webuiBaseUrl);
-  cancelUrl.pathname = "/api/chat/cancel";
+  const cancelUrl = new URL("/api/hermes", window.location.origin);
+  cancelUrl.searchParams.set("baseUrl", webuiBaseUrl);
+  cancelUrl.searchParams.set("path", "/api/chat/cancel");
   cancelUrl.searchParams.set("stream_id", streamId);
-  await fetch(cancelUrl.toString(), { headers: DAYTONA_HEADERS }).catch(() => {});
+  await fetch(cancelUrl.toString()).catch(() => {});
 }
 
 export async function respondApproval(
@@ -114,9 +102,8 @@ export async function respondApproval(
   sessionId: string,
   choice: "once" | "session" | "always" | "deny",
 ): Promise<void> {
-  await fetch(buildUrl(webuiBaseUrl, "/api/approval/respond"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...DAYTONA_HEADERS },
-    body: JSON.stringify({ session_id: sessionId, choice }),
+  await proxyPost("/api/approval/respond", webuiBaseUrl, {
+    session_id: sessionId,
+    choice,
   }).catch(() => {});
 }
