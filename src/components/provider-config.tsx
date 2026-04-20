@@ -188,9 +188,13 @@ export function ProviderSection({
         className="w-full px-5 py-4 flex items-center justify-between"
       >
         <div className="flex items-center gap-3">
-          <button
+          <div
+            role="radio"
+            aria-checked={isActive}
+            tabIndex={0}
             onClick={(e) => { e.stopPropagation(); onToggleActive(); }}
-            className={`w-4 h-4 rounded-full border-2 transition-all flex items-center justify-center ${
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); onToggleActive(); } }}
+            className={`w-4 h-4 rounded-full border-2 transition-all flex items-center justify-center cursor-pointer ${
               isActive
                 ? "border-white bg-white"
                 : "border-white/30 hover:border-white/50"
@@ -199,7 +203,7 @@ export function ProviderSection({
             {isActive && (
               <div className="w-1.5 h-1.5 rounded-full bg-black" />
             )}
-          </button>
+          </div>
           <img
             src={provider.iconUrl}
             alt=""
