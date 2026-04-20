@@ -269,7 +269,7 @@ export default function SkillPage({
         await removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
         setSession(null);
         sessionRef.current = null;
-        setPhase("config");
+        setPhase("launching");
         setSandboxState("error");
         setSandboxError("Failed to save sandbox record. Please try again.");
         return;
