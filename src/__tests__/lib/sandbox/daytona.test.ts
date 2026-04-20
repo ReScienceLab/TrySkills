@@ -289,12 +289,12 @@ describe("sandbox/daytona", () => {
       );
 
       expect(progress).toContain("swapping");
-      expect(progress).toContain("restarting");
+      expect(progress).not.toContain("restarting");
       expect(session.sandboxId).toBe("sb-test-123");
 
       const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
       expect(allCmds.some((c: string) => c.includes("rm -rf /home/daytona/.hermes/skills/*"))).toBe(true);
-      expect(allCmds.some((c: string) => c.includes("pkill -f"))).toBe(true);
+      expect(allCmds.every((c: string) => !c.includes("pkill -f"))).toBe(true);
     });
 
     it("throws on unexpected sandbox state", async () => {

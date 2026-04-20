@@ -31,7 +31,7 @@ describe("LaunchProgress", () => {
       <LaunchProgress state="swapping" onRetry={() => {}} onCancel={() => {}} mode="hotswap" />,
     );
     expect(container.textContent).toContain("Swapping skill");
-    expect(container.textContent).toContain("Restarting gateway");
+    expect(container.textContent).not.toContain("Restarting gateway");
     expect(container.textContent).toContain("Ready");
   });
 
@@ -41,7 +41,7 @@ describe("LaunchProgress", () => {
     );
     expect(container.textContent).toContain("Waking sandbox");
     expect(container.textContent).toContain("Swapping skill");
-    expect(container.textContent).toContain("Restarting gateway");
+    expect(container.textContent).not.toContain("Restarting gateway");
     expect(container.textContent).toContain("Ready");
   });
 

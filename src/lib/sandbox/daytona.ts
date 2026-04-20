@@ -254,7 +254,8 @@ export async function createHermesSandbox(
 
 /**
  * Hot-swap skill files in an existing running sandbox.
- * Cleans old skills, uploads new ones, rewrites config, and restarts the gateway.
+ * Cleans old skills, uploads new ones, and rewrites config.
+ * Skills are loaded per-session by Hermes, so no gateway restart is needed.
  */
 export async function hotSwapSkill(
   config: SandboxConfig,
@@ -302,15 +303,8 @@ export async function hotSwapSkill(
     await sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
   }
 
-  onProgress("restarting");
-
-  const agentDir = "/opt/hermes-agent";
-  const hermesCmd = `${agentDir}/venv/bin/hermes`;
-
-  await sandbox.process.executeCommand(
-    `pkill -f "hermes gateway" 2>/dev/null; sleep 1; nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
-  ).catch(() => {});
-
+  // No gateway restart needed -- Hermes loads skills per-session from disk.
+  // Just verify the gateway is still healthy.
   await waitForHealth(sandbox);
 
   const preview = await sandbox.getPreviewLink(WEBUI_PORT);

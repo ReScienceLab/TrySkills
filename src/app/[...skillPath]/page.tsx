@@ -143,8 +143,8 @@ export default function SkillPage({
 
           window.open(result.webuiUrl, "_blank", "noopener,noreferrer");
           return;
-        } catch {
-          // Hot-swap failed, fall through to cold create
+        } catch (swapErr) {
+          console.error("[hot-swap] Failed, falling back to cold create:", swapErr);
           await updatePoolState({
             sandboxId: claimed.sandboxId,
             poolState: "stopped",
