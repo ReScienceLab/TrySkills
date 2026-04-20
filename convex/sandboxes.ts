@@ -126,11 +126,14 @@ export const claimWarm = mutation({
       )
       .collect();
 
-    const warm = sandboxes.find((s) => s.poolState === "warm");
-    if (!warm) return null;
+    // Match warm OR active (active = previous session didn't cleanly transition to warm)
+    const reusable = sandboxes.find(
+      (s) => s.poolState === "warm" || s.poolState === "active",
+    );
+    if (!reusable) return null;
 
-    await ctx.db.patch("sandboxes", warm._id, { poolState: "swapping" });
-    return { sandboxId: warm.sandboxId, webuiUrl: warm.webuiUrl };
+    await ctx.db.patch("sandboxes", reusable._id, { poolState: "swapping" });
+    return { sandboxId: reusable.sandboxId, webuiUrl: reusable.webuiUrl };
   },
 });
 

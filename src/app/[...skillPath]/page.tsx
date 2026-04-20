@@ -261,7 +261,7 @@ export default function SkillPage({
       launchAbortRef.current?.abort();
       autoLaunchLock.delete(skillKey);
       // Mark sandbox as warm instead of destroying it
-      if (sessionRef.current && launchConfigRef.current) {
+      if (sessionRef.current) {
         markWarmMut({ sandboxId: sessionRef.current.sandboxId }).catch(() => {});
       }
     };
@@ -270,6 +270,10 @@ export default function SkillPage({
       window.removeEventListener("beforeunload", cleanup);
       launchAbortRef.current?.abort();
       autoLaunchLock.delete(skillKey);
+      // Also mark warm on SPA navigation (React cleanup)
+      if (sessionRef.current) {
+        markWarmMut({ sandboxId: sessionRef.current.sandboxId }).catch(() => {});
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [skillKey]);
