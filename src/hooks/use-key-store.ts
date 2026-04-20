@@ -12,10 +12,22 @@ export interface StoredConfig {
   model: string;
   llmKey: string;
   sandboxKey: string;
+  providerKeys?: Record<string, string>;
 }
 
 function lsKey(userId: string): string {
   return `tryskills-config-${userId}`;
+}
+
+function migrateConfig(raw: StoredConfig): StoredConfig {
+  if (!raw.providerKeys) {
+    const providerKeys: Record<string, string> = {};
+    if (raw.providerId && raw.llmKey) {
+      providerKeys[raw.providerId] = raw.llmKey;
+    }
+    return { ...raw, providerKeys };
+  }
+  return raw;
 }
 
 function readLocalCache(userId: string): StoredConfig | null {
@@ -23,7 +35,11 @@ function readLocalCache(userId: string): StoredConfig | null {
     const raw = localStorage.getItem(lsKey(userId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StoredConfig;
-    if (parsed.llmKey && parsed.sandboxKey) return parsed;
+    if (parsed.providerKeys) {
+      const activeKey = parsed.providerKeys[parsed.providerId] ?? "";
+      if (activeKey && parsed.sandboxKey) return { ...parsed, llmKey: activeKey };
+    }
+    if (parsed.llmKey && parsed.sandboxKey) return migrateConfig(parsed);
     return null;
   } catch {
     return null;
@@ -78,9 +94,11 @@ export function useKeyStore() {
       .then((key) => decrypt(data.encryptedData, data.iv, key))
       .then((plaintext) => {
         if (cancelled) return;
-        const parsed = JSON.parse(plaintext) as StoredConfig;
-        localStorage.setItem(lsKey(userId), JSON.stringify(parsed));
-        setDecryptedConfig(parsed);
+        const parsed = migrateConfig(JSON.parse(plaintext) as StoredConfig);
+        const activeKey = parsed.providerKeys?.[parsed.providerId] ?? parsed.llmKey;
+        const materialized = { ...parsed, llmKey: activeKey };
+        localStorage.setItem(lsKey(userId), JSON.stringify(materialized));
+        setDecryptedConfig(materialized);
         setDecryptedForId(id);
       })
       .catch(() => {
@@ -148,14 +166,19 @@ export function useKeyStore() {
 
   const save = useCallback(
     async (newConfig: StoredConfig) => {
-      setLocalOverride(newConfig);
+      const providerKeys = { ...(newConfig.providerKeys ?? {}) };
+      if (newConfig.providerId && newConfig.llmKey) {
+        providerKeys[newConfig.providerId] = newConfig.llmKey;
+      }
+      const toStore = { ...newConfig, providerKeys };
+      setLocalOverride(toStore);
       setHasUserSaved(true);
       if (user) {
-        localStorage.setItem(lsKey(user.id), JSON.stringify(newConfig));
+        localStorage.setItem(lsKey(user.id), JSON.stringify(toStore));
       }
       if (isAuthenticated && user) {
         const key = await deriveKey(user.id);
-        const { ciphertext, iv } = await encrypt(JSON.stringify(newConfig), key);
+        const { ciphertext, iv } = await encrypt(JSON.stringify(toStore), key);
         await saveToConvex({ encryptedData: ciphertext, iv });
       }
     },

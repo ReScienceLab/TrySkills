@@ -8,7 +8,6 @@ import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { ConfigPanel, type LaunchConfig } from "@/components/config-panel";
 import { LaunchProgress } from "@/components/launch-progress";
-import { SandboxSkeleton } from "@/components/sandbox-skeleton";
 import { SessionControl } from "@/components/session-control";
 import { GlowMesh } from "@/components/glow-mesh";
 import { SiteHeader } from "@/components/site-header";
@@ -34,7 +33,7 @@ export default function SkillPage({
   const resolvedParams = use(params);
   const { skillPath } = resolvedParams;
   const { isSignedIn, isLoaded: authLoaded } = useAuth();
-  const { config: savedConfig, loading: keysLoading, save } = useKeyStore();
+  const { config: savedConfig, loading: keysLoading } = useKeyStore();
   const createSandboxRecord = useMutation(api.sandboxes.create);
   const removeSandboxRecord = useMutation(api.sandboxes.remove);
   const updateSandboxState = useMutation(api.sandboxes.updateState);
@@ -74,12 +73,8 @@ export default function SkillPage({
     placeholderIdRef.current = placeholderId;
 
     try {
-      await save({
-        providerId: config.provider.id,
-        model: config.model,
-        llmKey: config.llmKey,
-        sandboxKey: config.sandboxKey,
-      });
+      // Config is already saved by ConfigPanelForm.handleLaunch or auto-launch;
+      // do not save again here to avoid overwriting providerKeys with stale data.
 
       await createSandboxRecord({
         sandboxId: placeholderId,
@@ -301,7 +296,6 @@ export default function SkillPage({
 
           {phase === "launching" && (
             <div className="space-y-6">
-              <SandboxSkeleton skillName={skillName} />
               <LaunchProgress
                 state={sandboxState}
                 error={sandboxError}

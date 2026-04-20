@@ -257,7 +257,8 @@ export async function destroySandbox(
     });
     const sandbox = await daytona.get(sandboxId);
     await daytona.delete(sandbox);
-  } catch {
-    // best-effort cleanup
+  } catch (err) {
+    // Re-throw so callers can decide whether to keep the dashboard record
+    throw err;
   }
 }
