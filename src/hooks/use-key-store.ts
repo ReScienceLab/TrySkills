@@ -104,15 +104,16 @@ export function useKeyStore() {
 
     if (isAuthenticated && storedKeys !== undefined) {
       if (storedKeys === null) {
-        // Convex has no keys. If we have a local cache, use it as a fallback
-        // and let the replay effect sync it to Convex. This handles:
-        // - User saved locally before auth synced (replay pending)
-        // - Page reload with keys only in localStorage (will auto-sync)
-        // The clear() function wipes both localStorage AND Convex, so a
-        // legitimate deletion won't have stale local cache.
+        // Convex explicitly has no keys. Respect the backend as authoritative —
+        // this handles cross-device deletion correctly.
+        // Clear stale local cache to prevent resurrection on other devices.
         if (isSignedIn && user) {
           const cached = readLocalCache(user.id);
-          if (cached) return cached;
+          if (cached) {
+            // Only keep local cache if user just saved in this session
+            // (hasUserSaved check is above), otherwise wipe it
+            localStorage.removeItem(lsKey(user.id));
+          }
         }
         return null;
       }
