@@ -76,6 +76,14 @@ export function LaunchProgress({
           </span>
         </div>
 
+        {mode !== "hotswap" && (
+          <div className="mb-6 px-3 py-2 bg-white/[0.03] border border-white/8 rounded">
+            <p className="text-xs text-white/35">
+              First launch takes longer while the environment is set up. Subsequent launches reuse this sandbox and are near-instant.
+            </p>
+          </div>
+        )}
+
         <div className="relative ml-1 mb-8">
           {steps.map((step, i) => {
             const isActive = step.key === state;
