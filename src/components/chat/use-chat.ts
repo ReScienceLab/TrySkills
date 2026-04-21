@@ -198,7 +198,21 @@ export function useChat(
           sessionIdRef.current = sid;
           setSessionId(sid);
           setError(null);
-          await startStream(sid, `I want to try the ${skillName} skill`);
+          // Send first message directly (not via startStream which swallows errors)
+          const firstMessage = `I want to try the ${skillName} skill`;
+          const streamId = await sendMessage(webuiBaseUrl, sid, firstMessage, model);
+          // Message sent successfully -- now stream the response
+          setMessages([{ role: "user", content: firstMessage }]);
+          setIsStreaming(true);
+          streamIdRef.current = streamId;
+          const unsub = streamResponse(
+            webuiBaseUrl,
+            streamId,
+            handleSSEEvent,
+            (err) => setError(err.message),
+            () => setIsStreaming(false),
+          );
+          cancelRef.current = unsub;
           return;
         } catch (err) {
           if (attempt === MAX_RETRIES) {

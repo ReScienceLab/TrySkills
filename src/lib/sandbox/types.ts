@@ -24,6 +24,7 @@ export interface SandboxSession {
   webuiBaseUrl: string;
   state: SandboxState;
   startedAt: number;
+  urlRefreshed?: boolean;
   cpu?: number;
   memory?: number;
   disk?: number;

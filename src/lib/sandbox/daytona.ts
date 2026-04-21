@@ -371,12 +371,14 @@ export async function installSkill(
   // Reuse existing signed URL if still fresh
   const urlAge = options?.webuiUrlCreatedAt ? Date.now() - options.webuiUrlCreatedAt : Infinity;
   let webuiUrl: string;
+  let urlRefreshed = false;
   if (options?.existingWebuiUrl && urlAge < SIGNED_URL_FRESH_MS) {
     webuiUrl = options.existingWebuiUrl;
     log("reused existing signed URL");
   } else {
     const signedPreview = await sandbox.getSignedPreviewUrl(WEBUI_PORT, SIGNED_URL_TTL_SECONDS);
     webuiUrl = signedPreview.url;
+    urlRefreshed = true;
     log("new signed URL obtained");
   }
 
@@ -384,6 +386,7 @@ export async function installSkill(
     sandboxId: sandbox.id,
     webuiUrl,
     webuiBaseUrl: webuiUrl,
+    urlRefreshed,
     state: "running",
     startedAt: Date.now(),
     cpu: sandbox.cpu,

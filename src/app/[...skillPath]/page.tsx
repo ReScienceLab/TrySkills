@@ -164,8 +164,8 @@ export default function SkillPage({
           poolState: "active",
           currentSkillPath: skillPathStr,
           webuiUrl: result.webuiUrl,
-          configHash: sameConfig ? undefined : configHash, // only update if we actually wrote config files
-          webuiUrlCreatedAt: Date.now(),
+          configHash: sameConfig ? undefined : configHash,
+          webuiUrlCreatedAt: result.urlRefreshed ? Date.now() : undefined,
         }).catch(() => {});
         addInstalledSkillMut({ sandboxId: sandbox.sandboxId, skillPath: skillPathStr }).catch(() => {});
         recordTrial({ sandboxId: sandbox.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
