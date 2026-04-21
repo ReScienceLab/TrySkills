@@ -500,6 +500,8 @@ export default function SkillPage({
                 }
                 setSession(null);
                 sessionRef.current = null;
+                autoLaunchFired.current = false;
+                autoLaunchLock.delete(skillKey);
                 setPhase("config");
               }}
             />
