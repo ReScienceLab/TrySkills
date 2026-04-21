@@ -101,8 +101,7 @@ describe("sandbox/daytona", () => {
     );
   });
 
-  it("falls back to cold install when snapshot not available", async () => {
-    // First call (snapshot) fails, second call (fallback) succeeds
+  it("falls back to image-based create when snapshot not available", async () => {
     mockCreate
       .mockRejectedValueOnce(new Error("Snapshot not found"))
       .mockResolvedValueOnce(mockSandbox);
@@ -117,7 +116,9 @@ describe("sandbox/daytona", () => {
     );
 
     expect(mockCreate).toHaveBeenCalledTimes(2);
-    expect(progress).toContain("installing");
+    // Image fallback uses snapshot-like setup (configuring, not installing)
+    expect(progress).toContain("configuring");
+    expect(progress).not.toContain("installing");
     expect(session.sandboxId).toBe("sb-test-123");
   });
 
