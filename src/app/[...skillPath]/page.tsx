@@ -171,10 +171,17 @@ export default function SkillPage({
         recordTrial({ sandboxId: sandbox.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
         return;
       } catch (err) {
-        console.error("[install] installSkill failed:", err);
-        setSandboxState("error");
-        setSandboxError(err instanceof Error ? err.message : "Install failed");
-        return;
+        const msg = err instanceof Error ? err.message.toLowerCase() : "";
+        if (msg.includes("not found")) {
+          console.error("[install] Sandbox not found in Daytona, removing stale record");
+          removeSandboxRecord({ sandboxId: sandbox.sandboxId }).catch(() => {});
+          // Fall through to cold create path below
+        } else {
+          console.error("[install] installSkill failed:", err);
+          setSandboxState("error");
+          setSandboxError(err instanceof Error ? err.message : "Install failed");
+          return;
+        }
       }
     }
 
