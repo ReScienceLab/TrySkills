@@ -176,7 +176,6 @@ export async function createHermesSandbox(
           autoDeleteInterval: AUTO_DELETE_MINUTES,
           public: true,
           labels,
-          resources: COLD_RESOURCES,
           envVars: {
             [providerMapping.envVar]: config.llmApiKey,
             API_SERVER_ENABLED: "true",
