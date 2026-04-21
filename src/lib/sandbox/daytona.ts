@@ -421,12 +421,21 @@ export async function findReusableSandbox(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function waitForHealth(sandbox: any): Promise<void> {
   const start = Date.now();
-  const healthCmd = `curl -sf http://localhost:${GATEWAY_PORT}/health 2>/dev/null`;
-  // Poll immediately, then every HEALTH_POLL_INTERVAL_MS
+  const gatewayCmd = `curl -sf http://localhost:${GATEWAY_PORT}/health 2>/dev/null`;
+  const webuiCmd = `curl -sf http://localhost:${WEBUI_PORT}/health 2>/dev/null || curl -sf -o /dev/null -w '%{http_code}' http://localhost:${WEBUI_PORT}/ 2>/dev/null | grep -q 200`;
+  let gatewayReady = false;
   while (Date.now() - start < HEALTH_TIMEOUT_MS) {
     try {
-      const result = await sandbox.process.executeCommand(healthCmd);
-      if (result.exitCode === 0) return;
+      if (!gatewayReady) {
+        const r = await sandbox.process.executeCommand(gatewayCmd);
+        if (r.exitCode === 0) gatewayReady = true;
+      }
+      if (gatewayReady) {
+        const r2 = await sandbox.process.executeCommand(
+          `curl -sf -o /dev/null http://localhost:${WEBUI_PORT}/ 2>/dev/null`,
+        );
+        if (r2.exitCode === 0) return;
+      }
     } catch {
       // not ready yet
     }
