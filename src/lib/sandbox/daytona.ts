@@ -145,6 +145,7 @@ export async function createHermesSandbox(
         autoDeleteInterval: AUTO_DELETE_MINUTES,
         public: true,
         labels,
+        resources: { disk: 10 },
         envVars: {
           [providerMapping.envVar]: config.llmApiKey,
           API_SERVER_ENABLED: "true",
@@ -196,6 +197,14 @@ export async function createHermesSandbox(
     `cat > ${webuiDir}/.env << 'WEOF'\n${buildWebuiEnv(agentDir)}\nWEOF`,
   ).catch(() => {});
   log("config written");
+
+  // Clean up disk space after cold install (venv cache, tmp downloads)
+  if (!usedSnapshot) {
+    await sandbox.process.executeCommand(
+      "rm -rf /tmp/camoufox* /tmp/pip-* /root/.cache/pip /root/.cache/uv 2>/dev/null; pip cache purge 2>/dev/null || true",
+    ).catch(() => {});
+    log("disk cleanup done");
+  }
 
   onProgress("uploading");
   log("uploading skill files");
