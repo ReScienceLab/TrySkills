@@ -9,7 +9,7 @@ export const create = mutation({
     state: v.optional(v.string()),
     poolState: v.optional(v.union(
       v.literal("active"),
-      v.literal("installing"),
+      v.literal("creating"),
       v.literal("stopped"),
     )),
     currentSkillPath: v.optional(v.string()),
@@ -25,20 +25,6 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
-
-    // Enforce single sandbox per user: remove old non-pending records
-    // only when inserting a real (non-placeholder) sandbox record
-    if (!args.sandboxId.startsWith("pending-")) {
-      const existing = await ctx.db
-        .query("sandboxes")
-        .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-        .collect();
-      for (const old of existing) {
-        if (!old.sandboxId.startsWith("pending-") && old.sandboxId !== args.sandboxId) {
-          await ctx.db.delete("sandboxes", old._id);
-        }
-      }
-    }
 
     return await ctx.db.insert("sandboxes", {
       tokenIdentifier: identity.tokenIdentifier,
@@ -141,7 +127,46 @@ export const heartbeat = mutation({
   },
 });
 
-export const claimSandbox = mutation({
+export const getSandbox = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    const sandboxes = await ctx.db
+      .query("sandboxes")
+      .withIndex("by_token", (q) =>
+        q.eq("tokenIdentifier", identity.tokenIdentifier),
+      )
+      // eslint-disable-next-line @convex-dev/no-collect-in-query
+      .collect();
+
+    const sandbox = sandboxes.find((s) => !s.sandboxId.startsWith("pending-"));
+    if (!sandbox) {
+      const STALE_PENDING_MS = 5 * 60 * 1000; // 5 min (covers slow/fallback cold creates)
+      const now = Date.now();
+      const pending = sandboxes.find(
+        (s) => s.sandboxId.startsWith("pending-") && now - s.createdAt < STALE_PENDING_MS,
+      );
+      if (pending) return { status: "creating" as const };
+      return null;
+    }
+
+    return {
+      status: "found" as const,
+      sandboxId: sandbox.sandboxId,
+      webuiUrl: sandbox.webuiUrl,
+      poolState: sandbox.poolState,
+      configHash: sandbox.configHash,
+      installedSkills: sandbox.installedSkills,
+      webuiUrlCreatedAt: sandbox.webuiUrlCreatedAt,
+      lastHeartbeat: sandbox.lastHeartbeat,
+      currentSkillPath: sandbox.currentSkillPath,
+    };
+  },
+});
+
+export const acquireCreateLock = mutation({
   args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -154,23 +179,39 @@ export const claimSandbox = mutation({
       )
       .collect();
 
-    const reusable = sandboxes.find((s) => {
-      if (s.sandboxId.startsWith("pending-")) return false;
-      return s.poolState === "active" || s.poolState === "stopped";
-    });
-    if (!reusable) return null;
+    const real = sandboxes.find((s) => !s.sandboxId.startsWith("pending-"));
+    if (real) {
+      return { status: "exists" as const, sandboxId: real.sandboxId };
+    }
 
-    await ctx.db.patch("sandboxes", reusable._id, { poolState: "installing" });
-    return {
-      sandboxId: reusable.sandboxId,
-      webuiUrl: reusable.webuiUrl,
-      currentSkillPath: reusable.currentSkillPath,
-      poolState: reusable.poolState,
-      configHash: reusable.configHash,
-      installedSkills: reusable.installedSkills,
-      webuiUrlCreatedAt: reusable.webuiUrlCreatedAt,
-      lastHeartbeat: reusable.lastHeartbeat,
-    };
+    const STALE_PENDING_MS = 5 * 60 * 1000;
+    const now = Date.now();
+
+    // Clean up stale pending records from crashed tabs
+    for (const s of sandboxes) {
+      if (s.sandboxId.startsWith("pending-") && now - s.createdAt > STALE_PENDING_MS) {
+        await ctx.db.delete("sandboxes", s._id);
+      }
+    }
+
+    const freshPending = sandboxes.find(
+      (s) => s.sandboxId.startsWith("pending-") && now - s.createdAt <= STALE_PENDING_MS,
+    );
+    if (freshPending) {
+      return { status: "creating" as const };
+    }
+
+    const placeholderId = `pending-${Date.now()}`;
+    await ctx.db.insert("sandboxes", {
+      tokenIdentifier: identity.tokenIdentifier,
+      sandboxId: placeholderId,
+      skillPath: "",
+      webuiUrl: "",
+      state: "creating",
+      poolState: "creating",
+      createdAt: Date.now(),
+    });
+    return { status: "acquired" as const, placeholderId };
   },
 });
 
@@ -208,7 +249,7 @@ export const updatePoolState = mutation({
     sandboxId: v.string(),
     poolState: v.union(
       v.literal("active"),
-      v.literal("installing"),
+      v.literal("creating"),
       v.literal("stopped"),
     ),
     currentSkillPath: v.optional(v.string()),
@@ -245,6 +286,33 @@ export const updatePoolState = mutation({
         patch.webuiUrlCreatedAt = args.webuiUrlCreatedAt;
       }
       await ctx.db.patch("sandboxes", sandbox._id, patch);
+    }
+    return null;
+  },
+});
+
+export const addInstalledSkill = mutation({
+  args: {
+    sandboxId: v.string(),
+    skillPath: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const sandbox = await ctx.db
+      .query("sandboxes")
+      .withIndex("by_sandbox", (q) => q.eq("sandboxId", args.sandboxId))
+      .unique();
+
+    if (sandbox && sandbox.tokenIdentifier === identity.tokenIdentifier) {
+      const current = sandbox.installedSkills ?? [];
+      if (!current.includes(args.skillPath)) {
+        await ctx.db.patch("sandboxes", sandbox._id, {
+          installedSkills: [...current, args.skillPath],
+        });
+      }
     }
     return null;
   },

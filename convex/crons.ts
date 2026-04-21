@@ -27,7 +27,7 @@ export const cleanupStaleSandboxes = internalMutation({
     const now = Date.now();
     for (const sandbox of staleSandboxes) {
       // Stale active sandboxes: mark as stopped (Daytona likely auto-stopped them)
-      if (sandbox.poolState === "active" || sandbox.poolState === "installing") {
+      if (sandbox.poolState === "active" || sandbox.poolState === "creating") {
         await ctx.runMutation(internal.sandboxes.internalMarkStopped, {
           sandboxId: sandbox.sandboxId,
         });

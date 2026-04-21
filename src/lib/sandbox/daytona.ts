@@ -249,6 +249,7 @@ export async function installSkill(
   skillName: string,
   skillFiles: SkillFile[],
   onProgress: (step: SandboxState) => void,
+  options?: { skipConfigWrite?: boolean },
 ): Promise<SandboxSession> {
   const { Daytona } = await getDaytonaSDK();
   const daytona = new Daytona({
@@ -273,23 +274,29 @@ export async function installSkill(
 
   onProgress("uploading");
 
-  // Write config and upload skill files in parallel (no cleanup of old skills)
+  // Upload skill files and optionally write config (skip if unchanged)
   const skillDirs = [...new Set(skillFiles.map((f) => {
     const destPath = `/home/daytona/.hermes/skills/${sanitizeSkillDir(skillName)}/${f.path}`;
     return destPath.substring(0, destPath.lastIndexOf("/"));
   }))];
 
-  await Promise.all([
-    sandbox.process.executeCommand(
-      `mkdir -p /home/daytona/.hermes && cat > /home/daytona/.hermes/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
-    ).catch(() => {}),
-    sandbox.process.executeCommand(
-      `cat > /home/daytona/.hermes/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider)}\nCFGEOF`,
-    ).catch(() => {}),
-    skillDirs.length > 0
-      ? sandbox.process.executeCommand(`mkdir -p ${skillDirs.map((d) => `"${d}"`).join(" ")}`).catch(() => {})
-      : Promise.resolve(),
-  ]);
+  const tasks: Promise<unknown>[] = [];
+  if (!options?.skipConfigWrite) {
+    tasks.push(
+      sandbox.process.executeCommand(
+        `mkdir -p /home/daytona/.hermes && cat > /home/daytona/.hermes/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
+      ).catch(() => {}),
+      sandbox.process.executeCommand(
+        `cat > /home/daytona/.hermes/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider)}\nCFGEOF`,
+      ).catch(() => {}),
+    );
+  }
+  if (skillDirs.length > 0) {
+    tasks.push(
+      sandbox.process.executeCommand(`mkdir -p ${skillDirs.map((d) => `"${d}"`).join(" ")}`).catch(() => {}),
+    );
+  }
+  await Promise.all(tasks);
 
   await Promise.all(
     skillFiles.map((file) => {
