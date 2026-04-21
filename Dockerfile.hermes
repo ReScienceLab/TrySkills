@@ -42,5 +42,5 @@ RUN cd /opt/hermes-webui && npm install --legacy-peer-deps 2>&1 || npm install -
 # Pre-create hermes home directory
 RUN mkdir -p /home/daytona/.hermes/skills /home/daytona/.hermes/logs
 
-# Cleanup caches to reduce image size
-RUN rm -rf /root/.cache /tmp/* /var/tmp/*
+# Cleanup caches to reduce image size (preserve Playwright browsers)
+RUN rm -rf /root/.cache/pip /root/.cache/uv /tmp/* /var/tmp/*
