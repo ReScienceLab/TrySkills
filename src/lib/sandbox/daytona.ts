@@ -88,7 +88,11 @@ export async function createHermesSandbox(
   userId?: string,
   callerOrigin?: string,
 ): Promise<SandboxSession & { usedSnapshot: boolean }> {
+  const t0 = Date.now();
+  const log = (label: string) => console.log(`[daytona] createHermesSandbox ${label}: ${Date.now() - t0}ms`);
+
   const { Daytona } = await getDaytonaSDK();
+  log("SDK loaded");
 
   const daytona = new Daytona({
     apiKey: config.daytonaApiKey,
@@ -128,6 +132,7 @@ export async function createHermesSandbox(
     );
     usedSnapshot = true;
   } catch (err) {
+    log("snapshot create failed, trying fallback");
     const msg = err instanceof Error ? err.message.toLowerCase() : "";
     const isSnapshotMissing = msg.includes("not found") || msg.includes("404") || msg.includes("unprocessable") || msg.includes("does not exist");
     if (!isSnapshotMissing) throw err;
@@ -153,6 +158,7 @@ export async function createHermesSandbox(
     );
   }
   activeSandbox = sandbox;
+  log(`sandbox created (snapshot=${usedSnapshot})`);
 
   if (usedSnapshot) {
     onProgress("configuring", { usedSnapshot: true });
@@ -164,6 +170,7 @@ export async function createHermesSandbox(
     ].join(" && ")).catch(() => {});
   } else {
     onProgress("installing", { usedSnapshot: false });
+    log("starting cold install");
     await sandbox.process.executeCommand(
       "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup 2>&1 || true",
     ).catch(() => {});
@@ -187,8 +194,10 @@ export async function createHermesSandbox(
   await sandbox.process.executeCommand(
     `cat > ${webuiDir}/.env << 'WEOF'\n${buildWebuiEnv(agentDir)}\nWEOF`,
   ).catch(() => {});
+  log("config written");
 
   onProgress("uploading");
+  log("uploading skill files");
   for (const file of skillFiles) {
     const destPath = `/home/daytona/.hermes/skills/${sanitizeSkillDir(skillName)}/${file.path}`;
     const dir = destPath.substring(0, destPath.lastIndexOf("/"));
@@ -197,6 +206,7 @@ export async function createHermesSandbox(
   }
 
   onProgress("starting");
+  log("skill files uploaded, starting gateway + webui");
 
   const hermesCmd = `${agentDir}/venv/bin/hermes`;
   const pythonCmd = `${agentDir}/venv/bin/python3`;
@@ -218,8 +228,10 @@ export async function createHermesSandbox(
   ).catch(() => {});
 
   await waitForHealth(sandbox);
+  log("health check passed");
 
   const signedPreview = await sandbox.getSignedPreviewUrl(WEBUI_PORT, SIGNED_URL_TTL_SECONDS);
+  log("signed URL obtained");
   console.log("[daytona] createHermesSandbox signedPreview URL:", signedPreview.url);
   const webuiUrl = signedPreview.url;
 
@@ -251,13 +263,18 @@ export async function installSkill(
   onProgress: (step: SandboxState) => void,
   options?: { skipConfigWrite?: boolean },
 ): Promise<SandboxSession> {
+  const t0 = Date.now();
+  const log = (label: string) => console.log(`[daytona] installSkill ${label}: ${Date.now() - t0}ms`);
+
   const { Daytona } = await getDaytonaSDK();
+  log("SDK loaded");
   const daytona = new Daytona({
     apiKey: config.daytonaApiKey,
     apiUrl: "https://app.daytona.io/api",
   });
 
   const sandbox = await daytona.get(sandboxId);
+  log("sandbox fetched");
   activeDaytona = daytona;
   activeSandbox = sandbox;
 
@@ -269,10 +286,12 @@ export async function installSkill(
       throw new Error(`Sandbox in unexpected state: ${sandbox.state}`);
     }
   }
+  log(`sandbox ready (state=${sandbox.state})`);
 
   const providerMapping = PROVIDER_ENV_MAP[config.llmProvider] || PROVIDER_ENV_MAP.openrouter;
 
   onProgress("uploading");
+  log(`uploading (skipConfig=${!!options?.skipConfigWrite})`);
 
   // Upload skill files and optionally write config (skip if unchanged)
   const skillDirs = [...new Set(skillFiles.map((f) => {
@@ -304,10 +323,13 @@ export async function installSkill(
       return sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
     }),
   );
+  log("files uploaded");
 
   await waitForHealth(sandbox);
+  log("health check passed");
 
   const signedPreview = await sandbox.getSignedPreviewUrl(WEBUI_PORT, SIGNED_URL_TTL_SECONDS);
+  log("signed URL obtained");
   const webuiUrl = signedPreview.url;
 
   return {
