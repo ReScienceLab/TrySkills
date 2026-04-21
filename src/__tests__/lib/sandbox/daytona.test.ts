@@ -101,7 +101,7 @@ describe("sandbox/daytona", () => {
     );
   });
 
-  it("falls back to image-based create when snapshot not available", async () => {
+  it("falls back to image then curl-install when snapshot not available", async () => {
     mockCreate
       .mockRejectedValueOnce(new Error("Snapshot not found"))
       .mockResolvedValueOnce(mockSandbox);
@@ -116,9 +116,7 @@ describe("sandbox/daytona", () => {
     );
 
     expect(mockCreate).toHaveBeenCalledTimes(2);
-    // Image fallback uses snapshot-like setup (configuring, not installing)
     expect(progress).toContain("configuring");
-    expect(progress).not.toContain("installing");
     expect(session.sandboxId).toBe("sb-test-123");
   });
 

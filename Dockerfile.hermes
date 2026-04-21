@@ -26,6 +26,15 @@ RUN ln -sf /opt/hermes-agent/venv/bin/hermes /usr/local/bin/hermes
 # Node deps for browser tooling
 RUN cd /opt/hermes-agent && npm install --silent 2>/dev/null || true
 
+# Playwright Chromium for browser-based skills
+RUN cd /opt/hermes-agent && npx playwright install --with-deps chromium 2>/dev/null || true
+
+# TUI dependencies (if present)
+RUN cd /opt/hermes-agent && if [ -f ui-tui/package.json ]; then cd ui-tui && npm install --silent 2>/dev/null; fi || true
+
+# WhatsApp bridge dependencies (if present)
+RUN cd /opt/hermes-agent && if [ -f scripts/whatsapp-bridge/package.json ]; then cd scripts/whatsapp-bridge && npm install --silent 2>/dev/null; fi || true
+
 # Hermes WebUI
 RUN git clone --depth 1 https://github.com/nesquena/hermes-webui.git /opt/hermes-webui
 RUN cd /opt/hermes-webui && npm install --legacy-peer-deps 2>&1 || npm install --force 2>&1 || true

@@ -140,43 +140,77 @@ export async function createHermesSandbox(
     const isSnapshotMissing = msg.includes("not found") || msg.includes("404") || msg.includes("unprocessable") || msg.includes("does not exist") || msg.includes("cannot specify");
     if (!isSnapshotMissing) throw err;
 
-    sandbox = await daytona.create(
-      {
-        image: HERMES_IMAGE,
-        autoStopInterval: AUTO_STOP_MINUTES,
-        autoArchiveInterval: AUTO_ARCHIVE_MINUTES,
-        autoDeleteInterval: AUTO_DELETE_MINUTES,
-        public: true,
-        labels,
-        resources: COLD_RESOURCES,
-        envVars: {
-          [providerMapping.envVar]: config.llmApiKey,
-          API_SERVER_ENABLED: "true",
-          API_SERVER_CORS_ORIGINS: "*",
-          GATEWAY_ALLOW_ALL_USERS: "true",
-          HERMES_WEBUI_ALLOWED_ORIGINS: callerOrigin
-            ? `${BASE_ALLOWED_ORIGINS},${callerOrigin}`
-            : BASE_ALLOWED_ORIGINS,
+    try {
+      sandbox = await daytona.create(
+        {
+          image: HERMES_IMAGE,
+          autoStopInterval: AUTO_STOP_MINUTES,
+          autoArchiveInterval: AUTO_ARCHIVE_MINUTES,
+          autoDeleteInterval: AUTO_DELETE_MINUTES,
+          public: true,
+          labels,
+          resources: COLD_RESOURCES,
+          envVars: {
+            [providerMapping.envVar]: config.llmApiKey,
+            API_SERVER_ENABLED: "true",
+            API_SERVER_CORS_ORIGINS: "*",
+            GATEWAY_ALLOW_ALL_USERS: "true",
+            HERMES_WEBUI_ALLOWED_ORIGINS: callerOrigin
+              ? `${BASE_ALLOWED_ORIGINS},${callerOrigin}`
+              : BASE_ALLOWED_ORIGINS,
+          },
         },
-      },
-      {
-        timeout: 300,
-        onSnapshotCreateLogs: (chunk) => console.log("[daytona] image build:", chunk),
-      },
-    );
-    usedSnapshot = true; // image-based sandbox has agent pre-installed at /opt/
+        {
+          timeout: 300,
+          onSnapshotCreateLogs: (chunk) => console.log("[daytona] image build:", chunk),
+        },
+      );
+      usedSnapshot = true;
+    } catch (imageErr) {
+      log("image fallback failed, trying bare create + curl install");
+      // Final fallback: bare sandbox + curl install (works even if GHCR image not published yet)
+      sandbox = await daytona.create(
+        {
+          autoStopInterval: AUTO_STOP_MINUTES,
+          autoArchiveInterval: AUTO_ARCHIVE_MINUTES,
+          autoDeleteInterval: AUTO_DELETE_MINUTES,
+          public: true,
+          labels,
+          resources: COLD_RESOURCES,
+          envVars: {
+            [providerMapping.envVar]: config.llmApiKey,
+            API_SERVER_ENABLED: "true",
+            API_SERVER_CORS_ORIGINS: "*",
+            GATEWAY_ALLOW_ALL_USERS: "true",
+            HERMES_WEBUI_ALLOWED_ORIGINS: callerOrigin
+              ? `${BASE_ALLOWED_ORIGINS},${callerOrigin}`
+              : BASE_ALLOWED_ORIGINS,
+          },
+        } as unknown as Parameters<typeof daytona.create>[0],
+        { timeout: 300 },
+      );
+      // usedSnapshot stays false -- needs curl install
+    }
   }
   activeSandbox = sandbox;
   log(`sandbox created (snapshot=${usedSnapshot})`);
 
-  // Both snapshot and image paths have agent at /opt/
-  onProgress("configuring", { usedSnapshot: true });
-  await sandbox.process.executeCommand([
-    "mkdir -p /home/daytona/.hermes/skills /home/daytona/.hermes/logs",
-    "ln -sfn /opt/hermes-agent /home/daytona/.hermes/hermes-agent",
-    "mkdir -p /home/daytona/.local/bin",
-    "ln -sf /opt/hermes-agent/venv/bin/hermes /home/daytona/.local/bin/hermes",
-  ].join(" && ")).catch(() => {});
+  if (usedSnapshot) {
+    onProgress("configuring", { usedSnapshot: true });
+    await sandbox.process.executeCommand([
+      "mkdir -p /home/daytona/.hermes/skills /home/daytona/.hermes/logs",
+      "ln -sfn /opt/hermes-agent /home/daytona/.hermes/hermes-agent",
+      "mkdir -p /home/daytona/.local/bin",
+      "ln -sf /opt/hermes-agent/venv/bin/hermes /home/daytona/.local/bin/hermes",
+    ].join(" && ")).catch(() => {});
+  } else {
+    onProgress("installing", { usedSnapshot: false });
+    log("starting curl install (final fallback)");
+    await sandbox.process.executeCommand(
+      "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup 2>&1 || true",
+    ).catch(() => {});
+    onProgress("configuring", { usedSnapshot: false });
+  }
 
   await sandbox.process.executeCommand(
     `mkdir -p /home/daytona/.hermes && cat > /home/daytona/.hermes/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
@@ -185,14 +219,25 @@ export async function createHermesSandbox(
     `cat > /home/daytona/.hermes/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider)}\nCFGEOF`,
   ).catch(() => {});
 
-  const agentDir = "/opt/hermes-agent";
-  const webuiDir = "/opt/hermes-webui";
+  const agentDir = usedSnapshot ? "/opt/hermes-agent" : "/home/daytona/.hermes/hermes-agent";
+  const webuiDir = usedSnapshot ? "/opt/hermes-webui" : "/home/daytona/hermes-webui";
+  if (!usedSnapshot) {
+    await sandbox.process.executeCommand(
+      "git clone --depth 1 https://github.com/nesquena/hermes-webui.git /home/daytona/hermes-webui 2>&1",
+    ).catch(() => {});
+  }
   await sandbox.process.executeCommand(
     `cat > ${webuiDir}/.env << 'WEOF'\n${buildWebuiEnv(agentDir)}\nWEOF`,
   ).catch(() => {});
   log("config written");
 
-  // Clean up disk space after cold install (venv cache, tmp downloads)
+  if (!usedSnapshot) {
+    await sandbox.process.executeCommand(
+      "rm -rf /tmp/camoufox* /tmp/pip-* /root/.cache /home/daytona/.cache && pip cache purge 2>/dev/null || true",
+    ).catch(() => {});
+    log("disk cleanup done");
+  }
+
   onProgress("uploading");
   log("uploading skill files");
   for (const file of skillFiles) {
