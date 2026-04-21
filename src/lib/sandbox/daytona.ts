@@ -161,7 +161,7 @@ export async function createHermesSandbox(
           },
         },
         {
-          timeout: 300,
+          timeout: 90,
           onSnapshotCreateLogs: (chunk) => console.log("[daytona] image build:", chunk),
         },
       );
