@@ -261,7 +261,7 @@ export async function installSkill(
   skillName: string,
   skillFiles: SkillFile[],
   onProgress: (step: SandboxState) => void,
-  options?: { skipConfigWrite?: boolean },
+  options?: { skipConfigWrite?: boolean; skipHealthCheck?: boolean },
 ): Promise<SandboxSession> {
   const t0 = Date.now();
   const log = (label: string) => console.log(`[daytona] installSkill ${label}: ${Date.now() - t0}ms`);
@@ -299,6 +299,7 @@ export async function installSkill(
     return destPath.substring(0, destPath.lastIndexOf("/"));
   }))];
 
+  // Run mkdir, config writes, AND file uploads all in parallel
   const tasks: Promise<unknown>[] = [];
   if (!options?.skipConfigWrite) {
     tasks.push(
@@ -315,18 +316,25 @@ export async function installSkill(
       sandbox.process.executeCommand(`mkdir -p ${skillDirs.map((d) => `"${d}"`).join(" ")}`).catch(() => {}),
     );
   }
-  await Promise.all(tasks);
-
-  await Promise.all(
-    skillFiles.map((file) => {
+  // Upload files in parallel with mkdir/config (don't wait for mkdir first)
+  tasks.push(
+    ...skillFiles.map(async (file) => {
       const destPath = `/home/daytona/.hermes/skills/${sanitizeSkillDir(skillName)}/${file.path}`;
+      const dir = destPath.substring(0, destPath.lastIndexOf("/"));
+      await sandbox.process.executeCommand(`mkdir -p "${dir}"`).catch(() => {});
       return sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
     }),
   );
+  await Promise.all(tasks);
   log("files uploaded");
 
-  await waitForHealth(sandbox);
-  log("health check passed");
+  // Skip health check if sandbox was already active (gateway already running)
+  if (!options?.skipHealthCheck) {
+    await waitForHealth(sandbox);
+    log("health check passed");
+  } else {
+    log("health check skipped (sandbox was active)");
+  }
 
   const signedPreview = await sandbox.getSignedPreviewUrl(WEBUI_PORT, SIGNED_URL_TTL_SECONDS);
   log("signed URL obtained");
