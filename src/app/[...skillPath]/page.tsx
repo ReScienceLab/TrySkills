@@ -493,10 +493,10 @@ export default function SkillPage({
               startedAt={session.startedAt}
               onStop={handleStop}
               onTryAnother={handleTryAnother}
-              onSessionError={() => {
-                // Sandbox may be dead -- clear record so next launch creates fresh
+              onSessionError={async () => {
+                // Sandbox may be dead -- clear record and wait before re-launching
                 if (session?.sandboxId) {
-                  removeSandboxRecord({ sandboxId: session.sandboxId }).catch(() => {});
+                  await removeSandboxRecord({ sandboxId: session.sandboxId }).catch(() => {});
                 }
                 setSession(null);
                 sessionRef.current = null;
