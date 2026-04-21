@@ -278,10 +278,37 @@ export async function installSkill(
   activeDaytona = daytona;
   activeSandbox = sandbox;
 
+  let wasStopped = false;
   if (sandbox.state !== "started") {
     if (sandbox.state === "stopped") {
       onProgress("starting");
+      wasStopped = true;
       await daytona.start(sandbox, 60);
+      log("sandbox started from stopped");
+
+      // Restart gateway + WebUI (processes die when sandbox stops)
+      const agentDir = "/opt/hermes-agent";
+      const webuiDir = "/opt/hermes-webui";
+      const hermesCmd = `${agentDir}/venv/bin/hermes`;
+      const pythonCmd = `${agentDir}/venv/bin/python3`;
+
+      await Promise.all([
+        sandbox.process.executeCommand(
+          `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
+        ).catch(() => {}),
+        sandbox.process.executeCommand(
+          [
+            `cd ${webuiDir}`,
+            `export HERMES_WEBUI_AGENT_DIR=${agentDir}`,
+            `export HERMES_WEBUI_PYTHON=${pythonCmd}`,
+            "export HERMES_WEBUI_HOST=0.0.0.0",
+            `export HERMES_WEBUI_PORT=${WEBUI_PORT}`,
+            "export HERMES_HOME=/home/daytona/.hermes",
+            `nohup ${pythonCmd} server.py > /tmp/hermes-webui.log 2>&1 &`,
+          ].join(" && "),
+        ).catch(() => {}),
+      ]);
+      log("gateway + webui restarted");
     } else {
       throw new Error(`Sandbox in unexpected state: ${sandbox.state}`);
     }
@@ -329,7 +356,7 @@ export async function installSkill(
   log("files uploaded");
 
   // Skip health check if sandbox was already active (gateway already running)
-  if (!options?.skipHealthCheck) {
+  if (wasStopped || !options?.skipHealthCheck) {
     await waitForHealth(sandbox);
     log("health check passed");
   } else {
