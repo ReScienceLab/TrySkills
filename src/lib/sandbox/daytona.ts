@@ -10,7 +10,6 @@ const GATEWAY_PORT = 8642;
 const WEBUI_PORT = 8787;
 const SIGNED_URL_TTL_SECONDS = 3600;
 const SIGNED_URL_FRESH_MS = 50 * 60 * 1000;
-const SNAPSHOT_RESOURCES = { cpu: 2, memory: 4, disk: 5 };
 const COLD_RESOURCES = { cpu: 2, memory: 4, disk: 10 };
 
 export interface SkillFile {
@@ -436,7 +435,6 @@ export async function findReusableSandbox(
 async function waitForHealth(sandbox: any): Promise<void> {
   const start = Date.now();
   const gatewayCmd = `curl -sf http://localhost:${GATEWAY_PORT}/health 2>/dev/null`;
-  const webuiCmd = `curl -sf http://localhost:${WEBUI_PORT}/health 2>/dev/null || curl -sf -o /dev/null -w '%{http_code}' http://localhost:${WEBUI_PORT}/ 2>/dev/null | grep -q 200`;
   let gatewayReady = false;
   while (Date.now() - start < HEALTH_TIMEOUT_MS) {
     try {
