@@ -144,7 +144,12 @@ export default function SkillPage({
             if (abort.signal.aborted) return;
             setSandboxState(step as SandboxState);
           },
-          { skipConfigWrite: sameConfig, skipHealthCheck: !isStopped },
+          {
+            skipConfigWrite: sameConfig,
+            skipHealthCheck: !isStopped,
+            existingWebuiUrl: sandbox.webuiUrl,
+            webuiUrlCreatedAt: sandbox.webuiUrlCreatedAt ?? undefined,
+          },
         );
 
         if (abort.signal.aborted) return;
@@ -159,17 +164,24 @@ export default function SkillPage({
           poolState: "active",
           currentSkillPath: skillPathStr,
           webuiUrl: result.webuiUrl,
-          configHash: sameConfig ? undefined : configHash, // only update if we actually wrote config files
-          webuiUrlCreatedAt: Date.now(),
+          configHash: sameConfig ? undefined : configHash,
+          webuiUrlCreatedAt: result.urlRefreshed ? Date.now() : undefined,
         }).catch(() => {});
         addInstalledSkillMut({ sandboxId: sandbox.sandboxId, skillPath: skillPathStr }).catch(() => {});
         recordTrial({ sandboxId: sandbox.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
         return;
       } catch (err) {
-        console.error("[install] installSkill failed:", err);
-        setSandboxState("error");
-        setSandboxError(err instanceof Error ? err.message : "Install failed");
-        return;
+        const msg = err instanceof Error ? err.message.toLowerCase() : "";
+        if (msg.includes("not found")) {
+          console.error("[install] Sandbox not found in Daytona, removing stale record");
+          await removeSandboxRecord({ sandboxId: sandbox.sandboxId }).catch(() => {});
+          // Fall through to cold create path below
+        } else {
+          console.error("[install] installSkill failed:", err);
+          setSandboxState("error");
+          setSandboxError(err instanceof Error ? err.message : "Install failed");
+          return;
+        }
       }
     }
 
@@ -481,6 +493,18 @@ export default function SkillPage({
               startedAt={session.startedAt}
               onStop={handleStop}
               onTryAnother={handleTryAnother}
+              onSessionError={async () => {
+                // Sandbox may be dead -- destroy Daytona sandbox + clear record
+                if (session?.sandboxId && launchConfigRef.current) {
+                  destroySandbox(launchConfigRef.current.sandboxKey, session.sandboxId).catch(() => {});
+                  await removeSandboxRecord({ sandboxId: session.sandboxId }).catch(() => {});
+                }
+                setSession(null);
+                sessionRef.current = null;
+                autoLaunchFired.current = false;
+                autoLaunchLock.delete(skillKey);
+                setPhase("config");
+              }}
             />
           )}
         </div>

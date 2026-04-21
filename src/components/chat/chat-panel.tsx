@@ -140,6 +140,7 @@ export function ChatPanel({
   webuiUrl,
   onStop,
   onTryAnother,
+  onSessionError,
 }: {
   webuiBaseUrl: string;
   model: string;
@@ -148,8 +149,9 @@ export function ChatPanel({
   webuiUrl: string;
   onStop: () => void;
   onTryAnother?: () => void;
+  onSessionError?: () => void;
 }) {
-  const { messages, isStreaming, error, approval, send, cancel, setApproval } = useChat(
+  const { messages, isStreaming, error, sessionFailed, approval, send, cancel, setApproval } = useChat(
     webuiBaseUrl,
     model,
     skillName,
@@ -238,6 +240,14 @@ export function ChatPanel({
         {error && (
           <div className="p-3 bg-red-500/10 border border-red-500/20 rounded text-sm text-red-400 mb-4">
             {error}
+            {sessionFailed && onSessionError && (
+              <button
+                onClick={onSessionError}
+                className="mt-2 block px-4 py-1.5 bg-red-500/20 hover:bg-red-500/30 rounded text-xs transition-all"
+              >
+                Reconnect (create new sandbox)
+              </button>
+            )}
           </div>
         )}
         {approval && (

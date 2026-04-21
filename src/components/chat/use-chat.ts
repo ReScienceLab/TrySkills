@@ -38,6 +38,7 @@ export function useChat(
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionFailed, setSessionFailed] = useState(false);
   const [approval, setApproval] = useState<ApprovalRequest | null>(null);
 
   const cancelRef = useRef<(() => void) | null>(null);
@@ -179,23 +180,51 @@ export function useChat(
     setIsStreaming(false);
   }, [webuiBaseUrl]);
 
-  // Auto-init: create session and send first message
+  // Auto-init: create session and send first message (with retry)
   useEffect(() => {
     if (!webuiBaseUrl || initRef.current) return;
     initRef.current = true;
 
+    const MAX_RETRIES = 3;
+    const RETRY_DELAYS = [2000, 4000, 8000];
+
     (async () => {
-      try {
-        const sid = await createSession(webuiBaseUrl, model);
-        sessionIdRef.current = sid;
-        setSessionId(sid);
-        await startStream(sid, `I want to try the ${skillName} skill`);
-      } catch (err) {
-        initRef.current = false; // allow retry on next render/remount
-        setError(err instanceof Error ? err.message : "Failed to connect");
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          if (attempt > 0) {
+            setError(`Retrying connection (${attempt}/${MAX_RETRIES})...`);
+            await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt - 1]));
+          }
+          const sid = await createSession(webuiBaseUrl, model);
+          sessionIdRef.current = sid;
+          setSessionId(sid);
+          setError(null);
+          // Send first message directly (not via startStream which swallows errors)
+          const firstMessage = `I want to try the ${skillName} skill`;
+          const streamId = await sendMessage(webuiBaseUrl, sid, firstMessage, model);
+          // Message sent successfully -- now stream the response
+          setMessages([{ role: "user", content: firstMessage }]);
+          setIsStreaming(true);
+          streamIdRef.current = streamId;
+          const unsub = streamResponse(
+            webuiBaseUrl,
+            streamId,
+            handleSSEEvent,
+            (err) => setError(err.message),
+            () => setIsStreaming(false),
+          );
+          cancelRef.current = unsub;
+          return;
+        } catch (err) {
+          if (attempt === MAX_RETRIES) {
+            initRef.current = false;
+            setSessionFailed(true);
+            setError(err instanceof Error ? err.message : "Failed to connect");
+          }
+        }
       }
     })();
   }, [webuiBaseUrl, model, skillName, startStream]);
 
-  return { messages, isStreaming, error, sessionId, approval, send, cancel, setApproval };
+  return { messages, isStreaming, error, sessionId, sessionFailed, approval, send, cancel, setApproval };
 }

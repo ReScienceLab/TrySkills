@@ -1,14 +1,17 @@
 import type { SandboxConfig, SandboxSession, SandboxState } from "./types";
 
 const SNAPSHOT_NAME = process.env.NEXT_PUBLIC_HERMES_SNAPSHOT || "hermes-ready";
+const HERMES_IMAGE = process.env.NEXT_PUBLIC_HERMES_IMAGE || "ghcr.io/resciencelab/hermes-ready:latest";
 const AUTO_STOP_MINUTES = 30;
 const AUTO_ARCHIVE_MINUTES = 60 * 24 * 2; // 2 days
 const AUTO_DELETE_MINUTES = 60 * 24 * 7; // 7 days
 const HEALTH_TIMEOUT_MS = 120_000;
-const HEALTH_POLL_INTERVAL_MS = 2_000;
+const HEALTH_POLL_INTERVAL_MS = 500;
 const GATEWAY_PORT = 8642;
 const WEBUI_PORT = 8787;
-const SIGNED_URL_TTL_SECONDS = 3600; // 1 hour signed preview URL
+const SIGNED_URL_TTL_SECONDS = 3600;
+const SIGNED_URL_FRESH_MS = 50 * 60 * 1000;
+const COLD_RESOURCES = { cpu: 2, memory: 4, disk: 10 };
 
 export interface SkillFile {
   path: string;
@@ -132,30 +135,61 @@ export async function createHermesSandbox(
     );
     usedSnapshot = true;
   } catch (err) {
-    log("snapshot create failed, trying fallback");
+    log("snapshot create failed, trying image fallback");
     const msg = err instanceof Error ? err.message.toLowerCase() : "";
-    const isSnapshotMissing = msg.includes("not found") || msg.includes("404") || msg.includes("unprocessable") || msg.includes("does not exist");
+    const isSnapshotMissing = msg.includes("not found") || msg.includes("404") || msg.includes("unprocessable") || msg.includes("does not exist") || msg.includes("cannot specify");
     if (!isSnapshotMissing) throw err;
 
-    sandbox = await daytona.create(
-      {
-        autoStopInterval: AUTO_STOP_MINUTES,
-        autoArchiveInterval: AUTO_ARCHIVE_MINUTES,
-        autoDeleteInterval: AUTO_DELETE_MINUTES,
-        public: true,
-        labels,
-        envVars: {
-          [providerMapping.envVar]: config.llmApiKey,
-          API_SERVER_ENABLED: "true",
-          API_SERVER_CORS_ORIGINS: "*",
-          GATEWAY_ALLOW_ALL_USERS: "true",
-          HERMES_WEBUI_ALLOWED_ORIGINS: callerOrigin
-            ? `${BASE_ALLOWED_ORIGINS},${callerOrigin}`
-            : BASE_ALLOWED_ORIGINS,
+    try {
+      sandbox = await daytona.create(
+        {
+          image: HERMES_IMAGE,
+          autoStopInterval: AUTO_STOP_MINUTES,
+          autoArchiveInterval: AUTO_ARCHIVE_MINUTES,
+          autoDeleteInterval: AUTO_DELETE_MINUTES,
+          public: true,
+          labels,
+          resources: COLD_RESOURCES,
+          envVars: {
+            [providerMapping.envVar]: config.llmApiKey,
+            API_SERVER_ENABLED: "true",
+            API_SERVER_CORS_ORIGINS: "*",
+            GATEWAY_ALLOW_ALL_USERS: "true",
+            HERMES_WEBUI_ALLOWED_ORIGINS: callerOrigin
+              ? `${BASE_ALLOWED_ORIGINS},${callerOrigin}`
+              : BASE_ALLOWED_ORIGINS,
+          },
         },
-      } as unknown as Parameters<typeof daytona.create>[0],
-      { timeout: 300 },
-    );
+        {
+          timeout: 90,
+          onSnapshotCreateLogs: (chunk) => console.log("[daytona] image build:", chunk),
+        },
+      );
+      usedSnapshot = true;
+    } catch (imageErr) {
+      log("image fallback failed, trying bare create + curl install");
+      // Final fallback: bare sandbox + curl install (works even if GHCR image not published yet)
+      sandbox = await daytona.create(
+        {
+          autoStopInterval: AUTO_STOP_MINUTES,
+          autoArchiveInterval: AUTO_ARCHIVE_MINUTES,
+          autoDeleteInterval: AUTO_DELETE_MINUTES,
+          public: true,
+          labels,
+          envVars: {
+            [providerMapping.envVar]: config.llmApiKey,
+            API_SERVER_ENABLED: "true",
+            API_SERVER_CORS_ORIGINS: "*",
+            GATEWAY_ALLOW_ALL_USERS: "true",
+            HERMES_WEBUI_ALLOWED_ORIGINS: callerOrigin
+              ? `${BASE_ALLOWED_ORIGINS},${callerOrigin}`
+              : BASE_ALLOWED_ORIGINS,
+          },
+        } as unknown as Parameters<typeof daytona.create>[0],
+        { timeout: 300 },
+      );
+      // usedSnapshot stays false -- needs curl install
+    }
   }
   activeSandbox = sandbox;
   log(`sandbox created (snapshot=${usedSnapshot})`);
@@ -170,7 +204,7 @@ export async function createHermesSandbox(
     ].join(" && ")).catch(() => {});
   } else {
     onProgress("installing", { usedSnapshot: false });
-    log("starting cold install");
+    log("starting curl install (final fallback)");
     await sandbox.process.executeCommand(
       "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup 2>&1 || true",
     ).catch(() => {});
@@ -195,6 +229,13 @@ export async function createHermesSandbox(
     `cat > ${webuiDir}/.env << 'WEOF'\n${buildWebuiEnv(agentDir)}\nWEOF`,
   ).catch(() => {});
   log("config written");
+
+  if (!usedSnapshot) {
+    await sandbox.process.executeCommand(
+      "rm -rf /tmp/camoufox* /tmp/pip-* /root/.cache /home/daytona/.cache && pip cache purge 2>/dev/null || true",
+    ).catch(() => {});
+    log("disk cleanup done");
+  }
 
   onProgress("uploading");
   log("uploading skill files");
@@ -261,7 +302,12 @@ export async function installSkill(
   skillName: string,
   skillFiles: SkillFile[],
   onProgress: (step: SandboxState) => void,
-  options?: { skipConfigWrite?: boolean; skipHealthCheck?: boolean },
+  options?: {
+    skipConfigWrite?: boolean;
+    skipHealthCheck?: boolean;
+    existingWebuiUrl?: string;
+    webuiUrlCreatedAt?: number;
+  },
 ): Promise<SandboxSession> {
   const t0 = Date.now();
   const log = (label: string) => console.log(`[daytona] installSkill ${label}: ${Date.now() - t0}ms`);
@@ -286,7 +332,6 @@ export async function installSkill(
       await daytona.start(sandbox, 60);
       log("sandbox started from stopped");
 
-      // Restart gateway + WebUI (processes die when sandbox stops)
       const agentDir = "/opt/hermes-agent";
       const webuiDir = "/opt/hermes-webui";
       const hermesCmd = `${agentDir}/venv/bin/hermes`;
@@ -318,18 +363,17 @@ export async function installSkill(
   const providerMapping = PROVIDER_ENV_MAP[config.llmProvider] || PROVIDER_ENV_MAP.openrouter;
 
   onProgress("uploading");
-  log(`uploading (skipConfig=${!!options?.skipConfigWrite})`);
+  log(`uploading (skipConfig=${!!options?.skipConfigWrite}, files=${skillFiles.length})`);
 
-  // Upload skill files and optionally write config (skip if unchanged)
-  const skillDirs = [...new Set(skillFiles.map((f) => {
+  // Batch ALL mkdir into one command, then parallel uploads
+  const allDirs = [...new Set(skillFiles.map((f) => {
     const destPath = `/home/daytona/.hermes/skills/${sanitizeSkillDir(skillName)}/${f.path}`;
     return destPath.substring(0, destPath.lastIndexOf("/"));
   }))];
 
-  // Run mkdir, config writes, AND file uploads all in parallel
-  const tasks: Promise<unknown>[] = [];
+  const setupTasks: Promise<unknown>[] = [];
   if (!options?.skipConfigWrite) {
-    tasks.push(
+    setupTasks.push(
       sandbox.process.executeCommand(
         `mkdir -p /home/daytona/.hermes && cat > /home/daytona/.hermes/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
       ).catch(() => {}),
@@ -338,39 +382,51 @@ export async function installSkill(
       ).catch(() => {}),
     );
   }
-  if (skillDirs.length > 0) {
-    tasks.push(
-      sandbox.process.executeCommand(`mkdir -p ${skillDirs.map((d) => `"${d}"`).join(" ")}`).catch(() => {}),
+  // One mkdir for ALL directories (batched)
+  if (allDirs.length > 0) {
+    setupTasks.push(
+      sandbox.process.executeCommand(`mkdir -p ${allDirs.map((d) => `"${d}"`).join(" ")}`).catch(() => {}),
     );
   }
-  // Upload files in parallel with mkdir/config (don't wait for mkdir first)
-  tasks.push(
-    ...skillFiles.map(async (file) => {
+  await Promise.all(setupTasks);
+  log("setup done (mkdir + config)");
+
+  // Pure parallel file uploads (no per-file mkdir)
+  await Promise.all(
+    skillFiles.map((file) => {
       const destPath = `/home/daytona/.hermes/skills/${sanitizeSkillDir(skillName)}/${file.path}`;
-      const dir = destPath.substring(0, destPath.lastIndexOf("/"));
-      await sandbox.process.executeCommand(`mkdir -p "${dir}"`).catch(() => {});
       return sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
     }),
   );
-  await Promise.all(tasks);
   log("files uploaded");
 
-  // Skip health check if sandbox was already active (gateway already running)
+  // Health check: only when waking from stopped
   if (wasStopped || !options?.skipHealthCheck) {
     await waitForHealth(sandbox);
     log("health check passed");
   } else {
-    log("health check skipped (sandbox was active)");
+    log("health check skipped");
   }
 
-  const signedPreview = await sandbox.getSignedPreviewUrl(WEBUI_PORT, SIGNED_URL_TTL_SECONDS);
-  log("signed URL obtained");
-  const webuiUrl = signedPreview.url;
+  // Reuse existing signed URL if still fresh
+  const urlAge = options?.webuiUrlCreatedAt ? Date.now() - options.webuiUrlCreatedAt : Infinity;
+  let webuiUrl: string;
+  let urlRefreshed = false;
+  if (options?.existingWebuiUrl && urlAge < SIGNED_URL_FRESH_MS) {
+    webuiUrl = options.existingWebuiUrl;
+    log("reused existing signed URL");
+  } else {
+    const signedPreview = await sandbox.getSignedPreviewUrl(WEBUI_PORT, SIGNED_URL_TTL_SECONDS);
+    webuiUrl = signedPreview.url;
+    urlRefreshed = true;
+    log("new signed URL obtained");
+  }
 
   return {
     sandboxId: sandbox.id,
     webuiUrl,
     webuiBaseUrl: webuiUrl,
+    urlRefreshed,
     state: "running",
     startedAt: Date.now(),
     cpu: sandbox.cpu,
@@ -408,11 +464,20 @@ export async function findReusableSandbox(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function waitForHealth(sandbox: any): Promise<void> {
   const start = Date.now();
-  const healthCmd = `curl -sf http://localhost:${GATEWAY_PORT}/health 2>/dev/null`;
+  const gatewayCmd = `curl -sf http://localhost:${GATEWAY_PORT}/health 2>/dev/null`;
+  let gatewayReady = false;
   while (Date.now() - start < HEALTH_TIMEOUT_MS) {
     try {
-      const result = await sandbox.process.executeCommand(healthCmd);
-      if (result.exitCode === 0) return;
+      if (!gatewayReady) {
+        const r = await sandbox.process.executeCommand(gatewayCmd);
+        if (r.exitCode === 0) gatewayReady = true;
+      }
+      if (gatewayReady) {
+        const r2 = await sandbox.process.executeCommand(
+          `curl -sf -o /dev/null http://localhost:${WEBUI_PORT}/ 2>/dev/null`,
+        );
+        if (r2.exitCode === 0) return;
+      }
     } catch {
       // not ready yet
     }

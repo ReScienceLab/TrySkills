@@ -121,15 +121,20 @@ describe("useChat", () => {
     expect(result.current.error).toBe("Something went wrong");
   });
 
-  it("handles createSession failure", async () => {
+  it("handles createSession failure after retries", async () => {
+    vi.useFakeTimers();
     mockCreateSession.mockRejectedValue(new Error("Connection refused"));
 
     const { result } = renderHook(() =>
       useChat("https://8787-abc.daytonaproxy01.net", "claude-3", "test-skill"),
     );
 
-    await vi.waitFor(() => {
-      expect(result.current.error).toBe("Connection refused");
-    });
+    // Advance through all retry delays (2s + 4s + 8s)
+    for (let i = 0; i < 4; i++) {
+      await vi.advanceTimersByTimeAsync(10000);
+    }
+
+    expect(result.current.error).toBe("Connection refused");
+    vi.useRealTimers();
   });
 });
