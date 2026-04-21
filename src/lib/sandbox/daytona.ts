@@ -5,10 +5,11 @@ const AUTO_STOP_MINUTES = 30;
 const AUTO_ARCHIVE_MINUTES = 60 * 24 * 2; // 2 days
 const AUTO_DELETE_MINUTES = 60 * 24 * 7; // 7 days
 const HEALTH_TIMEOUT_MS = 120_000;
-const HEALTH_POLL_INTERVAL_MS = 2_000;
+const HEALTH_POLL_INTERVAL_MS = 500;
 const GATEWAY_PORT = 8642;
 const WEBUI_PORT = 8787;
-const SIGNED_URL_TTL_SECONDS = 3600; // 1 hour signed preview URL
+const SIGNED_URL_TTL_SECONDS = 3600;
+const SIGNED_URL_FRESH_MS = 50 * 60 * 1000; // 50min = fresh enough to reuse
 
 export interface SkillFile {
   path: string;
@@ -261,7 +262,12 @@ export async function installSkill(
   skillName: string,
   skillFiles: SkillFile[],
   onProgress: (step: SandboxState) => void,
-  options?: { skipConfigWrite?: boolean; skipHealthCheck?: boolean },
+  options?: {
+    skipConfigWrite?: boolean;
+    skipHealthCheck?: boolean;
+    existingWebuiUrl?: string;
+    webuiUrlCreatedAt?: number;
+  },
 ): Promise<SandboxSession> {
   const t0 = Date.now();
   const log = (label: string) => console.log(`[daytona] installSkill ${label}: ${Date.now() - t0}ms`);
@@ -286,7 +292,6 @@ export async function installSkill(
       await daytona.start(sandbox, 60);
       log("sandbox started from stopped");
 
-      // Restart gateway + WebUI (processes die when sandbox stops)
       const agentDir = "/opt/hermes-agent";
       const webuiDir = "/opt/hermes-webui";
       const hermesCmd = `${agentDir}/venv/bin/hermes`;
@@ -318,18 +323,17 @@ export async function installSkill(
   const providerMapping = PROVIDER_ENV_MAP[config.llmProvider] || PROVIDER_ENV_MAP.openrouter;
 
   onProgress("uploading");
-  log(`uploading (skipConfig=${!!options?.skipConfigWrite})`);
+  log(`uploading (skipConfig=${!!options?.skipConfigWrite}, files=${skillFiles.length})`);
 
-  // Upload skill files and optionally write config (skip if unchanged)
-  const skillDirs = [...new Set(skillFiles.map((f) => {
+  // Batch ALL mkdir into one command, then parallel uploads
+  const allDirs = [...new Set(skillFiles.map((f) => {
     const destPath = `/home/daytona/.hermes/skills/${sanitizeSkillDir(skillName)}/${f.path}`;
     return destPath.substring(0, destPath.lastIndexOf("/"));
   }))];
 
-  // Run mkdir, config writes, AND file uploads all in parallel
-  const tasks: Promise<unknown>[] = [];
+  const setupTasks: Promise<unknown>[] = [];
   if (!options?.skipConfigWrite) {
-    tasks.push(
+    setupTasks.push(
       sandbox.process.executeCommand(
         `mkdir -p /home/daytona/.hermes && cat > /home/daytona/.hermes/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
       ).catch(() => {}),
@@ -338,34 +342,43 @@ export async function installSkill(
       ).catch(() => {}),
     );
   }
-  if (skillDirs.length > 0) {
-    tasks.push(
-      sandbox.process.executeCommand(`mkdir -p ${skillDirs.map((d) => `"${d}"`).join(" ")}`).catch(() => {}),
+  // One mkdir for ALL directories (batched)
+  if (allDirs.length > 0) {
+    setupTasks.push(
+      sandbox.process.executeCommand(`mkdir -p ${allDirs.map((d) => `"${d}"`).join(" ")}`).catch(() => {}),
     );
   }
-  // Upload files in parallel with mkdir/config (don't wait for mkdir first)
-  tasks.push(
-    ...skillFiles.map(async (file) => {
+  await Promise.all(setupTasks);
+  log("setup done (mkdir + config)");
+
+  // Pure parallel file uploads (no per-file mkdir)
+  await Promise.all(
+    skillFiles.map((file) => {
       const destPath = `/home/daytona/.hermes/skills/${sanitizeSkillDir(skillName)}/${file.path}`;
-      const dir = destPath.substring(0, destPath.lastIndexOf("/"));
-      await sandbox.process.executeCommand(`mkdir -p "${dir}"`).catch(() => {});
       return sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
     }),
   );
-  await Promise.all(tasks);
   log("files uploaded");
 
-  // Skip health check if sandbox was already active (gateway already running)
+  // Health check: only when waking from stopped
   if (wasStopped || !options?.skipHealthCheck) {
     await waitForHealth(sandbox);
     log("health check passed");
   } else {
-    log("health check skipped (sandbox was active)");
+    log("health check skipped");
   }
 
-  const signedPreview = await sandbox.getSignedPreviewUrl(WEBUI_PORT, SIGNED_URL_TTL_SECONDS);
-  log("signed URL obtained");
-  const webuiUrl = signedPreview.url;
+  // Reuse existing signed URL if still fresh
+  const urlAge = options?.webuiUrlCreatedAt ? Date.now() - options.webuiUrlCreatedAt : Infinity;
+  let webuiUrl: string;
+  if (options?.existingWebuiUrl && urlAge < SIGNED_URL_FRESH_MS) {
+    webuiUrl = options.existingWebuiUrl;
+    log("reused existing signed URL");
+  } else {
+    const signedPreview = await sandbox.getSignedPreviewUrl(WEBUI_PORT, SIGNED_URL_TTL_SECONDS);
+    webuiUrl = signedPreview.url;
+    log("new signed URL obtained");
+  }
 
   return {
     sandboxId: sandbox.id,
@@ -409,6 +422,7 @@ export async function findReusableSandbox(
 async function waitForHealth(sandbox: any): Promise<void> {
   const start = Date.now();
   const healthCmd = `curl -sf http://localhost:${GATEWAY_PORT}/health 2>/dev/null`;
+  // Poll immediately, then every HEALTH_POLL_INTERVAL_MS
   while (Date.now() - start < HEALTH_TIMEOUT_MS) {
     try {
       const result = await sandbox.process.executeCommand(healthCmd);
