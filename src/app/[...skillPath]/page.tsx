@@ -494,8 +494,9 @@ export default function SkillPage({
               onStop={handleStop}
               onTryAnother={handleTryAnother}
               onSessionError={async () => {
-                // Sandbox may be dead -- clear record and wait before re-launching
-                if (session?.sandboxId) {
+                // Sandbox may be dead -- destroy Daytona sandbox + clear record
+                if (session?.sandboxId && launchConfigRef.current) {
+                  destroySandbox(launchConfigRef.current.sandboxKey, session.sandboxId).catch(() => {});
                   await removeSandboxRecord({ sandboxId: session.sandboxId }).catch(() => {});
                 }
                 setSession(null);
