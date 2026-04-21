@@ -174,7 +174,7 @@ export default function SkillPage({
         const msg = err instanceof Error ? err.message.toLowerCase() : "";
         if (msg.includes("not found")) {
           console.error("[install] Sandbox not found in Daytona, removing stale record");
-          removeSandboxRecord({ sandboxId: sandbox.sandboxId }).catch(() => {});
+          await removeSandboxRecord({ sandboxId: sandbox.sandboxId }).catch(() => {});
           // Fall through to cold create path below
         } else {
           console.error("[install] installSkill failed:", err);
@@ -493,6 +493,15 @@ export default function SkillPage({
               startedAt={session.startedAt}
               onStop={handleStop}
               onTryAnother={handleTryAnother}
+              onSessionError={() => {
+                // Sandbox may be dead -- clear record so next launch creates fresh
+                if (session?.sandboxId) {
+                  removeSandboxRecord({ sandboxId: session.sandboxId }).catch(() => {});
+                }
+                setSession(null);
+                sessionRef.current = null;
+                setPhase("config");
+              }}
             />
           )}
         </div>

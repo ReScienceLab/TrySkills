@@ -38,6 +38,7 @@ export function useChat(
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionFailed, setSessionFailed] = useState(false);
   const [approval, setApproval] = useState<ApprovalRequest | null>(null);
 
   const cancelRef = useRef<(() => void) | null>(null);
@@ -217,6 +218,7 @@ export function useChat(
         } catch (err) {
           if (attempt === MAX_RETRIES) {
             initRef.current = false;
+            setSessionFailed(true);
             setError(err instanceof Error ? err.message : "Failed to connect");
           }
         }
@@ -224,5 +226,5 @@ export function useChat(
     })();
   }, [webuiBaseUrl, model, skillName, startStream]);
 
-  return { messages, isStreaming, error, sessionId, approval, send, cancel, setApproval };
+  return { messages, isStreaming, error, sessionId, sessionFailed, approval, send, cancel, setApproval };
 }
