@@ -86,11 +86,12 @@ export default function SkillPage({
   useHeartbeat(session?.sandboxId ?? null, savedConfig?.sandboxKey ?? null);
 
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
+  const [chatIsStreaming, setChatIsStreaming] = useState(false);
   const workspace = useWorkspace(
     session?.sandboxId ?? null,
     savedConfig?.sandboxKey ?? null,
     workspacePath,
-    phase === "running",
+    chatIsStreaming,
   );
 
   // For resumed sessions, set workspace path from Convex session data
@@ -435,6 +436,10 @@ export default function SkillPage({
     setWorkspacePath(path);
   }, []);
 
+  const handleStreamingChange = useCallback((streaming: boolean) => {
+    setChatIsStreaming(streaming);
+  }, []);
+
   if (!isValidPath) {
     return (
       <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
@@ -481,10 +486,12 @@ export default function SkillPage({
                 sandboxId={session.sandboxId}
                 sandboxKey={savedConfig?.sandboxKey}
                 defaultInput={resumeSession ? undefined : `I want to try the /${skillKey} skill`}
+                initialWorkspacePath={resumeSession?.workspacePath}
                 onStop={handleStop}
                 onTryAnother={handleTryAnother}
                 onToolComplete={workspace.onToolComplete}
                 onWorkspacePathChange={handleWorkspacePathChange}
+                onStreamingChange={handleStreamingChange}
                 onSessionError={async () => {
                   if (session?.sandboxId && launchConfigRef.current) {
                     destroySandbox(launchConfigRef.current.sandboxKey, session.sandboxId).catch(() => {});

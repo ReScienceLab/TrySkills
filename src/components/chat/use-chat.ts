@@ -172,6 +172,7 @@ export function useChat(
   onToolComplete?: (toolName: string) => void,
   sandboxId?: string | null,
   sandboxKey?: string | null,
+  initialWorkspacePath?: string | null,
 ) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages ?? [])
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([])
@@ -180,7 +181,7 @@ export function useChat(
   const [creditWarning, setCreditWarning] = useState<string | null>(null)
   const [sessionFailed, setSessionFailed] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(initialSessionId ?? null)
-  const [workspacePath, setWorkspacePath] = useState<string | null>(null)
+  const [workspacePath, setWorkspacePath] = useState<string | null>(initialWorkspacePath ?? null)
 
   const cancelRef = useRef<(() => void) | null>(null)
   const initRef = useRef(false)
@@ -237,7 +238,7 @@ export function useChat(
     [appendMessages],
   )
 
-  const workspacePathRef = useRef<string | null>(null)
+  const workspacePathRef = useRef<string | null>(initialWorkspacePath ?? null)
 
   const stream = useCallback(
     (allMessages: ChatMessage[]) => {
@@ -388,18 +389,23 @@ export function useChat(
           }
 
           if (!sessionIdRef.current && skillPath) {
+            // Generate workspace path before session creation so it can be persisted
+            const wsId = crypto.randomUUID().replace(/-/g, "").slice(0, 16)
+            const wsPath = `/root/.hermes/workspaces/${wsId}`
+
             const sid = await createSession({
               skillPath,
               title: `${skillName} session`,
               model,
+              workspacePath: wsPath,
             })
             const sidStr = sid as string
             sessionIdRef.current = sidStr
             setSessionId(sidStr)
 
-            const wsPath = `/root/.hermes/workspaces/${sidStr}`
             workspacePathRef.current = wsPath
             setWorkspacePath(wsPath)
+
             if (sandboxId && sandboxKey) {
               fetch("/api/workspace", {
                 method: "POST",

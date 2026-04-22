@@ -144,11 +144,13 @@ export function ChatPanel({
   sandboxId,
   sandboxKey,
   defaultInput,
+  initialWorkspacePath,
   onStop,
   onTryAnother,
   onSessionError,
   onToolComplete,
   onWorkspacePathChange,
+  onStreamingChange,
 }: {
   gatewayBaseUrl: string
   model: string
@@ -162,11 +164,13 @@ export function ChatPanel({
   sandboxId?: string | null
   sandboxKey?: string | null
   defaultInput?: string
+  initialWorkspacePath?: string | null
   onStop: () => void
   onTryAnother?: () => void
   onSessionError?: () => void
   onToolComplete?: (toolName: string) => void
   onWorkspacePathChange?: (path: string) => void
+  onStreamingChange?: (streaming: boolean) => void
 }) {
   const { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, workspacePath, send, cancel } = useChat(
     gatewayBaseUrl,
@@ -180,6 +184,7 @@ export function ChatPanel({
     onToolComplete,
     sandboxId,
     sandboxKey,
+    initialWorkspacePath,
   )
 
   const [input, setInput] = useState(defaultInput ?? "")
@@ -191,6 +196,11 @@ export function ChatPanel({
   useEffect(() => {
     if (workspacePath) onWorkspacePathChange?.(workspacePath)
   }, [workspacePath, onWorkspacePathChange])
+
+  // Propagate streaming state to parent for workspace polling
+  useEffect(() => {
+    onStreamingChange?.(isStreaming)
+  }, [isStreaming, onStreamingChange])
 
   // Keep browser URL in sync when session id changes (e.g. resume fallback creates new session)
   useEffect(() => {
