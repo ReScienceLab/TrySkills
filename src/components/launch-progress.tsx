@@ -65,7 +65,7 @@ export function LaunchProgress({
 
   return (
     <div className="animate-fade-in">
-      <div className="border border-white/20 bg-black/40 backdrop-blur-sm p-8">
+      <div className="border border-white/20 bg-black/40 backdrop-blur-sm p-8" role="status" aria-live="polite" aria-label="Launch progress">
         <div className="flex items-center gap-3 mb-8">
           <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
           <h2 className="text-base font-semibold text-white/90">

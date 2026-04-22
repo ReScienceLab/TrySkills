@@ -45,7 +45,12 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Welcome to TrySkills.sh — API key setup"
+    >
       <div className="w-full max-w-lg border border-white/20 bg-[#0a0a0a] shadow-2xl">
         <div className="px-6 py-5 border-b border-white/10">
           <h2 className="text-lg font-semibold text-white/90">Welcome to TrySkills.sh</h2>
@@ -101,11 +106,12 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
               </a>
 
               <div>
-                <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
+                <label htmlFor="onboarding-sandbox-key" className="block text-xs text-white/50 uppercase tracking-wider mb-2">
                   Paste your Daytona API Key
                 </label>
                 <div className="relative">
                   <input
+                    id="onboarding-sandbox-key"
                     type={showSandboxKey ? "text" : "password"}
                     value={sandboxKey}
                     onChange={(e) => setSandboxKey(e.target.value)}
@@ -115,6 +121,7 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
                   />
                   <button
                     onClick={() => setShowSandboxKey(!showSandboxKey)}
+                    aria-label={showSandboxKey ? "Hide Daytona API key" : "Show Daytona API key"}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors text-xs"
                   >
                     {showSandboxKey ? "Hide" : "Show"}

@@ -145,7 +145,7 @@ function SettingsForm({
               </div>
             </div>
             <div className="px-6 py-5">
-              <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
+              <label htmlFor="settings-sandbox-key" className="block text-xs text-white/50 uppercase tracking-wider mb-2">
                 Daytona API Key
                 <a href="https://app.daytona.io/dashboard/keys" target="_blank" rel="noopener noreferrer" className="ml-2 text-blue-400 hover:underline normal-case tracking-normal">
                   Get a key &rarr;
@@ -153,6 +153,7 @@ function SettingsForm({
               </label>
               <div className="relative">
                 <input
+                  id="settings-sandbox-key"
                   type={showSandboxKey ? "text" : "password"}
                   value={sandboxKey}
                   onChange={(e) => setSandboxKey(e.target.value)}
@@ -161,6 +162,7 @@ function SettingsForm({
                 />
                 <button
                   onClick={() => setShowSandboxKey(!showSandboxKey)}
+                  aria-label={showSandboxKey ? "Hide Daytona API key" : "Show Daytona API key"}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors text-xs"
                 >
                   {showSandboxKey ? "Hide" : "Show"}

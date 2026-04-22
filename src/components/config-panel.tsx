@@ -117,9 +117,10 @@ function ConfigPanelForm({
     <div className="animate-fade-in">
       <button
         onClick={onBack}
+        aria-label="Go back"
         className="flex items-center gap-2 text-sm text-white/40 hover:text-white/70 transition-colors mb-6"
       >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
         </svg>
         Back
@@ -131,12 +132,12 @@ function ConfigPanelForm({
         </div>
         <div className="px-6 py-5 space-y-5">
           <div>
-            <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">Provider</label>
+            <label htmlFor="provider-select" className="block text-xs text-white/50 uppercase tracking-wider mb-2">Provider</label>
             <ProviderTabs activeId={provider.id} onChange={handleProviderChange} />
           </div>
 
           <div>
-            <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">Model</label>
+            <label htmlFor="model-select" className="block text-xs text-white/50 uppercase tracking-wider mb-2">Model</label>
             <ModelSelector provider={provider} value={model} onChange={setModel} />
           </div>
 
@@ -156,7 +157,7 @@ function ConfigPanelForm({
           </div>
         </div>
         <div className="px-6 py-5">
-          <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
+          <label htmlFor="sandbox-key-input" className="block text-xs text-white/50 uppercase tracking-wider mb-2">
             Daytona API Key
             <a href="https://app.daytona.io/dashboard/keys" target="_blank" rel="noopener noreferrer" className="ml-2 text-blue-400 hover:underline normal-case tracking-normal">
               Get a key &rarr;
@@ -164,6 +165,7 @@ function ConfigPanelForm({
           </label>
           <div className="relative">
             <input
+              id="sandbox-key-input"
               type={showSandboxKey ? "text" : "password"}
               value={sandboxKey}
               onChange={(e) => setSandboxKey(e.target.value)}
@@ -172,6 +174,7 @@ function ConfigPanelForm({
             />
             <button
               onClick={() => setShowSandboxKey(!showSandboxKey)}
+              aria-label={showSandboxKey ? "Hide Daytona API key" : "Show Daytona API key"}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors text-xs"
             >
               {showSandboxKey ? "Hide" : "Show"}
