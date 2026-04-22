@@ -21,7 +21,7 @@ Always run type check + tests before committing.
 ├── src/
 │   ├── app/             → Next.js App Router pages
 │   │   ├── [...skillPath]/  → Skill page (launch + inline chat)
-│   │   ├── api/hermes/      → Server-side proxy for Hermes WebUI API
+│   │   ├── api/hermes/      → Server-side proxy for Hermes Gateway API
 │   │   ├── api/sandbox/     → Sandbox info + heartbeat API
 │   │   ├── dashboard/       → User dashboard (sandbox + skill trials)
 │   │   └── settings/        → API key settings
@@ -59,7 +59,10 @@ Each user gets one persistent Hermes agent sandbox (Daytona). Skills accumulate 
 - Stale pending locks expire after 5 minutes
 
 ### Hermes API Proxy
-All chat API calls go through `/api/hermes` (POST) and `/api/hermes/stream` (SSE) server-side routes. These add `X-Daytona-Skip-Preview-Warning` header to bypass the Daytona preview warning page. Proxy validates that `baseUrl` matches Daytona host patterns only.
+All chat API calls go through `/api/hermes` (POST) server-side route which proxies to the Gateway's `/v1/chat/completions` endpoint. The proxy adds `X-Daytona-Skip-Preview-Warning` header to bypass the Daytona preview warning page and validates that `baseUrl` matches Daytona host patterns only.
+
+### Session Management
+Chat sessions are stored in Convex (`chatSessions` table), not in the Gateway. Each skill trial creates a Convex session that persists messages across page reloads. Users can resume sessions from the dashboard via `?session=` URL parameter.
 
 ## Convex
 
@@ -72,8 +75,9 @@ Convex agent skills for common tasks can be installed by running `npx convex ai-
 <!-- convex-ai-end -->
 
 ### Key Tables
-- `sandboxes` — one row per user's sandbox (poolState, configHash, installedSkills, webuiUrl)
+- `sandboxes` — one row per user's sandbox (poolState, configHash, installedSkills, gatewayUrl)
 - `skillTrials` — records each skill launch (capped at 50 per query)
+- `chatSessions` — persistent chat sessions (skillPath, title, model, messages, timestamps)
 - `apiKeys` — encrypted user API keys (Clerk + AES)
 
 ### Deployment

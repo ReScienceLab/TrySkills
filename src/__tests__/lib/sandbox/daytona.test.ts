@@ -256,7 +256,7 @@ describe("sandbox/daytona", () => {
     const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
     const gwCmd = allCmds.find((c: string) => c.includes("hermes") && c.includes("gateway"));
     expect(gwCmd).toBeDefined();
-    // No WebUI (server.py) should be started -- only gateway
+    // No dashboard server (server.py) should be started -- only gateway
     const serverCmd = allCmds.find((c: string) => c.includes("server.py"));
     expect(serverCmd).toBeUndefined();
   });
