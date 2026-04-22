@@ -14,6 +14,7 @@
  */
 
 import { Daytona } from "@daytona/sdk";
+import { getProvider } from "../src/lib/providers/registry";
 
 const DAYTONA_API_KEY = process.env.DAYTONA_API_KEY;
 const LLM_API_KEY = process.env.LLM_API_KEY || "sk-placeholder-for-bench";
@@ -27,19 +28,15 @@ const SKIP_CLEANUP = process.env.SKIP_CLEANUP === "1";
 const GATEWAY_PORT = 8642;
 const WEBUI_PORT = 8787;
 
-const PROVIDER_ENV_MAP: Record<string, string> = {
-  openrouter: "OPENROUTER_API_KEY",
-  anthropic: "ANTHROPIC_API_KEY",
-  openai: "OPENAI_API_KEY",
-  google: "GOOGLE_API_KEY",
-};
-
-const INFERENCE_MAP: Record<string, string> = {
-  openrouter: "openrouter",
-  anthropic: "anthropic",
-  openai: "openrouter",
-  google: "gemini",
-};
+function resolveProvider(providerId: string) {
+  const provider = getProvider(providerId);
+  const envVar = provider?.inferenceProvider === "custom"
+    ? "OPENAI_API_KEY"
+    : provider?.envVar ?? "OPENROUTER_API_KEY";
+  const inferenceProvider = provider?.inferenceProvider ?? "openrouter";
+  const baseUrl = provider?.baseUrl;
+  return { envVar, inferenceProvider, baseUrl };
+}
 
 interface TimingResult {
   phase: string;
@@ -52,10 +49,16 @@ function fmt(ms: number): string {
 }
 
 function buildConfigYaml(): string {
-  return [
+  const { inferenceProvider, baseUrl } = resolveProvider(LLM_PROVIDER);
+  const lines = [
     "model:",
     `  default: "${LLM_MODEL}"`,
-    `  inference_provider: "${INFERENCE_MAP[LLM_PROVIDER] || "openrouter"}"`,
+    `  inference_provider: "${inferenceProvider}"`,
+  ];
+  if (baseUrl) {
+    lines.push(`  base_url: "${baseUrl}"`);
+  }
+  lines.push(
     "",
     "terminal:",
     "  backend: local",
@@ -63,11 +66,12 @@ function buildConfigYaml(): string {
     "compression:",
     "  enabled: true",
     "  threshold: 0.50",
-  ].join("\n");
+  );
+  return lines.join("\n");
 }
 
 function buildEnvFile(): string {
-  const envVar = PROVIDER_ENV_MAP[LLM_PROVIDER] || "OPENROUTER_API_KEY";
+  const { envVar } = resolveProvider(LLM_PROVIDER);
   return [
     `${envVar}=${LLM_API_KEY}`,
     "API_SERVER_ENABLED=true",
@@ -113,7 +117,7 @@ async function benchmarkSnapshot(daytona: Daytona): Promise<{ timings: TimingRes
   // Phase 1: Create from snapshot
   t = Date.now();
   console.log(`[1/5] Creating sandbox from snapshot "${SNAPSHOT_NAME}"...`);
-  const envVar = PROVIDER_ENV_MAP[LLM_PROVIDER] || "OPENROUTER_API_KEY";
+  const { envVar } = resolveProvider(LLM_PROVIDER);
   const sandbox = await daytona.create(
     {
       snapshot: SNAPSHOT_NAME,
@@ -207,7 +211,7 @@ async function benchmarkCold(daytona: Daytona): Promise<{ timings: TimingResult[
   // Phase 1: Create default sandbox
   t = Date.now();
   console.log("[1/6] Creating default sandbox (no snapshot)...");
-  const envVar = PROVIDER_ENV_MAP[LLM_PROVIDER] || "OPENROUTER_API_KEY";
+  const { envVar } = resolveProvider(LLM_PROVIDER);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sandbox = await (daytona as any).create(
     {

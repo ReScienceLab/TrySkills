@@ -5,22 +5,25 @@ vi.mock("@lobehub/icons", () => ({
   Anthropic: () => null,
   OpenAI: () => null,
   Google: () => null,
+  NousResearch: () => null,
+  Kimi: () => null,
+  Minimax: () => null,
 }));
 
 import { PROVIDERS, getProvider } from "@/lib/providers/registry";
 
 describe("providers/registry", () => {
-  it("exports 4 providers", () => {
-    expect(PROVIDERS).toHaveLength(4);
+  it("exports 7 providers", () => {
+    expect(PROVIDERS).toHaveLength(7);
   });
 
   it("each provider has required fields", () => {
     for (const p of PROVIDERS) {
       expect(p.id).toBeTruthy();
       expect(p.name).toBeTruthy();
-      expect(p.keyPrefix).toBeTruthy();
       expect(p.keyUrl).toMatch(/^https:\/\//);
       expect(p.envVar).toBeTruthy();
+      expect(p.inferenceProvider).toBeTruthy();
       expect(p.models.length).toBeGreaterThan(0);
     }
   });
@@ -51,5 +54,24 @@ describe("providers/registry", () => {
         expect(m.length).toBeGreaterThan(0);
       }
     }
+  });
+
+  it("openai maps to inference_provider openai (not openrouter)", () => {
+    const p = getProvider("openai");
+    expect(p!.inferenceProvider).toBe("openai");
+  });
+
+  it("custom providers have baseUrl set", () => {
+    for (const p of PROVIDERS) {
+      if (p.inferenceProvider === "custom") {
+        expect(p.baseUrl).toMatch(/^https:\/\//);
+      }
+    }
+  });
+
+  it("new providers are present", () => {
+    expect(getProvider("nous")).toBeDefined();
+    expect(getProvider("kimi")).toBeDefined();
+    expect(getProvider("minimax")).toBeDefined();
   });
 });
