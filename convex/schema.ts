@@ -73,6 +73,7 @@ export default defineSchema({
     skillPath: v.string(),
     title: v.string(),
     model: v.string(),
+    workspacePath: v.optional(v.string()),
     messages: v.array(v.object({
       role: v.union(v.literal("user"), v.literal("assistant"), v.literal("system")),
       content: v.string(),

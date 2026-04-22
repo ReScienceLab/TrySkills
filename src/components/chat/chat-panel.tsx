@@ -141,10 +141,13 @@ export function ChatPanel({
   apiKey,
   initialSessionId,
   initialMessages,
+  sandboxId,
+  sandboxKey,
   onStop,
   onTryAnother,
   onSessionError,
   onToolComplete,
+  onWorkspacePathChange,
 }: {
   gatewayBaseUrl: string
   model: string
@@ -155,12 +158,15 @@ export function ChatPanel({
   apiKey?: string
   initialSessionId?: string
   initialMessages?: { role: "user" | "assistant" | "system"; content: string }[]
+  sandboxId?: string | null
+  sandboxKey?: string | null
   onStop: () => void
   onTryAnother?: () => void
   onSessionError?: () => void
   onToolComplete?: (toolName: string) => void
+  onWorkspacePathChange?: (path: string) => void
 }) {
-  const { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, send, cancel } = useChat(
+  const { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, workspacePath, send, cancel } = useChat(
     gatewayBaseUrl,
     model,
     skillName,
@@ -170,12 +176,19 @@ export function ChatPanel({
     skillPath,
     initialMessages,
     onToolComplete,
+    sandboxId,
+    sandboxKey,
   )
 
   const [input, setInput] = useState("")
   const [elapsed, setElapsed] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Propagate workspace path to parent for workspace panel
+  useEffect(() => {
+    if (workspacePath) onWorkspacePathChange?.(workspacePath)
+  }, [workspacePath, onWorkspacePathChange])
 
   // Keep browser URL in sync when session id changes (e.g. resume fallback creates new session)
   useEffect(() => {

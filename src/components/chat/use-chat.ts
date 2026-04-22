@@ -170,6 +170,8 @@ export function useChat(
   skillPath?: string,
   initialMessages?: ChatMessage[],
   onToolComplete?: (toolName: string) => void,
+  sandboxId?: string | null,
+  sandboxKey?: string | null,
 ) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages ?? [])
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([])
@@ -178,6 +180,7 @@ export function useChat(
   const [creditWarning, setCreditWarning] = useState<string | null>(null)
   const [sessionFailed, setSessionFailed] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(initialSessionId ?? null)
+  const [workspacePath, setWorkspacePath] = useState<string | null>(null)
 
   const cancelRef = useRef<(() => void) | null>(null)
   const initRef = useRef(false)
@@ -385,8 +388,28 @@ export function useChat(
             const sidStr = sid as string
             sessionIdRef.current = sidStr
             setSessionId(sidStr)
+
+            // Create per-session workspace directory on sandbox
+            const wsPath = `/root/.hermes/workspaces/${sidStr}`
+            setWorkspacePath(wsPath)
+            if (sandboxId && sandboxKey) {
+              try {
+                await fetch("/api/workspace", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ action: "mkdir", sandboxId, key: sandboxKey, path: wsPath }),
+                })
+              } catch {
+                // best effort -- agent will mkdir itself via the system instruction
+              }
+            }
           }
 
+          const wsDir = `/root/.hermes/workspaces/${sessionIdRef.current}`
+          const systemMsg: ChatMessage = {
+            role: "system",
+            content: `Use the directory ${wsDir} as your working directory for all file operations in this session. Create files, save outputs, and write results there. Create the directory first if it does not exist.`,
+          }
           const firstMsg: ChatMessage = { role: "user", content: `I want to try the ${skillName} skill` }
           setMessages([firstMsg])
 
@@ -395,7 +418,7 @@ export function useChat(
 
           const cancel = chatStream(
             gatewayBaseUrl,
-            [firstMsg],
+            [systemMsg, firstMsg],
             {
               onDelta: (text) => {
                 currentContentRef.current += text
@@ -492,5 +515,5 @@ export function useChat(
 
   const isProviderError = error?.type === "credit_error" || error?.type === "auth_error" || error?.type === "rate_limit"
 
-  return { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, send, cancel }
+  return { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, workspacePath, send, cancel }
 }

@@ -174,3 +174,47 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+
+export async function POST(request: NextRequest) {
+  const { userId } = await auth()
+  if (!userId) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+  }
+
+  let body: { action?: string; sandboxId?: string; key?: string; path?: string }
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
+  }
+
+  const { action, sandboxId, key: daytonaKey, path: dirPath } = body
+  if (!sandboxId || !daytonaKey || !dirPath) {
+    return NextResponse.json({ error: "Missing sandboxId, key, or path" }, { status: 400 })
+  }
+
+  if (!dirPath.startsWith("/root/.hermes/workspaces/")) {
+    return NextResponse.json({ error: "Path must be under /root/.hermes/workspaces/" }, { status: 403 })
+  }
+
+  try {
+    const { Daytona } = await getDaytonaSDK()
+    const daytona = new Daytona({
+      apiKey: daytonaKey,
+      apiUrl: "https://app.daytona.io/api",
+    })
+    const sandbox = await daytona.get(sandboxId)
+
+    if (action === "mkdir") {
+      await sandbox.process.executeCommand(`mkdir -p "${dirPath}"`)
+      return NextResponse.json({ ok: true, path: dirPath })
+    }
+
+    return NextResponse.json({ error: "Invalid action" }, { status: 400 })
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Workspace request failed" },
+      { status: 500 },
+    )
+  }
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, use } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, use } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
@@ -29,10 +29,6 @@ import { OnboardingModal } from "@/components/onboarding-modal";
 import { WorkspacePanel } from "@/components/workspace/workspace-panel";
 import { useWorkspace } from "@/hooks/use-workspace";
 import type { SandboxState, SandboxSession } from "@/lib/sandbox/types";
-
-function sanitizeSkillDir(skillPath: string): string {
-  return skillPath.replace(/\//g, "--");
-}
 
 type AppPhase = "config" | "launching" | "running";
 
@@ -89,13 +85,20 @@ export default function SkillPage({
 
   useHeartbeat(session?.sandboxId ?? null, savedConfig?.sandboxKey ?? null);
 
-  const workspacePath = session ? `/root/.hermes/skills/${sanitizeSkillDir(skillKey)}` : null;
+  const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const workspace = useWorkspace(
     session?.sandboxId ?? null,
     savedConfig?.sandboxKey ?? null,
     workspacePath,
     phase === "running",
   );
+
+  // For resumed sessions, set workspace path from Convex session data
+  useEffect(() => {
+    if (resumeSession?.workspacePath && !workspacePath) {
+      setWorkspacePath(resumeSession.workspacePath);
+    }
+  }, [resumeSession, workspacePath]);
 
   const handleLaunch = async (config: LaunchConfig) => {
     launchAbortRef.current?.abort();
@@ -428,6 +431,10 @@ export default function SkillPage({
     }
   };
 
+  const handleWorkspacePathChange = useCallback((path: string) => {
+    setWorkspacePath(path);
+  }, []);
+
   if (!isValidPath) {
     return (
       <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
@@ -471,9 +478,12 @@ export default function SkillPage({
                 apiKey={savedConfig?.llmKey}
                 initialSessionId={resumeSession ? resumeSessionId : undefined}
                 initialMessages={resumeSession?.messages}
+                sandboxId={session.sandboxId}
+                sandboxKey={savedConfig?.sandboxKey}
                 onStop={handleStop}
                 onTryAnother={handleTryAnother}
                 onToolComplete={workspace.onToolComplete}
+                onWorkspacePathChange={handleWorkspacePathChange}
                 onSessionError={async () => {
                   if (session?.sandboxId && launchConfigRef.current) {
                     destroySandbox(launchConfigRef.current.sandboxKey, session.sandboxId).catch(() => {});

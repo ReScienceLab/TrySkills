@@ -43,7 +43,10 @@ describe("useChat", () => {
     await vi.waitFor(() => {
       expect(mockChatStream).toHaveBeenCalledWith(
         "https://8642-abc.daytonaproxy01.net",
-        [{ role: "user", content: "I want to try the test-skill skill" }],
+        [
+          { role: "system", content: expect.stringContaining("/root/.hermes/workspaces/") },
+          { role: "user", content: "I want to try the test-skill skill" },
+        ],
         expect.any(Object),
         "claude-3",
       )
