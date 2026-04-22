@@ -404,19 +404,19 @@ export async function installSkill(
 
   const hermesCmd = `$(test -f /opt/hermes-agent/venv/bin/hermes && echo /opt/hermes-agent/venv/bin/hermes || echo ${HERMES_HOME}/hermes-agent/venv/bin/hermes)`;
 
-  // Restart gateway after config is written so it picks up new env vars
-  if (wasStopped || !options?.skipConfigWrite) {
-    if (!wasStopped) {
-      await sandbox.process.executeCommand(
-        `pkill -f "hermes.*gateway" 2>/dev/null || true`,
-      ).catch(() => {});
-      await new Promise((r) => setTimeout(r, 500));
-      log("stopped old gateway");
-    }
+  // Start or restart the gateway so it picks up current config
+  if (wasStopped) {
+    // Stopped sandbox: gateway not running, just start it
     await sandbox.process.executeCommand(
       `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
     ).catch(() => {});
-    log("gateway (re)started after config write");
+    log("gateway started after wake");
+  } else if (!options?.skipConfigWrite) {
+    // Running sandbox with config changes: gracefully restart gateway
+    await sandbox.process.executeCommand(
+      `pkill -f "hermes.*gateway" 2>/dev/null; sleep 2; nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
+    ).catch(() => {});
+    log("gateway restarted after config write");
   }
 
   // Always verify gateway is alive before returning
