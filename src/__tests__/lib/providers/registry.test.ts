@@ -62,9 +62,16 @@ describe("providers/registry", () => {
     expect(p!.baseUrl).toBe("https://api.openai.com/v1");
   });
 
-  it("kimi maps to hermes provider 'kimi-coding'", () => {
+  it("nous uses custom hermes provider with explicit base_url", () => {
+    const p = getProvider("nous");
+    expect(p!.hermesProvider).toBe("custom");
+    expect(p!.baseUrl).toBe("https://inference-api.nousresearch.com/v1");
+  });
+
+  it("kimi maps to hermes provider 'kimi-coding' without hardcoded base_url", () => {
     const p = getProvider("kimi");
     expect(p!.hermesProvider).toBe("kimi-coding");
+    expect(p!.baseUrl).toBeUndefined();
   });
 
   it("minimax uses anthropic endpoint", () => {
