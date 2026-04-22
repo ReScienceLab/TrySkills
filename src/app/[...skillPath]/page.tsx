@@ -45,7 +45,6 @@ export default function SkillPage({
   const updateSandboxState = useMutation(api.sandboxes.updateState);
   const acquireCreateLock = useMutation(api.sandboxes.acquireCreateLock);
   const updatePoolState = useMutation(api.sandboxes.updatePoolState);
-  const addInstalledSkillMut = useMutation(api.sandboxes.addInstalledSkill);
   const recordTrial = useMutation(api.skillTrials.record);
   const userSandbox = useQuery(
     api.sandboxes.getSandbox,
@@ -165,9 +164,12 @@ export default function SkillPage({
           gatewayUrl: result.gatewayUrl,
           configHash: sameConfig ? undefined : configHash,
           gatewayUrlCreatedAt: result.urlRefreshed ? Date.now() : undefined,
-          installedSkills: result.discoveredSkills,
+          installedSkills: [...new Set([
+            ...(sandbox.installedSkills ?? []),
+            ...(result.discoveredSkills ?? []),
+            skillPathStr,
+          ])],
         }).catch(() => {});
-        addInstalledSkillMut({ sandboxId: sandbox.sandboxId, skillPath: skillPathStr }).catch(() => {});
         recordTrial({ sandboxId: sandbox.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
         return;
       } catch (err) {

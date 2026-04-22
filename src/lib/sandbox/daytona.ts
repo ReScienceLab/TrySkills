@@ -22,7 +22,10 @@ async function discoverSkillsOnDisk(sandbox: any): Promise<string[]> {
     )
     const output = (result.result?.output ?? result.output ?? "").trim()
     if (!output) return []
-    return output.split("\n").filter((s: string) => s.trim()).map((s: string) => s.trim())
+    return output
+      .split("\n")
+      .filter((s: string) => s.trim())
+      .map((s: string) => s.trim().replace(/--/g, "/"))
   } catch {
     return []
   }
