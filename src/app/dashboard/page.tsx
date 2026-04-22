@@ -64,8 +64,13 @@ export default function DashboardPage() {
     } catch {}
   }, [config?.sandboxKey]);
 
+  const isGatewayReachable = isRealSandbox
+    && sandbox?.gatewayUrl
+    && sandbox.poolState !== "stopped"
+    && (sandbox.gatewayUrlCreatedAt ? Date.now() - sandbox.gatewayUrlCreatedAt < 50 * 60 * 1000 : false);
+
   const loadSessions = useCallback(async () => {
-    if (!isRealSandbox || !sandbox?.gatewayUrl) return;
+    if (!isGatewayReachable || !sandbox?.gatewayUrl) return;
     setSessionsLoading(true);
     setSessionsError(null);
     try {
@@ -76,7 +81,7 @@ export default function DashboardPage() {
     } finally {
       setSessionsLoading(false);
     }
-  }, [isRealSandbox, sandbox?.gatewayUrl]);
+  }, [isGatewayReachable, sandbox?.gatewayUrl]);
 
   useEffect(() => {
     if (isRealSandbox && config?.sandboxKey && !liveInfo) {
@@ -85,13 +90,13 @@ export default function DashboardPage() {
   }, [isRealSandbox, sandbox?.sandboxId, config?.sandboxKey, fetchLiveInfo, liveInfo]);
 
   useEffect(() => {
-    if (isRealSandbox && sandbox?.gatewayUrl) {
+    if (isGatewayReachable) {
       loadSessions();
     }
-  }, [isRealSandbox, sandbox?.gatewayUrl, loadSessions]);
+  }, [isGatewayReachable, loadSessions]);
 
   const handleDeleteSession = async (sessionId: string) => {
-    if (!sandbox?.gatewayUrl) return;
+    if (!isGatewayReachable || !sandbox?.gatewayUrl) return;
     try {
       await deleteGatewaySession(sandbox.gatewayUrl, sessionId);
       setSessions((prev) => prev.filter((s) => s.session_id !== sessionId));
@@ -100,10 +105,30 @@ export default function DashboardPage() {
     }
   };
 
+  const resolveSessionSkillPath = (session: SessionCompact): string | null => {
+    // Extract skill path from Gateway workspace (e.g. /root/.hermes/skills/owner--repo--skillName)
+    if (session.workspace) {
+      const match = session.workspace.match(/skills\/(.+)$/)
+      if (match) {
+        // Convert sanitized dir back to path: "owner--repo--skill" -> "owner/repo/skill"
+        return match[1].replace(/--/g, "/")
+      }
+    }
+    // Fallback: try matching installed skills against session title
+    const installed = sandbox?.installedSkills ?? []
+    for (const sp of installed) {
+      const name = sp.split("/").pop() || ""
+      if (name && session.title?.toLowerCase().includes(name.toLowerCase())) {
+        return sp
+      }
+    }
+    return sandbox?.currentSkillPath ?? null
+  };
+
   const handleResumeSession = (session: SessionCompact) => {
-    const skillPath = sandbox?.currentSkillPath;
-    if (!skillPath) return;
-    window.location.href = `/${skillPath}?session=${session.session_id}`;
+    const skillPath = resolveSessionSkillPath(session)
+    if (!skillPath) return
+    window.location.href = `/${skillPath}?session=${session.session_id}`
   };
 
   const handleDestroy = async () => {
@@ -321,7 +346,13 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              {sessionsLoading && sessions.length === 0 ? (
+              {!isGatewayReachable && sessions.length === 0 ? (
+                <div className="text-sm text-white/40">
+                  {isStopped
+                    ? "Sandbox is stopped. Resume a skill to view chat sessions."
+                    : "Gateway URL expired. Try a skill to refresh the connection."}
+                </div>
+              ) : sessionsLoading && sessions.length === 0 ? (
                 <div className="flex items-center gap-2 text-sm text-white/40">
                   <div className="w-3 h-3 rounded-full border-2 border-white/20 border-t-white/50 animate-spin" />
                   Loading sessions...

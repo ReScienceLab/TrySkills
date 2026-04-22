@@ -40,6 +40,7 @@ export interface SessionCompact {
   message_count: number
   created_at: number
   updated_at: number
+  workspace?: string
   pinned?: boolean
   archived?: boolean
 }

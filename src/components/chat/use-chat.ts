@@ -328,24 +328,32 @@ export function useChat(
         try {
           // If resuming a session, load existing messages
           if (initialSessionId) {
-            const detail = await fetchSession(gatewayBaseUrl, initialSessionId)
-            const chatMessages: ChatMessage[] = (detail.messages || [])
-              .filter((m) => m.role === "user" || m.role === "assistant")
-              .map((m) => ({ role: m.role, content: m.content }))
-            if (chatMessages.length > 0) {
-              setMessages(chatMessages)
-              sessionIdRef.current = initialSessionId
-              setSessionId(initialSessionId)
-              return
+            try {
+              const detail = await fetchSession(gatewayBaseUrl, initialSessionId)
+              const chatMessages: ChatMessage[] = (detail.messages || [])
+                .filter((m) => m.role === "user" || m.role === "assistant")
+                .map((m) => ({ role: m.role, content: m.content }))
+              if (chatMessages.length > 0) {
+                setMessages(chatMessages)
+                sessionIdRef.current = initialSessionId
+                setSessionId(initialSessionId)
+                return
+              }
+            } catch {
+              // Resume failed, fall through to create new session
             }
           }
 
-          // Create a new Gateway session
-          const sid = await createGatewaySession(gatewayBaseUrl, model)
-          sessionIdRef.current = sid
-          setSessionId(sid)
+          // Try to create a Gateway session; fall back to sessionless mode if unavailable
+          let sid: string | undefined
+          try {
+            sid = await createGatewaySession(gatewayBaseUrl, model)
+            sessionIdRef.current = sid
+            setSessionId(sid)
+          } catch {
+            // Gateway session API unavailable, continue without session
+          }
 
-          // Send first message using the session API
           const firstMsg: ChatMessage = { role: "user", content: `I want to try the ${skillName} skill` }
           setMessages([firstMsg])
 
@@ -395,7 +403,7 @@ export function useChat(
           )
           cancelRef.current = cancel
         } catch (err) {
-          // Session creation failed, fall back to retry
+          // Unexpected error, retry
           attempt++
           if (attempt <= MAX_RETRIES) {
             setError({ type: "network", message: `Retrying (${attempt}/${MAX_RETRIES})...` })
