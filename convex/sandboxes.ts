@@ -318,6 +318,34 @@ export const addInstalledSkill = mutation({
   },
 });
 
+export const syncInstalledSkills = mutation({
+  args: {
+    sandboxId: v.string(),
+    discoveredSkills: v.array(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const sandbox = await ctx.db
+      .query("sandboxes")
+      .withIndex("by_sandbox", (q) => q.eq("sandboxId", args.sandboxId))
+      .unique();
+
+    if (sandbox && sandbox.tokenIdentifier === identity.tokenIdentifier) {
+      const current = sandbox.installedSkills ?? [];
+      const newSkills = args.discoveredSkills.filter((s) => !current.includes(s));
+      if (newSkills.length > 0) {
+        await ctx.db.patch("sandboxes", sandbox._id, {
+          installedSkills: [...current, ...newSkills],
+        });
+      }
+    }
+    return null;
+  },
+});
+
 export const listStale = internalQuery({
   args: {
     staleThresholdMs: v.number(),

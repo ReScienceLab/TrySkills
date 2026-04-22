@@ -29,4 +29,5 @@ export interface SandboxSession {
   memory?: number;
   disk?: number;
   region?: string;
+  discoveredSkills?: string[];
 }

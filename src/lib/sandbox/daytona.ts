@@ -14,6 +14,31 @@ const SIGNED_URL_FRESH_MS = 50 * 60 * 1000;
 const COLD_RESOURCES = { cpu: 2, memory: 4, disk: 10 };
 const HERMES_HOME = "/root/.hermes";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function discoverSkillsOnDisk(sandbox: any): Promise<string[]> {
+  try {
+    const result = await sandbox.process.executeCommand(
+      `for d in ${HERMES_HOME}/skills/*/; do [ -f "$d/SKILL.md" ] && basename "$d"; done 2>/dev/null || true`,
+    )
+    const output = (result.result?.output ?? result.output ?? "").trim()
+    if (!output) return []
+    return output
+      .split("\n")
+      .filter((s: string) => s.trim())
+      .map((s: string) => {
+        const name = s.trim()
+        if (!name.includes("--")) return name
+        // Reverse sanitizeSkillDir: owner--repo--skill -> owner/repo/skill
+        // Only apply if result looks like a valid TrySkills path (3+ segments)
+        const decoded = name.replace(/--/g, "/")
+        const segments = decoded.split("/")
+        return segments.length >= 3 ? decoded : name
+      })
+  } catch {
+    return []
+  }
+}
+
 export interface SkillFile {
   path: string;
   content: string;
@@ -243,6 +268,9 @@ export async function createHermesSandbox(
   console.log("[daytona] createHermesSandbox signedPreview URL:", signedPreview.url);
   const gatewayUrl = signedPreview.url;
 
+  const discoveredSkills = await discoverSkillsOnDisk(sandbox);
+  log(`discovered ${discoveredSkills.length} skills on disk`);
+
   return {
     sandboxId: sandbox.id,
     gatewayUrl,
@@ -254,6 +282,7 @@ export async function createHermesSandbox(
     disk: sandbox.disk,
     region: sandbox.target,
     usedSnapshot,
+    discoveredSkills,
   };
 }
 
@@ -368,6 +397,9 @@ export async function installSkill(
     log("new signed URL obtained");
   }
 
+  const discoveredSkills = await discoverSkillsOnDisk(sandbox);
+  log(`discovered ${discoveredSkills.length} skills on disk`);
+
   return {
     sandboxId: sandbox.id,
     gatewayUrl,
@@ -379,6 +411,7 @@ export async function installSkill(
     memory: sandbox.memory,
     disk: sandbox.disk,
     region: sandbox.target,
+    discoveredSkills,
   };
 }
 
