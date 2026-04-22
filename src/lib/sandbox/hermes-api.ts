@@ -1,19 +1,32 @@
 export interface ChatMessage {
-  role: "user" | "assistant" | "system";
-  content: string;
+  role: "user" | "assistant" | "system"
+  content: string
 }
 
 export interface ToolProgress {
-  tool: string;
-  emoji: string;
-  label: string;
+  tool: string
+  emoji: string
+  label: string
+}
+
+export class ProviderError extends Error {
+  code: string | number | undefined
+  constructor(message: string, code?: string | number) {
+    super(message)
+    this.name = "ProviderError"
+    this.code = code
+  }
+}
+
+export interface StreamDoneMeta {
+  hadContent: boolean
 }
 
 export interface StreamCallbacks {
-  onDelta: (text: string) => void;
-  onToolProgress: (tool: ToolProgress) => void;
-  onDone: () => void;
-  onError: (err: Error) => void;
+  onDelta: (text: string) => void
+  onToolProgress: (tool: ToolProgress) => void
+  onDone: (meta: StreamDoneMeta) => void
+  onError: (err: Error) => void
 }
 
 export function chatStream(
@@ -22,10 +35,12 @@ export function chatStream(
   callbacks: StreamCallbacks,
   model?: string,
 ): () => void {
-  let aborted = false;
-  const controller = new AbortController();
+  let aborted = false
+  const controller = new AbortController()
 
-  (async () => {
+  void (async () => {
+    let hadContent = false
+
     try {
       const res = await fetch("/api/hermes", {
         method: "POST",
@@ -41,75 +56,110 @@ export function chatStream(
           },
         }),
         signal: controller.signal,
-      });
+      })
 
       if (!res.ok || !res.body) {
-        const text = await res.text().catch(() => "");
-        throw new Error(text || `Gateway error: ${res.status}`);
+        const text = await res.text().catch(() => "")
+        const parsed = tryParseErrorJson(text)
+        if (parsed) {
+          throw new ProviderError(parsed.message, parsed.code)
+        }
+        throw new Error(text || `Gateway error: ${res.status}`)
       }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let currentEventType = "";
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+      let currentEventType = ""
 
       while (!aborted) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        const { done, value } = await reader.read()
+        if (done) break
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split("\n")
+        buffer = lines.pop() || ""
 
         for (const line of lines) {
           if (line.startsWith("event: ")) {
-            currentEventType = line.slice(7).trim();
-            continue;
+            currentEventType = line.slice(7).trim()
+            continue
           }
-          if (!line.startsWith("data: ")) continue;
-          const data = line.slice(6);
+          if (!line.startsWith("data: ")) continue
+          const data = line.slice(6)
 
           if (data === "[DONE]") {
-            callbacks.onDone();
-            return;
+            callbacks.onDone({ hadContent })
+            return
           }
 
           try {
-            const parsed = JSON.parse(data);
+            const parsed = JSON.parse(data)
+
+            // Detect error payloads embedded in SSE stream
+            if (parsed.error) {
+              const errMsg = parsed.error.message || parsed.error.type || "Unknown provider error"
+              const errCode = parsed.error.code || parsed.error.type
+              callbacks.onError(new ProviderError(errMsg, errCode))
+              return
+            }
 
             if (currentEventType === "hermes.tool.progress") {
-              callbacks.onToolProgress(parsed as ToolProgress);
-              currentEventType = "";
-              continue;
+              callbacks.onToolProgress(parsed as ToolProgress)
+              currentEventType = ""
+              continue
             }
-            currentEventType = "";
+            currentEventType = ""
 
-            const delta = parsed.choices?.[0]?.delta;
+            // Detect finish_reason: "error" (OpenRouter mid-stream format)
+            const finishReason = parsed.choices?.[0]?.finish_reason
+            if (finishReason === "error") {
+              const errMsg = parsed.error?.message || "Provider error during streaming"
+              callbacks.onError(new ProviderError(errMsg, parsed.error?.code))
+              return
+            }
+
+            const delta = parsed.choices?.[0]?.delta
             if (delta?.content) {
-              callbacks.onDelta(delta.content);
+              hadContent = true
+              callbacks.onDelta(delta.content)
             }
 
-            const finishReason = parsed.choices?.[0]?.finish_reason;
             if (finishReason === "stop") {
-              callbacks.onDone();
-              return;
+              callbacks.onDone({ hadContent })
+              return
             }
           } catch {
-            // ignore parse errors
+            // ignore parse errors for non-JSON lines
           }
         }
       }
 
-      if (!aborted) callbacks.onDone();
+      if (!aborted) callbacks.onDone({ hadContent })
     } catch (err) {
       if (!aborted) {
-        callbacks.onError(err instanceof Error ? err : new Error(String(err)));
+        callbacks.onError(err instanceof Error ? err : new Error(String(err)))
       }
     }
-  })();
+  })()
 
   return () => {
-    aborted = true;
-    controller.abort();
-  };
+    aborted = true
+    controller.abort()
+  }
+}
+
+function tryParseErrorJson(text: string): { message: string; code?: string | number } | null {
+  try {
+    const parsed = JSON.parse(text)
+    if (parsed.error?.message) {
+      return { message: parsed.error.message, code: parsed.error.code || parsed.error.type }
+    }
+    if (parsed.error && typeof parsed.error === "string") {
+      return { message: parsed.error }
+    }
+  } catch {
+    // not JSON
+  }
+  return null
 }

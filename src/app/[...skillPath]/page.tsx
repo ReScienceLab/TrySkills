@@ -489,6 +489,8 @@ export default function SkillPage({
               model={savedConfig?.model || "anthropic/claude-sonnet-4"}
               skillName={skillName}
               startedAt={session.startedAt}
+              providerId={savedConfig?.providerId}
+              apiKey={savedConfig?.llmKey}
               onStop={handleStop}
               onTryAnother={handleTryAnother}
               onSessionError={async () => {
