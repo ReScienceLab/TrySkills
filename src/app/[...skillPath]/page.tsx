@@ -6,8 +6,11 @@ import { useSearchParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
 
-async function computeConfigHash(provider: string, model: string, key: string): Promise<string> {
-  const data = new TextEncoder().encode(`${provider}:${model}:${key}`);
+async function computeConfigHash(provider: string, model: string, key: string, envVars?: Record<string, string>): Promise<string> {
+  const envPart = envVars && Object.keys(envVars).length > 0
+    ? JSON.stringify(envVars, Object.keys(envVars).sort())
+    : ""
+  const data = new TextEncoder().encode(`${provider}:${model}:${key}:${envPart}`);
   const buf = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 16);
 }
@@ -111,7 +114,7 @@ export default function SkillPage({
     setSandboxError(undefined);
 
     const skillPathStr = `${owner}/${repo}/${skillName}`;
-    const configHash = await computeConfigHash(config.provider.id, config.model, config.llmKey);
+    const configHash = await computeConfigHash(config.provider.id, config.model, config.llmKey, config.envVars);
 
     // Check for existing sandbox (read-only query, no lock)
     const sandbox = userSandbox;
@@ -165,6 +168,7 @@ export default function SkillPage({
             llmProvider: config.provider.id,
             llmApiKey: config.llmKey,
             llmModel: config.model,
+            envVars: config.envVars,
           },
           sandbox.sandboxId,
           skillPathStr,
@@ -263,6 +267,7 @@ export default function SkillPage({
           llmProvider: config.provider.id,
           llmApiKey: config.llmKey,
           llmModel: config.model,
+          envVars: config.envVars,
         },
         skillPathStr,
         skillFiles,
@@ -374,6 +379,7 @@ export default function SkillPage({
       model: savedConfig.model,
       llmKey: savedConfig.llmKey,
       sandboxKey: savedConfig.sandboxKey,
+      envVars: savedConfig.envVars,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSignedIn, keysLoading, savedConfig, phase]);

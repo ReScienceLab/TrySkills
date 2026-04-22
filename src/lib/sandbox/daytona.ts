@@ -88,14 +88,39 @@ function buildConfigYaml(model: string, provider: string, baseUrl?: string): str
   return lines.join("\n");
 }
 
-function buildEnvFile(providerEnvVar: string, apiKey: string): string {
-  return [
+const RESERVED_ENV_KEYS = new Set([
+  "API_SERVER_ENABLED",
+  "API_SERVER_CORS_ORIGINS",
+  "GATEWAY_ALLOW_ALL_USERS",
+])
+
+function sanitizeExtraEnvVars(
+  extraEnvVars: Record<string, string> | undefined,
+  providerEnvVar: string,
+): Record<string, string> {
+  if (!extraEnvVars) return {}
+  const result: Record<string, string> = {}
+  for (const [key, value] of Object.entries(extraEnvVars)) {
+    if (key !== providerEnvVar && !RESERVED_ENV_KEYS.has(key)) {
+      result[key] = value
+    }
+  }
+  return result
+}
+
+function buildEnvFile(providerEnvVar: string, apiKey: string, extraEnvVars?: Record<string, string>): string {
+  const lines = [
     `${providerEnvVar}=${apiKey}`,
     "API_SERVER_ENABLED=true",
     "API_SERVER_CORS_ORIGINS=*",
     "GATEWAY_ALLOW_ALL_USERS=true",
-    "",
-  ].join("\n");
+  ]
+  const safe = sanitizeExtraEnvVars(extraEnvVars, providerEnvVar)
+  for (const [key, value] of Object.entries(safe)) {
+    lines.push(`${key}=${value}`)
+  }
+  lines.push("")
+  return lines.join("\n")
 }
 
 /**
@@ -128,6 +153,7 @@ export async function createHermesSandbox(
   activeDaytona = daytona;
 
   const providerMapping = resolveProviderMapping(config.llmProvider);
+  const safeExtra = sanitizeExtraEnvVars(config.envVars, providerMapping.envVar);
 
   onProgress("creating");
 
@@ -150,6 +176,7 @@ export async function createHermesSandbox(
           API_SERVER_ENABLED: "true",
           API_SERVER_CORS_ORIGINS: "*",
           GATEWAY_ALLOW_ALL_USERS: "true",
+          ...safeExtra,
         },
       },
       { timeout: 120 },
@@ -176,6 +203,7 @@ export async function createHermesSandbox(
             API_SERVER_ENABLED: "true",
             API_SERVER_CORS_ORIGINS: "*",
             GATEWAY_ALLOW_ALL_USERS: "true",
+            ...safeExtra,
           },
         },
         {
@@ -199,6 +227,7 @@ export async function createHermesSandbox(
             API_SERVER_ENABLED: "true",
             API_SERVER_CORS_ORIGINS: "*",
             GATEWAY_ALLOW_ALL_USERS: "true",
+            ...safeExtra,
           },
         } as unknown as Parameters<typeof daytona.create>[0],
         { timeout: 300 },
@@ -227,7 +256,7 @@ export async function createHermesSandbox(
   }
 
   await sandbox.process.executeCommand(
-    `mkdir -p ${HERMES_HOME} && cat > ${HERMES_HOME}/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
+    `mkdir -p ${HERMES_HOME} && cat > ${HERMES_HOME}/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey, config.envVars)}\nENVEOF`,
   ).catch(() => {});
   await sandbox.process.executeCommand(
     `cat > ${HERMES_HOME}/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.hermesProvider, providerMapping.baseUrl)}\nCFGEOF`,
@@ -326,13 +355,7 @@ export async function installSkill(
       wasStopped = true;
       await daytona.start(sandbox, 60);
       log("sandbox started from stopped");
-
-      const hermesCmd = `$(test -f /opt/hermes-agent/venv/bin/hermes && echo /opt/hermes-agent/venv/bin/hermes || echo ${HERMES_HOME}/hermes-agent/venv/bin/hermes)`;
-
-      await sandbox.process.executeCommand(
-        `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
-      ).catch(() => {});
-      log("gateway restarted");
+      // Config files are written below before starting the gateway
     } else {
       throw new Error(`Sandbox in unexpected state: ${sandbox.state}`);
     }
@@ -354,7 +377,7 @@ export async function installSkill(
   if (!options?.skipConfigWrite) {
     setupTasks.push(
       sandbox.process.executeCommand(
-        `mkdir -p ${HERMES_HOME} && cat > ${HERMES_HOME}/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
+        `mkdir -p ${HERMES_HOME} && cat > ${HERMES_HOME}/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey, config.envVars)}\nENVEOF`,
       ).catch(() => {}),
       sandbox.process.executeCommand(
         `cat > ${HERMES_HOME}/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.hermesProvider, providerMapping.baseUrl)}\nCFGEOF`,
@@ -378,6 +401,27 @@ export async function installSkill(
     }),
   );
   log("files uploaded");
+
+  const hermesCmd = `$(test -f /opt/hermes-agent/venv/bin/hermes && echo /opt/hermes-agent/venv/bin/hermes || echo ${HERMES_HOME}/hermes-agent/venv/bin/hermes)`;
+
+  // Start or restart the gateway so it picks up current config
+  if (wasStopped) {
+    // Stopped sandbox: gateway not running, just start it
+    await sandbox.process.executeCommand(
+      `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
+    ).catch(() => {});
+    log("gateway started after wake");
+  } else if (!options?.skipConfigWrite) {
+    // Running sandbox with config changes: gracefully restart gateway
+    await sandbox.process.executeCommand(
+      `pkill -f "hermes.*gateway" 2>/dev/null || true`,
+    ).catch(() => {});
+    await new Promise((r) => setTimeout(r, 2000));
+    await sandbox.process.executeCommand(
+      `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
+    ).catch(() => {});
+    log("gateway restarted after config write");
+  }
 
   // Always verify gateway is alive before returning
   await waitForHealth(sandbox);

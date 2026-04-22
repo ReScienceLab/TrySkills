@@ -16,6 +16,7 @@ export interface SandboxConfig {
   llmProvider: string;
   llmApiKey: string;
   llmModel: string;
+  envVars?: Record<string, string>;
 }
 
 export interface SandboxSession {

@@ -13,6 +13,7 @@ export interface StoredConfig {
   llmKey: string;
   sandboxKey: string;
   providerKeys?: Record<string, string>;
+  envVars?: Record<string, string>;
 }
 
 function lsKey(userId: string): string {

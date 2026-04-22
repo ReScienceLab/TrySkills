@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { PROVIDERS, type Provider } from "@/lib/providers/registry";
 import { useKeyStore } from "@/hooks/use-key-store";
 import { ProviderTabs, ModelSelector, ApiKeyInput } from "@/components/provider-config";
@@ -10,6 +11,7 @@ export interface LaunchConfig {
   model: string;
   llmKey: string;
   sandboxKey: string;
+  envVars?: Record<string, string>;
 }
 
 export function ConfigPanel({
@@ -60,6 +62,7 @@ export function ConfigPanel({
       initialModel={initialModel}
       initialProviderKeys={initialProviderKeys}
       initialSandboxKey={savedConfig?.sandboxKey ?? ""}
+      initialEnvVars={savedConfig?.envVars}
       save={save}
       onLaunch={onLaunch}
       onBack={onBack}
@@ -72,6 +75,7 @@ function ConfigPanelForm({
   initialModel,
   initialProviderKeys,
   initialSandboxKey,
+  initialEnvVars,
   save,
   onLaunch,
   onBack,
@@ -80,6 +84,7 @@ function ConfigPanelForm({
   initialModel: string;
   initialProviderKeys: Record<string, string>;
   initialSandboxKey: string;
+  initialEnvVars?: Record<string, string>;
   save: (config: import("@/hooks/use-key-store").StoredConfig) => Promise<void>;
   onLaunch: (config: LaunchConfig) => void;
   onBack: () => void;
@@ -107,8 +112,9 @@ function ConfigPanelForm({
       llmKey,
       sandboxKey,
       providerKeys,
+      envVars: initialEnvVars,
     });
-    onLaunch({ provider, model, llmKey, sandboxKey });
+    onLaunch({ provider, model, llmKey, sandboxKey, envVars: initialEnvVars });
   };
 
   const isReady = llmKey.length > 5 && sandboxKey.length > 5;
@@ -193,6 +199,22 @@ function ConfigPanelForm({
           </span>
         </div>
       </div>
+
+      {initialEnvVars && Object.keys(initialEnvVars).length > 0 && (
+        <div className="border border-white/10 bg-white/[0.03] px-5 py-3 mb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4 text-white/40 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12a7.5 7.5 0 0015 0m-15 0a7.5 7.5 0 1115 0m-15 0H3m16.5 0H21m-1.5 0H12m-8.457 3.077l1.41-.513m14.095-5.13l1.41-.513M5.106 17.785l1.15-.964m11.49-9.642l1.149-.964M7.501 19.795l.75-1.3m7.5-12.99l.75-1.3m-6.063 16.658l.26-1.477m2.605-14.772l.26-1.477m0 17.726l-.26-1.477M10.698 4.614l-.26-1.477M16.5 19.794l-.75-1.299M7.5 4.205L6.75 2.906" />
+              </svg>
+              <span className="text-xs text-white/50">
+                {Object.keys(initialEnvVars).length} env variable{Object.keys(initialEnvVars).length !== 1 ? "s" : ""} configured
+              </span>
+            </div>
+            <Link href="/settings" className="text-xs text-blue-400 hover:underline">Manage</Link>
+          </div>
+        </div>
+      )}
 
       <button
         onClick={handleLaunch}

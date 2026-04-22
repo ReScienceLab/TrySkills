@@ -6,6 +6,7 @@ import { SignInButton } from "@clerk/nextjs";
 import { PROVIDERS, type Provider } from "@/lib/providers/registry";
 import { useKeyStore } from "@/hooks/use-key-store";
 import { ProviderSection } from "@/components/provider-config";
+import { EnvVarsEditor } from "@/components/env-vars-editor";
 import { GlowMesh } from "@/components/glow-mesh";
 import { SiteHeader } from "@/components/site-header";
 
@@ -49,7 +50,7 @@ export default function SettingsPage() {
 
   return (
     <SettingsForm
-      key={savedConfig ? `${savedConfig.providerId}:${savedConfig.sandboxKey}` : "empty"}
+      key={savedConfig ? `${savedConfig.providerId}:${savedConfig.sandboxKey}:${JSON.stringify(savedConfig.envVars ?? {})}` : "empty"}
       savedConfig={savedConfig}
       save={save}
       clear={clear}
@@ -83,6 +84,7 @@ function SettingsForm({
   const [providerModels, setProviderModels] = useState<Record<string, string>>(initialModels);
   const [sandboxKey, setSandboxKey] = useState(savedConfig?.sandboxKey ?? "");
   const [showSandboxKey, setShowSandboxKey] = useState(false);
+  const [envVars, setEnvVars] = useState<Record<string, string>>(savedConfig?.envVars ?? {});
   const [saved, setSaved] = useState(false);
 
   const activeKey = providerKeys[activeProviderId] ?? "";
@@ -95,6 +97,7 @@ function SettingsForm({
       llmKey: activeKey,
       sandboxKey,
       providerKeys,
+      envVars: Object.keys(envVars).length > 0 ? envVars : undefined,
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -105,6 +108,7 @@ function SettingsForm({
     setProviderKeys({});
     setProviderModels(Object.fromEntries(PROVIDERS.map(p => [p.id, p.models[0]])));
     setSandboxKey("");
+    setEnvVars({});
     setActiveProviderId(PROVIDERS[0].id);
   };
 
@@ -168,6 +172,18 @@ function SettingsForm({
                   {showSandboxKey ? "Hide" : "Show"}
                 </button>
               </div>
+            </div>
+          </div>
+
+          <div className="border border-white/20 bg-black/40 backdrop-blur-sm mb-4">
+            <div className="px-6 py-5 border-b border-white/10">
+              <div className="flex items-center gap-3">
+                <h2 className="text-base font-semibold text-white/90">Environment Variables</h2>
+                <span className="text-xs text-white/30">For skills that need extra API keys</span>
+              </div>
+            </div>
+            <div className="px-6 py-5">
+              <EnvVarsEditor value={envVars} onChange={setEnvVars} />
             </div>
           </div>
 
