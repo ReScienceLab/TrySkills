@@ -112,6 +112,7 @@ function ConfigPanelForm({
       llmKey,
       sandboxKey,
       providerKeys,
+      envVars: initialEnvVars,
     });
     onLaunch({ provider, model, llmKey, sandboxKey, envVars: initialEnvVars });
   };

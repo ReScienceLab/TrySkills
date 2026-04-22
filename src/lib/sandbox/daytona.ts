@@ -88,6 +88,26 @@ function buildConfigYaml(model: string, provider: string, baseUrl?: string): str
   return lines.join("\n");
 }
 
+const RESERVED_ENV_KEYS = new Set([
+  "API_SERVER_ENABLED",
+  "API_SERVER_CORS_ORIGINS",
+  "GATEWAY_ALLOW_ALL_USERS",
+])
+
+function sanitizeExtraEnvVars(
+  extraEnvVars: Record<string, string> | undefined,
+  providerEnvVar: string,
+): Record<string, string> {
+  if (!extraEnvVars) return {}
+  const result: Record<string, string> = {}
+  for (const [key, value] of Object.entries(extraEnvVars)) {
+    if (key !== providerEnvVar && !RESERVED_ENV_KEYS.has(key)) {
+      result[key] = value
+    }
+  }
+  return result
+}
+
 function buildEnvFile(providerEnvVar: string, apiKey: string, extraEnvVars?: Record<string, string>): string {
   const lines = [
     `${providerEnvVar}=${apiKey}`,
@@ -95,12 +115,9 @@ function buildEnvFile(providerEnvVar: string, apiKey: string, extraEnvVars?: Rec
     "API_SERVER_CORS_ORIGINS=*",
     "GATEWAY_ALLOW_ALL_USERS=true",
   ]
-  if (extraEnvVars) {
-    for (const [key, value] of Object.entries(extraEnvVars)) {
-      if (key !== providerEnvVar) {
-        lines.push(`${key}=${value}`)
-      }
-    }
+  const safe = sanitizeExtraEnvVars(extraEnvVars, providerEnvVar)
+  for (const [key, value] of Object.entries(safe)) {
+    lines.push(`${key}=${value}`)
   }
   lines.push("")
   return lines.join("\n")
@@ -136,6 +153,7 @@ export async function createHermesSandbox(
   activeDaytona = daytona;
 
   const providerMapping = resolveProviderMapping(config.llmProvider);
+  const safeExtra = sanitizeExtraEnvVars(config.envVars, providerMapping.envVar);
 
   onProgress("creating");
 
@@ -158,7 +176,7 @@ export async function createHermesSandbox(
           API_SERVER_ENABLED: "true",
           API_SERVER_CORS_ORIGINS: "*",
           GATEWAY_ALLOW_ALL_USERS: "true",
-          ...config.envVars,
+          ...safeExtra,
         },
       },
       { timeout: 120 },
@@ -185,7 +203,7 @@ export async function createHermesSandbox(
             API_SERVER_ENABLED: "true",
             API_SERVER_CORS_ORIGINS: "*",
             GATEWAY_ALLOW_ALL_USERS: "true",
-            ...config.envVars,
+            ...safeExtra,
           },
         },
         {
@@ -209,7 +227,7 @@ export async function createHermesSandbox(
             API_SERVER_ENABLED: "true",
             API_SERVER_CORS_ORIGINS: "*",
             GATEWAY_ALLOW_ALL_USERS: "true",
-            ...config.envVars,
+            ...safeExtra,
           },
         } as unknown as Parameters<typeof daytona.create>[0],
         { timeout: 300 },
