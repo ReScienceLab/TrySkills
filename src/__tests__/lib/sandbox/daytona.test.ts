@@ -370,9 +370,9 @@ describe("sandbox/daytona", () => {
       const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
       // Should NOT clean old skills (additive install)
       expect(allCmds.every((c: string) => !c.includes("rm -rf"))).toBe(true);
-      // Should NOT restart gateway (already running)
-      expect(allCmds.every((c: string) => !c.includes("pkill"))).toBe(true);
-      expect(allCmds.every((c: string) => !c.includes("hermes gateway"))).toBe(true);
+      // Should restart gateway after config rewrite so new env vars take effect
+      const gwCmd = allCmds.find((c: string) => c.includes("hermes") && c.includes("gateway"));
+      expect(gwCmd).toBeDefined();
     });
 
     it("throws on unexpected sandbox state", async () => {
