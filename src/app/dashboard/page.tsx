@@ -35,9 +35,12 @@ export default function DashboardPage() {
   const trials = useQuery(api.skillTrials.list, isAuthenticated ? {} : "skip");
   const removeSandbox = useMutation(api.sandboxes.remove);
 
+  const STALE_PENDING_MS = 5 * 60 * 1000;
   const sandboxList = sandboxes ?? [];
   const sandbox = sandboxList.find((s) => !s.sandboxId.startsWith("pending-"))
-    ?? sandboxList.find((s) => s.sandboxId.startsWith("pending-"));
+    ?? sandboxList.find((s) =>
+      s.sandboxId.startsWith("pending-") && Date.now() - s.createdAt <= STALE_PENDING_MS
+    );
   const trialList = trials ?? [];
 
   const [liveInfo, setLiveInfo] = useState<SandboxLiveInfo | null>(null);
