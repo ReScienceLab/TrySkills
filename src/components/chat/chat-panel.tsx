@@ -143,6 +143,7 @@ export function ChatPanel({
   initialMessages,
   sandboxId,
   sandboxKey,
+  defaultInput,
   onStop,
   onTryAnother,
   onSessionError,
@@ -160,6 +161,7 @@ export function ChatPanel({
   initialMessages?: { role: "user" | "assistant" | "system"; content: string }[]
   sandboxId?: string | null
   sandboxKey?: string | null
+  defaultInput?: string
   onStop: () => void
   onTryAnother?: () => void
   onSessionError?: () => void
@@ -180,7 +182,7 @@ export function ChatPanel({
     sandboxKey,
   )
 
-  const [input, setInput] = useState("")
+  const [input, setInput] = useState(defaultInput ?? "")
   const [elapsed, setElapsed] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
