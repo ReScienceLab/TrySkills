@@ -9,6 +9,7 @@ import { useChat, type ToolCall, type ChatError } from "./use-chat"
 import type { ChatMessage } from "@/lib/sandbox/hermes-api"
 
 const streamdownPlugins = { code, mermaid }
+const disallowedElements = ["img", "iframe", "script", "object", "embed", "link", "video", "audio", "source"] as const
 
 function ToolCard({ tool }: { tool: ToolCall }) {
   return (
@@ -116,7 +117,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
     <div className="mb-4">
       {msg.content && (
         <div className="prose prose-invert prose-sm max-w-none text-white/85 [&_a]:text-blue-400 [&_a:hover]:underline">
-          <Streamdown plugins={streamdownPlugins}>
+          <Streamdown plugins={streamdownPlugins} disallowedElements={disallowedElements}>
             {msg.content}
           </Streamdown>
         </div>
