@@ -1,10 +1,13 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import ReactMarkdown from "react-markdown"
-import rehypeHighlight from "rehype-highlight"
+import { Streamdown } from "streamdown"
+import { code } from "@streamdown/code"
+import "streamdown/styles.css"
 import { useChat, type ToolCall, type ChatError } from "./use-chat"
 import type { ChatMessage } from "@/lib/sandbox/hermes-api"
+
+const streamdownPlugins = { code }
 
 function ToolCard({ tool }: { tool: ToolCall }) {
   return (
@@ -111,10 +114,10 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
   return (
     <div className="mb-4">
       {msg.content && (
-        <div className="prose prose-invert prose-sm max-w-none text-white/85 [&_pre]:bg-white/5 [&_pre]:border [&_pre]:border-white/10 [&_pre]:rounded [&_code]:text-emerald-400/80 [&_a]:text-blue-400 [&_a:hover]:underline">
-          <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
+        <div className="prose prose-invert prose-sm max-w-none text-white/85 [&_a]:text-blue-400 [&_a:hover]:underline">
+          <Streamdown plugins={streamdownPlugins}>
             {msg.content}
-          </ReactMarkdown>
+          </Streamdown>
         </div>
       )}
     </div>
