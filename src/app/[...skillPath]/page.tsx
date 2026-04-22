@@ -165,6 +165,7 @@ export default function SkillPage({
           gatewayUrl: result.gatewayUrl,
           configHash: sameConfig ? undefined : configHash,
           gatewayUrlCreatedAt: result.urlRefreshed ? Date.now() : undefined,
+          installedSkills: result.discoveredSkills,
         }).catch(() => {});
         addInstalledSkillMut({ sandboxId: sandbox.sandboxId, skillPath: skillPathStr }).catch(() => {});
         recordTrial({ sandboxId: sandbox.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
@@ -258,6 +259,7 @@ export default function SkillPage({
       // Insert real record BEFORE deleting placeholder to avoid null window.
       // If insert fails, destroy sandbox to prevent orphan.
       try {
+        const allSkills = [...new Set([skillPathStr, ...(result.discoveredSkills ?? [])])];
         await createSandboxRecord({
           sandboxId: result.sandboxId,
           skillPath: skillPathStr,
@@ -266,7 +268,7 @@ export default function SkillPage({
           poolState: "active",
           currentSkillPath: skillPathStr,
           configHash,
-          installedSkills: [skillPathStr],
+          installedSkills: allSkills,
           gatewayUrlCreatedAt: Date.now(),
           cpu: result.cpu,
           memory: result.memory,
