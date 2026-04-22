@@ -45,6 +45,8 @@ export default function SkillPage({
   const updateSandboxState = useMutation(api.sandboxes.updateState);
   const acquireCreateLock = useMutation(api.sandboxes.acquireCreateLock);
   const updatePoolState = useMutation(api.sandboxes.updatePoolState);
+  const addInstalledSkillMut = useMutation(api.sandboxes.addInstalledSkill);
+  const syncInstalledSkills = useMutation(api.sandboxes.syncInstalledSkills);
   const recordTrial = useMutation(api.skillTrials.record);
   const userSandbox = useQuery(
     api.sandboxes.getSandbox,
@@ -164,15 +166,11 @@ export default function SkillPage({
           gatewayUrl: result.gatewayUrl,
           configHash: sameConfig ? undefined : configHash,
           gatewayUrlCreatedAt: result.urlRefreshed ? Date.now() : undefined,
-          installedSkills: [...new Set([
-            ...(sandbox.installedSkills ?? []),
-            ...(result.discoveredSkills ?? []).filter((d: string) => {
-              const existing = sandbox.installedSkills ?? []
-              return !existing.some((e) => e.replace(/\//g, "--") === d)
-            }),
-            skillPathStr,
-          ])],
         }).catch(() => {});
+        addInstalledSkillMut({ sandboxId: sandbox.sandboxId, skillPath: skillPathStr }).catch(() => {});
+        if (result.discoveredSkills?.length) {
+          syncInstalledSkills({ sandboxId: sandbox.sandboxId, discoveredSkills: result.discoveredSkills }).catch(() => {});
+        }
         recordTrial({ sandboxId: sandbox.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
         return;
       } catch (err) {
@@ -264,10 +262,6 @@ export default function SkillPage({
       // Insert real record BEFORE deleting placeholder to avoid null window.
       // If insert fails, destroy sandbox to prevent orphan.
       try {
-        const nativeSkills = (result.discoveredSkills ?? []).filter(
-          (d) => d !== skillPathStr.replace(/\//g, "--"),
-        )
-        const allSkills = [skillPathStr, ...nativeSkills];
         await createSandboxRecord({
           sandboxId: result.sandboxId,
           skillPath: skillPathStr,
@@ -276,7 +270,7 @@ export default function SkillPage({
           poolState: "active",
           currentSkillPath: skillPathStr,
           configHash,
-          installedSkills: allSkills,
+          installedSkills: [skillPathStr],
           gatewayUrlCreatedAt: Date.now(),
           cpu: result.cpu,
           memory: result.memory,
@@ -296,6 +290,9 @@ export default function SkillPage({
         return;
       }
       recordTrial({ sandboxId: result.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
+      if (result.discoveredSkills?.length) {
+        syncInstalledSkills({ sandboxId: result.sandboxId, discoveredSkills: result.discoveredSkills }).catch(() => {});
+      }
     } catch (err) {
       if (abort.signal.aborted) return;
       setSandboxState("error");
