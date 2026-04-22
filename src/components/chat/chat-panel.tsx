@@ -9,7 +9,7 @@ import { useChat, type ToolCall, type ChatError } from "./use-chat"
 import type { ChatMessage } from "@/lib/sandbox/hermes-api"
 
 const streamdownPlugins = { code, mermaid }
-const disallowedElements = ["img", "iframe", "script", "object", "embed", "link", "video", "audio", "source"] as const
+const disallowedElements = ["img", "iframe", "script", "object", "embed", "link", "video", "audio", "source", "form", "input", "button", "select", "textarea"] as const
 
 function ToolCard({ tool }: { tool: ToolCall }) {
   return (
