@@ -141,9 +141,16 @@ export function ChatPanel({
   apiKey,
   initialSessionId,
   initialMessages,
+  sandboxId,
+  sandboxKey,
+  defaultInput,
+  initialWorkspacePath,
   onStop,
   onTryAnother,
   onSessionError,
+  onToolComplete,
+  onWorkspacePathChange,
+  onStreamingChange,
 }: {
   gatewayBaseUrl: string
   model: string
@@ -154,11 +161,18 @@ export function ChatPanel({
   apiKey?: string
   initialSessionId?: string
   initialMessages?: { role: "user" | "assistant" | "system"; content: string }[]
+  sandboxId?: string | null
+  sandboxKey?: string | null
+  defaultInput?: string
+  initialWorkspacePath?: string | null
   onStop: () => void
   onTryAnother?: () => void
   onSessionError?: () => void
+  onToolComplete?: (toolName: string) => void
+  onWorkspacePathChange?: (path: string) => void
+  onStreamingChange?: (streaming: boolean) => void
 }) {
-  const { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, send, cancel } = useChat(
+  const { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, workspacePath, send, cancel } = useChat(
     gatewayBaseUrl,
     model,
     skillName,
@@ -167,12 +181,26 @@ export function ChatPanel({
     initialSessionId,
     skillPath,
     initialMessages,
+    onToolComplete,
+    sandboxId,
+    sandboxKey,
+    initialWorkspacePath,
   )
 
-  const [input, setInput] = useState("")
+  const [input, setInput] = useState(defaultInput ?? "")
   const [elapsed, setElapsed] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Propagate workspace path to parent for workspace panel
+  useEffect(() => {
+    if (workspacePath) onWorkspacePathChange?.(workspacePath)
+  }, [workspacePath, onWorkspacePathChange])
+
+  // Propagate streaming state to parent for workspace polling
+  useEffect(() => {
+    onStreamingChange?.(isStreaming)
+  }, [isStreaming, onStreamingChange])
 
   // Keep browser URL in sync when session id changes (e.g. resume fallback creates new session)
   useEffect(() => {
@@ -223,7 +251,7 @@ export function ChatPanel({
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-80px)] max-w-4xl mx-auto w-full">
+    <div className="flex flex-col h-[calc(100vh-56px)] w-full">
       {/* TopBar */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 shrink-0" aria-label={`Skill ${skillName} active for ${formatTime(elapsed)}`}>
         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" aria-hidden="true" />

@@ -169,6 +169,10 @@ export function useChat(
   initialSessionId?: string,
   skillPath?: string,
   initialMessages?: ChatMessage[],
+  onToolComplete?: (toolName: string) => void,
+  sandboxId?: string | null,
+  sandboxKey?: string | null,
+  initialWorkspacePath?: string | null,
 ) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages ?? [])
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([])
@@ -177,6 +181,7 @@ export function useChat(
   const [creditWarning, setCreditWarning] = useState<string | null>(null)
   const [sessionFailed, setSessionFailed] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(initialSessionId ?? null)
+  const [workspacePath, setWorkspacePath] = useState<string | null>(initialWorkspacePath ?? null)
 
   const cancelRef = useRef<(() => void) | null>(null)
   const initRef = useRef(false)
@@ -186,6 +191,8 @@ export function useChat(
   const preflightFailedRef = useRef(false)
   const turnIdRef = useRef(0)
   const sessionIdRef = useRef<string | null>(initialSessionId ?? null)
+  const onToolCompleteRef = useRef(onToolComplete)
+  onToolCompleteRef.current = onToolComplete
 
   const createSession = useMutation(api.chatSessions.create)
   const appendMessages = useMutation(api.chatSessions.appendMessages)
@@ -231,6 +238,8 @@ export function useChat(
     [appendMessages],
   )
 
+  const workspacePathRef = useRef<string | null>(initialWorkspacePath ?? null)
+
   const stream = useCallback(
     (allMessages: ChatMessage[]) => {
       if (!gatewayBaseUrl) return
@@ -243,9 +252,21 @@ export function useChat(
 
       const lastUserMsg = allMessages[allMessages.length - 1]
 
+      // Prepend workspace system message on every request
+      const wsDir = workspacePathRef.current
+      const messagesWithSystem = wsDir
+        ? [
+            {
+              role: "system" as const,
+              content: `Use the directory ${wsDir} as your working directory for all file operations in this session. Create files, save outputs, and write results there. Create the directory first if it does not exist.`,
+            },
+            ...allMessages,
+          ]
+        : allMessages
+
       const cancel = chatStream(
         gatewayBaseUrl,
-        allMessages,
+        messagesWithSystem,
         {
           onDelta: (text) => {
             currentContentRef.current += text
@@ -259,12 +280,25 @@ export function useChat(
           },
           onToolProgress: (tool: ToolProgress) => {
             setToolCalls((prev) => {
+              const running = prev.filter((t) => t.status === "running")
+              for (const t of running) {
+                onToolCompleteRef.current?.(t.name)
+              }
               const existing = prev.find((t) => t.name === tool.tool && t.status === "running")
               if (existing) return prev
-              return [...prev, { name: tool.tool, emoji: tool.emoji, status: "running" }]
+              return [
+                ...prev.map((t) => t.status === "running" ? { ...t, status: "done" as const } : t),
+                { name: tool.tool, emoji: tool.emoji, status: "running" },
+              ]
             })
           },
           onDone: async (meta) => {
+            setToolCalls((prev) => {
+              for (const t of prev.filter((tc) => tc.status === "running")) {
+                onToolCompleteRef.current?.(t.name)
+              }
+              return prev.map((t) => ({ ...t, status: "done" as const }))
+            })
             await handleDone(meta)
             if (meta.hadContent && lastUserMsg) {
               await saveToSession(
@@ -338,7 +372,7 @@ export function useChat(
       })
   }, [gatewayBaseUrl, providerId, apiKey])
 
-  // Auto-init: create Convex session + send first message (or resume existing session)
+  // Auto-init: create Convex session + workspace directory (no auto-send)
   useEffect(() => {
     if (!gatewayBaseUrl || initRef.current) return
 
@@ -348,99 +382,44 @@ export function useChat(
       if (initRef.current || !gatewayBaseUrl || preflightFailedRef.current) return
       initRef.current = true
 
-      const MAX_RETRIES = 3
-      const RETRY_DELAYS = [2000, 4000, 8000]
-      let attempt = 0
-
-      const tryInit = async () => {
+      const doInit = async () => {
         try {
-          // If resuming with pre-loaded messages, skip auto-init
           if (initialMessages && initialMessages.length > 0) {
             return
           }
 
-          // Create a Convex session (if not already set from resume)
           if (!sessionIdRef.current && skillPath) {
+            // Generate workspace path before session creation so it can be persisted
+            const wsId = crypto.randomUUID().replace(/-/g, "").slice(0, 16)
+            const wsPath = `/root/.hermes/workspaces/${wsId}`
+
             const sid = await createSession({
               skillPath,
               title: `${skillName} session`,
               model,
+              workspacePath: wsPath,
             })
             const sidStr = sid as string
             sessionIdRef.current = sidStr
             setSessionId(sidStr)
+
+            workspacePathRef.current = wsPath
+            setWorkspacePath(wsPath)
+
+            if (sandboxId && sandboxKey) {
+              fetch("/api/workspace", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "mkdir", sandboxId, key: sandboxKey, path: wsPath }),
+              }).catch(() => {})
+            }
           }
-
-          const firstMsg: ChatMessage = { role: "user", content: `I want to try the ${skillName} skill` }
-          setMessages([firstMsg])
-
-          currentContentRef.current = ""
-          setIsStreaming(true)
-
-          const cancel = chatStream(
-            gatewayBaseUrl,
-            [firstMsg],
-            {
-              onDelta: (text) => {
-                currentContentRef.current += text
-                setMessages((prev) => {
-                  const last = prev[prev.length - 1]
-                  if (last?.role === "assistant") {
-                    return [...prev.slice(0, -1), { ...last, content: currentContentRef.current }]
-                  }
-                  return [...prev, { role: "assistant", content: currentContentRef.current }]
-                })
-              },
-              onToolProgress: (tool: ToolProgress) => {
-                setToolCalls((prev) => [...prev, { name: tool.tool, emoji: tool.emoji, status: "running" }])
-              },
-              onDone: async (meta) => {
-                await handleDone(meta)
-                if (meta.hadContent) {
-                  await saveToSession(
-                    firstMsg,
-                    { role: "assistant", content: currentContentRef.current },
-                  )
-                }
-              },
-              onError: (err) => {
-                const classified = classifyError(err, providerId)
-                if (classified.type === "credit_error" || classified.type === "auth_error") {
-                  setIsStreaming(false)
-                  setSessionFailed(true)
-                  setError(classified)
-                  return
-                }
-                attempt++
-                if (attempt <= MAX_RETRIES) {
-                  setError({ type: "network", message: `Retrying (${attempt}/${MAX_RETRIES})...` })
-                  retryTimerRef.current = setTimeout(() => { void tryInit() }, RETRY_DELAYS[attempt - 1])
-                } else {
-                  setIsStreaming(false)
-                  setSessionFailed(true)
-                  setError(classified)
-                  initRef.current = false
-                }
-              },
-            },
-            model,
-          )
-          cancelRef.current = cancel
         } catch (err) {
-          attempt++
-          if (attempt <= MAX_RETRIES) {
-            setError({ type: "network", message: `Retrying (${attempt}/${MAX_RETRIES})...` })
-            retryTimerRef.current = setTimeout(() => { void tryInit() }, RETRY_DELAYS[attempt - 1])
-          } else {
-            setIsStreaming(false)
-            setSessionFailed(true)
-            setError(classifyError(err instanceof Error ? err : new Error(String(err)), providerId))
-            initRef.current = false
-          }
+          console.error("[useChat] session init failed:", err)
         }
       }
 
-      void tryInit()
+      void doInit()
     }
 
     if (!preflightDoneRef.current) {
@@ -455,12 +434,11 @@ export function useChat(
     }
 
     return () => {
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
       clearInterval(pollTimer)
     }
   }, [gatewayBaseUrl, model, skillName]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const isProviderError = error?.type === "credit_error" || error?.type === "auth_error" || error?.type === "rate_limit"
 
-  return { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, send, cancel }
+  return { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, workspacePath, send, cancel }
 }

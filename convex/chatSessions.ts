@@ -11,6 +11,7 @@ export const create = mutation({
     skillPath: v.string(),
     title: v.string(),
     model: v.string(),
+    workspacePath: v.optional(v.string()),
   },
   returns: v.id("chatSessions"),
   handler: async (ctx, args) => {
@@ -22,6 +23,7 @@ export const create = mutation({
       skillPath: args.skillPath,
       title: args.title,
       model: args.model,
+      workspacePath: args.workspacePath,
       messages: [],
       messageCount: 0,
       createdAt: Date.now(),
@@ -111,6 +113,7 @@ export const list = query({
       skillPath: s.skillPath,
       title: s.title,
       model: s.model,
+      workspacePath: s.workspacePath,
       messageCount: s.messageCount,
       createdAt: s.createdAt,
       updatedAt: s.updatedAt,

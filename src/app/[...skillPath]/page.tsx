@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, use } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, use } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
@@ -26,6 +26,8 @@ import { useKeyStore } from "@/hooks/use-key-store";
 import { useHeartbeat } from "@/hooks/use-heartbeat";
 import { getProvider } from "@/lib/providers/registry";
 import { OnboardingModal } from "@/components/onboarding-modal";
+import { WorkspacePanel } from "@/components/workspace/workspace-panel";
+import { useWorkspace } from "@/hooks/use-workspace";
 import type { SandboxState, SandboxSession } from "@/lib/sandbox/types";
 
 type AppPhase = "config" | "launching" | "running";
@@ -82,6 +84,22 @@ export default function SkillPage({
   const userCancelled = useRef(false);
 
   useHeartbeat(session?.sandboxId ?? null, savedConfig?.sandboxKey ?? null);
+
+  const [workspacePath, setWorkspacePath] = useState<string | null>(null);
+  const [chatIsStreaming, setChatIsStreaming] = useState(false);
+  const workspace = useWorkspace(
+    session?.sandboxId ?? null,
+    savedConfig?.sandboxKey ?? null,
+    workspacePath,
+    chatIsStreaming,
+  );
+
+  // For resumed sessions, set workspace path from Convex session data
+  useEffect(() => {
+    if (resumeSession?.workspacePath && !workspacePath) {
+      setWorkspacePath(resumeSession.workspacePath);
+    }
+  }, [resumeSession, workspacePath]);
 
   const handleLaunch = async (config: LaunchConfig) => {
     launchAbortRef.current?.abort();
@@ -414,6 +432,14 @@ export default function SkillPage({
     }
   };
 
+  const handleWorkspacePathChange = useCallback((path: string) => {
+    setWorkspacePath(path);
+  }, []);
+
+  const handleStreamingChange = useCallback((streaming: boolean) => {
+    setChatIsStreaming(streaming);
+  }, []);
+
   if (!isValidPath) {
     return (
       <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
@@ -438,8 +464,86 @@ export default function SkillPage({
       <GlowMesh />
       <SiteHeader breadcrumb={`${owner}/${repo}/${skillName}`} />
 
-      <div className="flex-1 flex items-center justify-center relative z-10 px-6">
-        <div className="w-full max-w-[640px]">
+      {phase === "running" && session ? (
+        <div className="flex-1 flex relative z-10 overflow-hidden pt-14">
+          {/* Chat column */}
+          <div className="flex-1 min-w-0 max-w-4xl mx-auto">
+            {resumeSessionId && resumeSession === undefined ? (
+              <div className="flex items-center justify-center py-20">
+                <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
+              </div>
+            ) : (
+              <ChatPanel
+                gatewayBaseUrl={session.gatewayBaseUrl || session.gatewayUrl}
+                model={savedConfig?.model || "anthropic/claude-sonnet-4"}
+                skillName={skillName}
+                skillPath={skillKey}
+                startedAt={session.startedAt}
+                providerId={savedConfig?.providerId}
+                apiKey={savedConfig?.llmKey}
+                initialSessionId={resumeSession ? resumeSessionId : undefined}
+                initialMessages={resumeSession?.messages}
+                sandboxId={session.sandboxId}
+                sandboxKey={savedConfig?.sandboxKey}
+                defaultInput={resumeSession ? undefined : `I want to try the /${skillKey} skill`}
+                initialWorkspacePath={resumeSession?.workspacePath}
+                onStop={handleStop}
+                onTryAnother={handleTryAnother}
+                onToolComplete={workspace.onToolComplete}
+                onWorkspacePathChange={handleWorkspacePathChange}
+                onStreamingChange={handleStreamingChange}
+                onSessionError={async () => {
+                  if (session?.sandboxId && launchConfigRef.current) {
+                    destroySandbox(launchConfigRef.current.sandboxKey, session.sandboxId).catch(() => {});
+                    await removeSandboxRecord({ sandboxId: session.sandboxId }).catch(() => {});
+                  }
+                  setSession(null);
+                  sessionRef.current = null;
+                  autoLaunchFired.current = false;
+                  autoLaunchLock.delete(skillKey);
+                  setPhase("config");
+                }}
+              />
+            )}
+          </div>
+
+          {/* Workspace panel */}
+          {workspace.panelOpen && (
+            <div className="w-[360px] shrink-0 hidden lg:block h-[calc(100vh-56px)]">
+              <WorkspacePanel
+                entries={workspace.entries}
+                selectedFile={workspace.selectedFile}
+                fileContent={workspace.fileContent}
+                loadingTree={workspace.loadingTree}
+                loadingFile={workspace.loadingFile}
+                treeError={workspace.treeError}
+                fileError={workspace.fileError}
+                onSelectFile={workspace.selectFile}
+                onCloseFile={workspace.closeFile}
+                onRefresh={workspace.refreshTree}
+                onClose={() => workspace.setPanelOpen(false)}
+              />
+            </div>
+          )}
+
+          {/* Workspace toggle button (when panel is closed) */}
+          {!workspace.panelOpen && workspace.entries.length > 0 && (
+            <button
+              onClick={() => workspace.setPanelOpen(true)}
+              className="fixed right-4 bottom-6 z-20 hidden lg:flex items-center gap-2 px-3 py-2 bg-white/[0.06] backdrop-blur-sm border border-white/[0.08] rounded-lg text-[13px] text-white/40 hover:text-white/60 hover:bg-white/[0.1] hover:border-white/[0.12] transition-all shadow-lg shadow-black/20"
+              title="Open workspace files"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+              </svg>
+              Files
+              <span className="text-[11px] text-white/20 bg-white/[0.06] px-1.5 py-0.5 rounded">{workspace.entries.length}</span>
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="flex-1 flex items-center justify-center relative z-10 px-6">
+          <div className="w-full max-w-[640px]">
           {phase === "config" && !authLoaded && (
             <div className="flex items-center justify-center py-20">
               <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
@@ -499,42 +603,9 @@ export default function SkillPage({
               />
             </div>
           )}
-
-          {phase === "running" && session && (
-            resumeSessionId && resumeSession === undefined ? (
-              <div className="flex items-center justify-center py-20">
-                <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
-              </div>
-            ) : (
-            <ChatPanel
-              gatewayBaseUrl={session.gatewayBaseUrl || session.gatewayUrl}
-              model={savedConfig?.model || "anthropic/claude-sonnet-4"}
-              skillName={skillName}
-              skillPath={skillKey}
-              startedAt={session.startedAt}
-              providerId={savedConfig?.providerId}
-              apiKey={savedConfig?.llmKey}
-              initialSessionId={resumeSession ? resumeSessionId : undefined}
-              initialMessages={resumeSession?.messages}
-              onStop={handleStop}
-              onTryAnother={handleTryAnother}
-              onSessionError={async () => {
-                // Sandbox may be dead -- destroy Daytona sandbox + clear record
-                if (session?.sandboxId && launchConfigRef.current) {
-                  destroySandbox(launchConfigRef.current.sandboxKey, session.sandboxId).catch(() => {});
-                  await removeSandboxRecord({ sandboxId: session.sandboxId }).catch(() => {});
-                }
-                setSession(null);
-                sessionRef.current = null;
-                autoLaunchFired.current = false;
-                autoLaunchLock.delete(skillKey);
-                setPhase("config");
-              }}
-            />
-            )
-          )}
         </div>
       </div>
+      )}
     </main>
   );
 }
