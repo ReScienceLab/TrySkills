@@ -101,6 +101,7 @@ export async function POST(request: NextRequest) {
         [DAYTONA_SKIP_HEADER]: "true",
       },
       body: body ? JSON.stringify(body) : undefined,
+      signal: request.signal,
     });
 
     // Streaming passthrough for SSE responses

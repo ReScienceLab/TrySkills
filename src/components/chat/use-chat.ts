@@ -23,6 +23,7 @@ export function useChat(
   const cancelRef = useRef<(() => void) | null>(null);
   const initRef = useRef(false);
   const currentContentRef = useRef("");
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const stream = useCallback(
     (allMessages: ChatMessage[]) => {
@@ -84,6 +85,10 @@ export function useChat(
   const cancel = useCallback(() => {
     cancelRef.current?.();
     cancelRef.current = null;
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
     setIsStreaming(false);
     // Remove partial assistant message to avoid replaying truncated content
     setMessages((prev) =>
@@ -102,7 +107,6 @@ export function useChat(
     const RETRY_DELAYS = [2000, 4000, 8000];
 
     let attempt = 0;
-    let timer: ReturnType<typeof setTimeout>;
 
     const tryInit = () => {
       const firstMsg: ChatMessage = { role: "user", content: `I want to try the ${skillName} skill` };
@@ -133,7 +137,7 @@ export function useChat(
             attempt++;
             if (attempt <= MAX_RETRIES) {
               setError(`Retrying (${attempt}/${MAX_RETRIES})...`);
-              timer = setTimeout(tryInit, RETRY_DELAYS[attempt - 1]);
+              retryTimerRef.current = setTimeout(tryInit, RETRY_DELAYS[attempt - 1]);
             } else {
               setIsStreaming(false);
               setSessionFailed(true);
@@ -152,7 +156,7 @@ export function useChat(
     tryInit();
 
     return () => {
-      clearTimeout(timer);
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };
   }, [gatewayBaseUrl, model, skillName]); // eslint-disable-line react-hooks/exhaustive-deps
 
