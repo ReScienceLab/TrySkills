@@ -1,5 +1,5 @@
 import type { SandboxConfig, SandboxSession, SandboxState } from "./types";
-import { getProvider } from "@/lib/providers/registry";
+import { getProviderData } from "@/lib/providers/provider-data";
 
 const SNAPSHOT_NAME = process.env.NEXT_PUBLIC_HERMES_SNAPSHOT || "hermes-ready";
 const HERMES_IMAGE = process.env.NEXT_PUBLIC_HERMES_IMAGE || "ghcr.io/resciencelab/hermes-ready:latest";
@@ -20,7 +20,7 @@ export interface SkillFile {
 }
 
 function resolveProviderMapping(llmProvider: string) {
-  const provider = getProvider(llmProvider);
+  const provider = getProviderData(llmProvider);
   const envVar = provider?.inferenceProvider === "custom"
     ? "OPENAI_API_KEY"
     : provider?.envVar ?? "OPENROUTER_API_KEY";

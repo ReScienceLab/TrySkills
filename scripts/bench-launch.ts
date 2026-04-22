@@ -14,7 +14,7 @@
  */
 
 import { Daytona } from "@daytona/sdk";
-import { getProvider } from "../src/lib/providers/registry";
+import { getProviderData } from "../src/lib/providers/provider-data";
 
 const DAYTONA_API_KEY = process.env.DAYTONA_API_KEY;
 const LLM_API_KEY = process.env.LLM_API_KEY || "sk-placeholder-for-bench";
@@ -29,7 +29,7 @@ const GATEWAY_PORT = 8642;
 const WEBUI_PORT = 8787;
 
 function resolveProvider(providerId: string) {
-  const provider = getProvider(providerId);
+  const provider = getProviderData(providerId);
   const envVar = provider?.inferenceProvider === "custom"
     ? "OPENAI_API_KEY"
     : provider?.envVar ?? "OPENROUTER_API_KEY";

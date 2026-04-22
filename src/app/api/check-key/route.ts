@@ -16,11 +16,17 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const res = await fetch(provider.checkEndpoint, {
-      method: "GET",
+    const method = provider.checkMethod ?? "GET";
+    const fetchInit: RequestInit = {
+      method,
       headers: provider.checkAuthHeader(apiKey),
       signal: AbortSignal.timeout(10_000),
-    });
+    };
+    if (method === "POST" && provider.checkBody) {
+      fetchInit.body = provider.checkBody(apiKey);
+    }
+
+    const res = await fetch(provider.checkEndpoint, fetchInit);
 
     if (res.ok) {
       return NextResponse.json({ ok: true });
