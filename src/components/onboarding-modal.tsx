@@ -4,15 +4,27 @@ import { useState } from "react";
 import { PROVIDERS, type Provider } from "@/lib/providers/registry";
 import { useKeyStore } from "@/hooks/use-key-store";
 import { ProviderTabs, ModelSelector, ApiKeyInput } from "@/components/provider-config";
+import type { SkillEnvVar } from "@/lib/skill/env-vars";
 
-export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
+type Step = 1 | 2 | "envvars" | 3;
+
+export function OnboardingModal({
+  onComplete,
+  skillEnvVars,
+}: {
+  onComplete: () => void;
+  skillEnvVars?: SkillEnvVar[];
+}) {
   const { save } = useKeyStore();
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const hasEnvVarsStep = skillEnvVars && skillEnvVars.length > 0;
+  const [step, setStep] = useState<Step>(1);
   const [provider, setProvider] = useState<Provider>(PROVIDERS[0]);
   const [model, setModel] = useState(PROVIDERS[0].models[0]);
   const [llmKey, setLlmKey] = useState("");
   const [sandboxKey, setSandboxKey] = useState("");
   const [showSandboxKey, setShowSandboxKey] = useState(false);
+  const [envVarValues, setEnvVarValues] = useState<Record<string, string>>({});
+  const [envVarVisible, setEnvVarVisible] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -29,12 +41,16 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
     setSaving(true);
     setSaveError(null);
     try {
+      const envVars = Object.fromEntries(
+        Object.entries(envVarValues).filter(([, v]) => v.trim()),
+      );
       await save({
         providerId: provider.id,
         model,
         llmKey,
         sandboxKey,
         providerKeys: { [provider.id]: llmKey },
+        envVars: Object.keys(envVars).length > 0 ? envVars : undefined,
       });
       setStep(3);
     } catch (err) {
@@ -61,17 +77,20 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
 
         <div className="px-6 py-2 border-b border-white/10">
           <div className="flex items-center gap-1">
-            {[1, 2, 3].map((s) => (
-              <div key={s} className="flex items-center gap-1 flex-1">
-                <div className={`h-1 flex-1 transition-colors ${
-                  s <= step ? "bg-white" : "bg-white/10"
-                }`} />
-              </div>
-            ))}
+            {(hasEnvVarsStep ? [1, 2, "envvars", 3] as const : [1, 2, 3] as const).map((s, i) => {
+              const stepOrder = (v: Step) => v === 1 ? 0 : v === 2 ? 1 : v === "envvars" ? 2 : 3;
+              const filled = stepOrder(step) >= stepOrder(s);
+              return (
+                <div key={i} className="flex items-center gap-1 flex-1">
+                  <div className={`h-1 flex-1 transition-colors ${filled ? "bg-white" : "bg-white/10"}`} />
+                </div>
+              );
+            })}
           </div>
           <div className="flex justify-between text-[10px] text-white/30 mt-1 mb-2">
             <span>Sandbox</span>
             <span>LLM Provider</span>
+            {hasEnvVarsStep && <span>Env Vars</span>}
             <span>Done</span>
           </div>
         </div>
@@ -183,6 +202,59 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
             </div>
           )}
 
+          {step === "envvars" && hasEnvVarsStep && (
+            <div className="space-y-4 animate-fade-in">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-sm font-semibold text-white/60">3</div>
+                <div>
+                  <div className="text-sm font-medium text-white/90">Skill Environment Variables</div>
+                  <div className="text-xs text-white/40">This skill uses additional API keys (optional)</div>
+                </div>
+              </div>
+
+              <div className="space-y-3 max-h-[280px] overflow-y-auto">
+                {skillEnvVars!.map((v) => (
+                  <div key={v.name} className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <label htmlFor={`onboard-env-${v.name}`} className="text-xs font-mono text-white/70">{v.name}</label>
+                      {v.help && (
+                        <a href={v.help} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400 hover:underline">
+                          Get key &rarr;
+                        </a>
+                      )}
+                    </div>
+                    {v.description && <p className="text-[11px] text-white/30">{v.description}</p>}
+                    <div className="relative">
+                      <input
+                        id={`onboard-env-${v.name}`}
+                        type={envVarVisible.has(v.name) ? "text" : "password"}
+                        value={envVarValues[v.name] ?? ""}
+                        onChange={(e) => setEnvVarValues((prev) => ({ ...prev, [v.name]: e.target.value }))}
+                        placeholder={`Enter ${v.name}`}
+                        className="w-full px-3 py-2 pr-12 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 focus:border-white/30 transition-colors placeholder:text-white/20"
+                      />
+                      <button
+                        onClick={() => setEnvVarVisible((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(v.name)) next.delete(v.name); else next.add(v.name);
+                          return next;
+                        })}
+                        aria-label={envVarVisible.has(v.name) ? `Hide ${v.name}` : `Show ${v.name}`}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors text-xs"
+                      >
+                        {envVarVisible.has(v.name) ? "Hide" : "Show"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <p className="text-[11px] text-white/30">
+                You can configure these later in Settings if you don&#39;t have them now.
+              </p>
+            </div>
+          )}
+
           {step === 3 && (
             <div className="space-y-4 animate-fade-in text-center py-4">
               <svg className="w-12 h-12 mx-auto text-green-400/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -202,9 +274,9 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
         </div>
 
         <div className="px-6 py-4 border-t border-white/10 flex justify-between">
-          {step > 1 && step < 3 ? (
+          {(step === 2 || step === "envvars") ? (
             <button
-              onClick={() => setStep((s) => (s - 1) as 1 | 2 | 3)}
+              onClick={() => setStep(step === "envvars" ? 2 : 1)}
               className="px-4 py-2 text-sm text-white/40 hover:text-white/70 transition-colors"
             >
               Back
@@ -229,7 +301,7 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
 
           {step === 2 && (
             <button
-              onClick={handleFinish}
+              onClick={() => hasEnvVarsStep ? setStep("envvars") : handleFinish()}
               disabled={llmKey.length < 5 || saving}
               className={`px-6 py-2 text-sm font-medium transition-all ${
                 llmKey.length >= 5 && !saving
@@ -237,8 +309,24 @@ export function OnboardingModal({ onComplete }: { onComplete: () => void }) {
                   : "bg-white/10 text-white/30 cursor-not-allowed"
               }`}
             >
-              {saving ? "Saving..." : "Save & Finish"}
+              {saving && !hasEnvVarsStep ? "Saving..." : hasEnvVarsStep ? "Next" : "Save & Finish"}
             </button>
+          )}
+
+          {step === "envvars" && (
+            <div className="flex gap-2">
+              <button
+                onClick={handleFinish}
+                disabled={saving}
+                className={`px-6 py-2 text-sm font-medium transition-all ${
+                  !saving
+                    ? "bg-white text-black hover:bg-white/90"
+                    : "bg-white/10 text-white/30 cursor-not-allowed"
+                }`}
+              >
+                {saving ? "Saving..." : "Save & Finish"}
+              </button>
+            </div>
           )}
 
           {step === 3 && (

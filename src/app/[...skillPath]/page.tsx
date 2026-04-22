@@ -23,12 +23,14 @@ import { LaunchProgress, type LaunchMode } from "@/components/launch-progress";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { GlowMesh } from "@/components/glow-mesh";
 import { SiteHeader } from "@/components/site-header";
-import { resolveSkillPath, fetchSkillDirectory } from "@/lib/skill/resolver";
+import { resolveSkillPath, fetchSkillDirectory, fetchSkillContent } from "@/lib/skill/resolver";
 import { createHermesSandbox, destroySandbox, installSkill } from "@/lib/sandbox/daytona";
 import { useKeyStore } from "@/hooks/use-key-store";
 import { useHeartbeat } from "@/hooks/use-heartbeat";
 import { getProvider } from "@/lib/providers/registry";
 import { OnboardingModal } from "@/components/onboarding-modal";
+import { EnvVarsPrompt } from "@/components/env-vars-prompt";
+import { extractSkillEnvVars, type SkillEnvVar } from "@/lib/skill/env-vars";
 import { WorkspacePanel } from "@/components/workspace/workspace-panel";
 import { useWorkspace } from "@/hooks/use-workspace";
 import type { SandboxState, SandboxSession } from "@/lib/sandbox/types";
@@ -48,7 +50,7 @@ export default function SkillPage({
   const resumeSessionId = searchParams.get("session") ?? undefined;
   const { isSignedIn, isLoaded: authLoaded, userId } = useAuth();
   const { isAuthenticated } = useConvexAuth();
-  const { config: savedConfig, loading: keysLoading } = useKeyStore();
+  const { config: savedConfig, loading: keysLoading, save: saveConfig } = useKeyStore();
   const createSandboxRecord = useMutation(api.sandboxes.create);
   const removeSandboxRecord = useMutation(api.sandboxes.remove);
   const updateSandboxState = useMutation(api.sandboxes.updateState);
@@ -86,6 +88,10 @@ export default function SkillPage({
   const placeholderIdRef = useRef<string | null>(null);
   const userCancelled = useRef(false);
 
+  const [detectedEnvVars, setDetectedEnvVars] = useState<SkillEnvVar[]>([]);
+  const [showEnvPrompt, setShowEnvPrompt] = useState(false);
+  const pendingLaunchRef = useRef<LaunchConfig | null>(null);
+
   useHeartbeat(session?.sandboxId ?? null, savedConfig?.sandboxKey ?? null);
 
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
@@ -104,7 +110,31 @@ export default function SkillPage({
     }
   }, [resumeSession, workspacePath]);
 
+  // Early fetch: detect env vars from SKILL.md on page load
+  useEffect(() => {
+    if (!isValidPath) return
+    let cancelled = false
+    fetchSkillContent(resolved).then((content) => {
+      if (cancelled || !content) return
+      const vars = extractSkillEnvVars(content)
+      setDetectedEnvVars(vars)
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [isValidPath, resolved]);
+
   const handleLaunch = async (config: LaunchConfig) => {
+    // Check for missing skill-specific env vars before launching
+    if (detectedEnvVars.length > 0 && !pendingLaunchRef.current) {
+      const configured = config.envVars ?? {}
+      const missing = detectedEnvVars.filter((v) => !configured[v.name])
+      if (missing.length > 0) {
+        pendingLaunchRef.current = config
+        setShowEnvPrompt(true)
+        return
+      }
+    }
+    pendingLaunchRef.current = null
+
     launchAbortRef.current?.abort();
     const abort = new AbortController();
     launchAbortRef.current = abort;
@@ -438,6 +468,28 @@ export default function SkillPage({
     }
   };
 
+  const handleEnvVarsConfigure = async (newEnvVars: Record<string, string>) => {
+    setShowEnvPrompt(false)
+    const config = pendingLaunchRef.current
+    if (!config) return
+    const merged = { ...config.envVars, ...newEnvVars }
+    const updatedConfig = { ...config, envVars: merged }
+    // Save the env vars to the user's settings
+    if (savedConfig) {
+      await saveConfig({ ...savedConfig, envVars: merged }).catch(() => {})
+    }
+    pendingLaunchRef.current = updatedConfig
+    void handleLaunch(updatedConfig)
+  }
+
+  const handleEnvVarsSkip = () => {
+    setShowEnvPrompt(false)
+    const config = pendingLaunchRef.current
+    if (!config) return
+    pendingLaunchRef.current = config
+    void handleLaunch(config)
+  }
+
   const handleWorkspacePathChange = useCallback((path: string) => {
     setWorkspacePath(path);
   }, []);
@@ -469,6 +521,17 @@ export default function SkillPage({
     <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
       <GlowMesh />
       <SiteHeader breadcrumb={`${owner}/${repo}/${skillName}`} />
+
+      {showEnvPrompt && detectedEnvVars.length > 0 && (
+        <EnvVarsPrompt
+          skillName={skillName}
+          missingVars={detectedEnvVars.filter(
+            (v) => !(pendingLaunchRef.current?.envVars ?? {})[v.name],
+          )}
+          onConfigure={handleEnvVarsConfigure}
+          onSkip={handleEnvVarsSkip}
+        />
+      )}
 
       {phase === "running" && session ? (
         <div className="flex-1 flex relative z-10 overflow-hidden pt-14">
@@ -578,9 +641,10 @@ export default function SkillPage({
           )}
 
           {phase === "config" && needsOnboarding && (
-            <OnboardingModal onComplete={() => {
-              window.location.reload();
-            }} />
+            <OnboardingModal
+              onComplete={() => { window.location.reload(); }}
+              skillEnvVars={detectedEnvVars.length > 0 ? detectedEnvVars : undefined}
+            />
           )}
 
           {/* Show config after user cancels */}
