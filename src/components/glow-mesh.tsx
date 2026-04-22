@@ -24,6 +24,7 @@ export function GlowMesh() {
   const mouseRef = useRef<{ x: number; y: number }>({ x: -1000, y: -1000 });
   const rafRef = useRef<number>(0);
   const reducedMotionRef = useRef(false);
+  const visibleRef = useRef(true);
 
   const init = useCallback(() => {
     const canvas = canvasRef.current;
@@ -60,9 +61,28 @@ export function GlowMesh() {
   }, []);
 
   useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { visibleRef.current = entry.isIntersecting; },
+      { threshold: 0 },
+    );
+    observer.observe(canvas);
+    const handleVisibility = () => {
+      if (document.hidden) visibleRef.current = false;
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, []);
+
+  useEffect(() => {
     const img = new window.Image();
     img.src = "/bg.svg";
     img.onload = () => { maskRef.current = img; };
+    img.onerror = () => { maskRef.current = null; };
   }, []);
 
   useEffect(() => {
@@ -92,7 +112,7 @@ export function GlowMesh() {
         return;
       }
 
-      if (reducedMotionRef.current) {
+      if (reducedMotionRef.current || !visibleRef.current) {
         rafRef.current = requestAnimationFrame(animate);
         return;
       }

@@ -183,10 +183,17 @@ export function ChatPanel({
   }, [sessionId, initialSessionId])
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startedAt) / 1000))
-    }, 1000)
-    return () => clearInterval(timer)
+    let timer: ReturnType<typeof setInterval> | null = null
+    const start = () => {
+      if (!timer) timer = setInterval(() => {
+        setElapsed(Math.floor((Date.now() - startedAt) / 1000))
+      }, 1000)
+    }
+    const stop = () => { if (timer) { clearInterval(timer); timer = null } }
+    const onVisibility = () => { document.hidden ? stop() : start() }
+    start()
+    document.addEventListener("visibilitychange", onVisibility)
+    return () => { stop(); document.removeEventListener("visibilitychange", onVisibility) }
   }, [startedAt])
 
   useEffect(() => {
