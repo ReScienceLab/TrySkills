@@ -13,6 +13,7 @@ export async function checkProviderCredit(
       body: JSON.stringify({ providerId, apiKey }),
       signal: AbortSignal.timeout(10_000),
     })
+    if (!res.ok) return { ok: true }
     return (await res.json()) as CreditCheckResult
   } catch {
     return { ok: true }
