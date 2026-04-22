@@ -21,12 +21,12 @@ export interface SkillFile {
 
 function resolveProviderMapping(llmProvider: string) {
   const provider = getProviderData(llmProvider);
-  const envVar = provider?.inferenceProvider === "custom"
+  const envVar = provider?.hermesProvider === "custom"
     ? "OPENAI_API_KEY"
     : provider?.envVar ?? "OPENROUTER_API_KEY";
-  const inferenceProvider = provider?.inferenceProvider ?? "openrouter";
+  const hermesProvider = provider?.hermesProvider ?? "openrouter";
   const baseUrl = provider?.baseUrl;
-  return { envVar, inferenceProvider, baseUrl };
+  return { envVar, hermesProvider, baseUrl };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -39,11 +39,11 @@ async function getDaytonaSDK() {
   return { Daytona };
 }
 
-function buildConfigYaml(model: string, inferenceProvider: string, baseUrl?: string): string {
+function buildConfigYaml(model: string, provider: string, baseUrl?: string): string {
   const lines = [
     "model:",
     `  default: "${model}"`,
-    `  inference_provider: "${inferenceProvider}"`,
+    `  provider: "${provider}"`,
   ];
   if (baseUrl) {
     lines.push(`  base_url: "${baseUrl}"`);
@@ -217,7 +217,7 @@ export async function createHermesSandbox(
     `mkdir -p ${HERMES_HOME} && cat > ${HERMES_HOME}/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
   ).catch(() => {});
   await sandbox.process.executeCommand(
-    `cat > ${HERMES_HOME}/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider, providerMapping.baseUrl)}\nCFGEOF`,
+    `cat > ${HERMES_HOME}/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.hermesProvider, providerMapping.baseUrl)}\nCFGEOF`,
   ).catch(() => {});
 
   const agentDir = usedSnapshot ? "/opt/hermes-agent" : `${HERMES_HOME}/hermes-agent`;
@@ -340,7 +340,7 @@ export async function installSkill(
         `mkdir -p ${HERMES_HOME} && cat > ${HERMES_HOME}/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
       ).catch(() => {}),
       sandbox.process.executeCommand(
-        `cat > ${HERMES_HOME}/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider, providerMapping.baseUrl)}\nCFGEOF`,
+        `cat > ${HERMES_HOME}/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.hermesProvider, providerMapping.baseUrl)}\nCFGEOF`,
       ).catch(() => {}),
     );
   }

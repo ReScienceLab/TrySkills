@@ -205,8 +205,12 @@ describe("sandbox/daytona", () => {
     }
   });
 
-  it("custom providers (nous, kimi, minimax) use OPENAI_API_KEY in sandbox", async () => {
-    for (const providerId of ["nous", "kimi", "minimax"] as const) {
+  it("new providers map to correct env var names in sandbox", async () => {
+    for (const [providerId, expectedEnvVar] of [
+      ["nous", "NOUS_API_KEY"],
+      ["kimi", "KIMI_API_KEY"],
+      ["minimax", "MINIMAX_API_KEY"],
+    ] as const) {
       mockCreate.mockResolvedValue(mockSandbox);
       await createHermesSandbox(
         { ...testConfig, llmProvider: providerId, llmApiKey: "test-key" },
@@ -218,12 +222,31 @@ describe("sandbox/daytona", () => {
       expect(mockCreate).toHaveBeenLastCalledWith(
         expect.objectContaining({
           envVars: expect.objectContaining({
-            OPENAI_API_KEY: "test-key",
+            [expectedEnvVar]: "test-key",
           }),
         }),
         expect.anything(),
       );
     }
+  });
+
+  it("openai uses OPENAI_API_KEY via custom hermes provider", async () => {
+    mockCreate.mockResolvedValue(mockSandbox);
+    await createHermesSandbox(
+      { ...testConfig, llmProvider: "openai", llmApiKey: "test-key" },
+      "test",
+      testSkillFiles,
+      () => {},
+    );
+
+    expect(mockCreate).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        envVars: expect.objectContaining({
+          OPENAI_API_KEY: "test-key",
+        }),
+      }),
+      expect.anything(),
+    );
   });
 
   it("starts gateway from /opt on snapshot path", async () => {

@@ -30,12 +30,12 @@ const WEBUI_PORT = 8787;
 
 function resolveProvider(providerId: string) {
   const provider = getProviderData(providerId);
-  const envVar = provider?.inferenceProvider === "custom"
+  const envVar = provider?.hermesProvider === "custom"
     ? "OPENAI_API_KEY"
     : provider?.envVar ?? "OPENROUTER_API_KEY";
-  const inferenceProvider = provider?.inferenceProvider ?? "openrouter";
+  const hermesProvider = provider?.hermesProvider ?? "openrouter";
   const baseUrl = provider?.baseUrl;
-  return { envVar, inferenceProvider, baseUrl };
+  return { envVar, hermesProvider, baseUrl };
 }
 
 interface TimingResult {
@@ -49,11 +49,11 @@ function fmt(ms: number): string {
 }
 
 function buildConfigYaml(): string {
-  const { inferenceProvider, baseUrl } = resolveProvider(LLM_PROVIDER);
+  const { hermesProvider, baseUrl } = resolveProvider(LLM_PROVIDER);
   const lines = [
     "model:",
     `  default: "${LLM_MODEL}"`,
-    `  inference_provider: "${inferenceProvider}"`,
+    `  provider: "${hermesProvider}"`,
   ];
   if (baseUrl) {
     lines.push(`  base_url: "${baseUrl}"`);

@@ -23,7 +23,7 @@ describe("providers/registry", () => {
       expect(p.name).toBeTruthy();
       expect(p.keyUrl).toMatch(/^https:\/\//);
       expect(p.envVar).toBeTruthy();
-      expect(p.inferenceProvider).toBeTruthy();
+      expect(p.hermesProvider).toBeTruthy();
       expect(p.models.length).toBeGreaterThan(0);
     }
   });
@@ -56,14 +56,26 @@ describe("providers/registry", () => {
     }
   });
 
-  it("openai maps to inference_provider openai (not openrouter)", () => {
+  it("openai maps to hermes provider 'custom' (not openrouter)", () => {
     const p = getProvider("openai");
-    expect(p!.inferenceProvider).toBe("openai");
+    expect(p!.hermesProvider).toBe("custom");
+    expect(p!.baseUrl).toBe("https://api.openai.com/v1");
   });
 
-  it("custom providers have baseUrl set", () => {
+  it("kimi maps to hermes provider 'kimi-coding'", () => {
+    const p = getProvider("kimi");
+    expect(p!.hermesProvider).toBe("kimi-coding");
+  });
+
+  it("minimax uses anthropic endpoint", () => {
+    const p = getProvider("minimax");
+    expect(p!.hermesProvider).toBe("minimax");
+    expect(p!.baseUrl).toBe("https://api.minimax.io/anthropic");
+  });
+
+  it("providers with baseUrl have it set", () => {
     for (const p of PROVIDERS) {
-      if (p.inferenceProvider === "custom") {
+      if (p.baseUrl) {
         expect(p.baseUrl).toMatch(/^https:\/\//);
       }
     }

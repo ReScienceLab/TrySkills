@@ -5,7 +5,7 @@ export interface ProviderData {
   keyUrl: string
   models: string[]
   envVar: string
-  inferenceProvider: string
+  hermesProvider: string
   baseUrl?: string
   authType?: "api-key" | "oauth"
   allowCustomModel?: boolean
@@ -22,7 +22,7 @@ export const PROVIDER_DATA: ProviderData[] = [
     keyPrefix: "sk-or-",
     keyUrl: "https://openrouter.ai/keys",
     envVar: "OPENROUTER_API_KEY",
-    inferenceProvider: "openrouter",
+    hermesProvider: "openrouter",
     allowCustomModel: true,
     checkEndpoint: "https://openrouter.ai/api/v1/models?supported_parameters=temperature&per_page=1",
     checkAuthHeader: (key) => ({ Authorization: `Bearer ${key}` }),
@@ -41,7 +41,7 @@ export const PROVIDER_DATA: ProviderData[] = [
     keyPrefix: "sk-ant-",
     keyUrl: "https://console.anthropic.com/settings/keys",
     envVar: "ANTHROPIC_API_KEY",
-    inferenceProvider: "anthropic",
+    hermesProvider: "anthropic",
     checkEndpoint: "https://api.anthropic.com/v1/models?limit=1",
     checkAuthHeader: (key) => ({ "x-api-key": key, "anthropic-version": "2023-06-01" }),
     models: ["claude-sonnet-4-6", "claude-opus-4-7", "claude-haiku-4-5"],
@@ -52,7 +52,8 @@ export const PROVIDER_DATA: ProviderData[] = [
     keyPrefix: "sk-",
     keyUrl: "https://platform.openai.com/api-keys",
     envVar: "OPENAI_API_KEY",
-    inferenceProvider: "openai",
+    hermesProvider: "custom",
+    baseUrl: "https://api.openai.com/v1",
     checkEndpoint: "https://api.openai.com/v1/models?limit=1",
     checkAuthHeader: (key) => ({ Authorization: `Bearer ${key}` }),
     models: ["gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"],
@@ -63,7 +64,7 @@ export const PROVIDER_DATA: ProviderData[] = [
     keyPrefix: "AI",
     keyUrl: "https://aistudio.google.com/apikey",
     envVar: "GOOGLE_API_KEY",
-    inferenceProvider: "gemini",
+    hermesProvider: "gemini",
     checkEndpoint: "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1",
     checkAuthHeader: (key) => ({ "x-goog-api-key": key }),
     models: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"],
@@ -74,7 +75,7 @@ export const PROVIDER_DATA: ProviderData[] = [
     keyPrefix: "",
     keyUrl: "https://portal.nousresearch.com",
     envVar: "NOUS_API_KEY",
-    inferenceProvider: "custom",
+    hermesProvider: "nous",
     baseUrl: "https://inference-api.nousresearch.com/v1",
     allowCustomModel: true,
     checkEndpoint: "https://inference-api.nousresearch.com/v1/chat/completions",
@@ -100,7 +101,7 @@ export const PROVIDER_DATA: ProviderData[] = [
     keyPrefix: "",
     keyUrl: "https://platform.kimi.ai/console/api-keys",
     envVar: "KIMI_API_KEY",
-    inferenceProvider: "custom",
+    hermesProvider: "kimi-coding",
     baseUrl: "https://api.moonshot.ai/v1",
     checkEndpoint: "https://api.moonshot.ai/v1/models",
     checkAuthHeader: (key) => ({ Authorization: `Bearer ${key}` }),
@@ -112,8 +113,8 @@ export const PROVIDER_DATA: ProviderData[] = [
     keyPrefix: "",
     keyUrl: "https://platform.minimax.io/user-center/basic-information/interface-key",
     envVar: "MINIMAX_API_KEY",
-    inferenceProvider: "custom",
-    baseUrl: "https://api.minimax.io/v1",
+    hermesProvider: "minimax",
+    baseUrl: "https://api.minimax.io/anthropic",
     checkEndpoint: "https://api.minimax.io/v1/chat/completions",
     checkMethod: "POST",
     checkAuthHeader: (key) => ({
@@ -125,7 +126,7 @@ export const PROVIDER_DATA: ProviderData[] = [
       messages: [{ role: "user", content: "hi" }],
       max_tokens: 1,
     }),
-    models: ["MiniMax-M2.7", "MiniMax-M2.5", "MiniMax-M2.1"],
+    models: ["MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5", "MiniMax-M2.1"],
   },
 ]
 
