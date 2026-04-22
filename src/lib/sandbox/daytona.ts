@@ -25,7 +25,12 @@ async function discoverSkillsOnDisk(sandbox: any): Promise<string[]> {
     return output
       .split("\n")
       .filter((s: string) => s.trim())
-      .map((s: string) => s.trim())
+      .map((s: string) => {
+        const name = s.trim()
+        // Reverse sanitizeSkillDir: owner--repo--skill -> owner/repo/skill
+        // Safe because GitHub usernames/repos cannot contain consecutive hyphens
+        return name.includes("--") ? name.replace(/--/g, "/") : name
+      })
   } catch {
     return []
   }
