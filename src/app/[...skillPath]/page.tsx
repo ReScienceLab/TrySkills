@@ -7,8 +7,10 @@ import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
 
 async function computeConfigHash(provider: string, model: string, key: string, envVars?: Record<string, string>): Promise<string> {
-  const envSuffix = envVars ? Object.keys(envVars).sort().map(k => `${k}=${envVars[k]}`).join(":") : ""
-  const data = new TextEncoder().encode(`${provider}:${model}:${key}:${envSuffix}`);
+  const envPart = envVars && Object.keys(envVars).length > 0
+    ? JSON.stringify(envVars, Object.keys(envVars).sort())
+    : ""
+  const data = new TextEncoder().encode(`${provider}:${model}:${key}:${envPart}`);
   const buf = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 16);
 }
