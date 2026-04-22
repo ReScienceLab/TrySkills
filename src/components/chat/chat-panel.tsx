@@ -116,7 +116,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
     <div className="mb-4">
       {msg.content && (
         <div className="prose prose-invert prose-sm max-w-none text-white/85 [&_a]:text-blue-400 [&_a:hover]:underline">
-          <Streamdown plugins={streamdownPlugins}>
+          <Streamdown plugins={streamdownPlugins} skipHtml>
             {msg.content}
           </Streamdown>
         </div>
