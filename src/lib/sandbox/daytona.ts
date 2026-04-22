@@ -270,7 +270,6 @@ export async function installSkill(
   onProgress: (step: SandboxState) => void,
   options?: {
     skipConfigWrite?: boolean;
-    skipHealthCheck?: boolean;
     existingWebuiUrl?: string;
     webuiUrlCreatedAt?: number;
   },
@@ -353,13 +352,9 @@ export async function installSkill(
   );
   log("files uploaded");
 
-  // Health check: only when waking from stopped
-  if (wasStopped || !options?.skipHealthCheck) {
-    await waitForHealth(sandbox);
-    log("health check passed");
-  } else {
-    log("health check skipped");
-  }
+  // Always verify gateway is alive before returning
+  await waitForHealth(sandbox);
+  log("health check passed");
 
   // Reuse existing signed URL if still fresh
   const urlAge = options?.webuiUrlCreatedAt ? Date.now() - options.webuiUrlCreatedAt : Infinity;

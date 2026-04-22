@@ -146,7 +146,6 @@ export default function SkillPage({
           },
           {
             skipConfigWrite: sameConfig,
-            skipHealthCheck: !isStopped,
             existingWebuiUrl: sandbox.webuiUrl,
             webuiUrlCreatedAt: sandbox.webuiUrlCreatedAt ?? undefined,
           },
