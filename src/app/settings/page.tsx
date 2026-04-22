@@ -50,7 +50,7 @@ export default function SettingsPage() {
 
   return (
     <SettingsForm
-      key={savedConfig ? `${savedConfig.providerId}:${savedConfig.sandboxKey}` : "empty"}
+      key={savedConfig ? `${savedConfig.providerId}:${savedConfig.sandboxKey}:${JSON.stringify(savedConfig.envVars ?? {})}` : "empty"}
       savedConfig={savedConfig}
       save={save}
       clear={clear}
