@@ -23,6 +23,8 @@ export function GlowMesh() {
   const maskRef = useRef<HTMLImageElement | null>(null);
   const mouseRef = useRef<{ x: number; y: number }>({ x: -1000, y: -1000 });
   const rafRef = useRef<number>(0);
+  const reducedMotionRef = useRef(false);
+  const visibleRef = useRef(true);
 
   const init = useCallback(() => {
     const canvas = canvasRef.current;
@@ -51,9 +53,36 @@ export function GlowMesh() {
   }, []);
 
   useEffect(() => {
+    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+    reducedMotionRef.current = mql.matches;
+    const handler = (e: MediaQueryListEvent) => { reducedMotionRef.current = e.matches; };
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { visibleRef.current = entry.isIntersecting; },
+      { threshold: 0 },
+    );
+    observer.observe(canvas);
+    const handleVisibility = () => {
+      visibleRef.current = !document.hidden;
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, []);
+
+  useEffect(() => {
     const img = new window.Image();
     img.src = "/bg.svg";
     img.onload = () => { maskRef.current = img; };
+    img.onerror = () => { maskRef.current = null; };
   }, []);
 
   useEffect(() => {
@@ -79,6 +108,11 @@ export function GlowMesh() {
       const canvas = canvasRef.current;
       const ctx = canvas?.getContext("2d");
       if (!canvas || !ctx) {
+        rafRef.current = requestAnimationFrame(animate);
+        return;
+      }
+
+      if (reducedMotionRef.current || !visibleRef.current) {
         rafRef.current = requestAnimationFrame(animate);
         return;
       }

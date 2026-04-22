@@ -1,33 +1,26 @@
 @import "tailwindcss";
 
 :root {
-  --bg-primary: #ffffff;
-  --bg-secondary: #f8f9fb;
-  --bg-tertiary: #f0f2f5;
-  --bg-elevated: #e8ebef;
-  --bg-surface: #fafbfc;
+  --bg-primary: #0a0a0a;
   --bg-code: #1e2028;
 
-  --text-primary: #111827;
-  --text-secondary: #4b5563;
+  --text-primary: #e5e7eb;
+  --text-secondary: #9ca3af;
   --text-tertiary: #6b7280;
-  --text-muted: #9ca3af;
+  --text-muted: #4b5563;
 
   --accent: #3b82f6;
   --accent-hover: #2563eb;
-  --accent-muted: #60a5fa;
   --accent-subtle: rgba(59, 130, 246, 0.08);
-  --accent-light: #dbeafe;
 
-  --border: #e5e7eb;
-  --border-subtle: #f3f4f6;
+  --border: #1f2937;
   --border-accent: rgba(59, 130, 246, 0.3);
 
   --success: #22c55e;
   --warning: #f59e0b;
   --error: #ef4444;
 
-  --footer-bg: #2563eb;
+  --ring-color: rgba(59, 130, 246, 0.5);
 }
 
 @theme inline {
@@ -64,19 +57,9 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes slide-in-right {
-  from { opacity: 0; transform: translateX(-16px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
 @keyframes pulse-dot {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 1; }
-}
-
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
 }
 
 .animate-fade-in {
@@ -87,20 +70,9 @@ body {
   animation: fade-in-up 0.6s ease-out both;
 }
 
-.animate-slide-in-right {
-  animation: slide-in-right 0.4s ease-out both;
-}
-
-.animate-blink {
-  animation: blink 1s step-end infinite;
-}
-
 .delay-100 { animation-delay: 100ms; }
 .delay-200 { animation-delay: 200ms; }
 .delay-300 { animation-delay: 300ms; }
-.delay-400 { animation-delay: 400ms; }
-.delay-500 { animation-delay: 500ms; }
-.delay-600 { animation-delay: 600ms; }
 
 .card {
   background: var(--bg-primary);
@@ -114,16 +86,13 @@ body {
   box-shadow: 0 4px 24px rgba(59, 130, 246, 0.06);
 }
 
-.text-gradient {
-  background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.text-gradient-blue {
-  background: linear-gradient(135deg, #2563eb 0%, #3b82f6 50%, #60a5fa 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

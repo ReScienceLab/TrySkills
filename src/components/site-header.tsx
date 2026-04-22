@@ -24,7 +24,7 @@ export function SiteHeader({ breadcrumb }: { breadcrumb?: string }) {
               {breadcrumb}
             </span>
           )}
-          <nav className="flex items-center gap-6">
+          <nav aria-label="Main navigation" className="flex items-center gap-6">
             <a
               href="https://skills.sh"
               target="_blank"
@@ -45,6 +45,7 @@ export function SiteHeader({ breadcrumb }: { breadcrumb?: string }) {
               href="https://github.com/ReScienceLab/TrySkills"
               target="_blank"
               rel="noopener noreferrer"
+              aria-label="GitHub repository"
               className="flex items-center gap-2 text-sm text-white/60 hover:text-white transition-colors"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">

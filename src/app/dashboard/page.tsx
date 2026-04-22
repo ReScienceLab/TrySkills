@@ -201,7 +201,7 @@ export default function DashboardPage() {
                     <button
                       onClick={handleCopyId}
                       className="text-white/20 hover:text-white/50 transition-colors shrink-0"
-                      title="Copy sandbox ID"
+                      aria-label={copied ? "Copied sandbox ID" : "Copy sandbox ID"}
                     >
                       {copied ? "✓" : "⎘"}
                     </button>
@@ -265,11 +265,11 @@ export default function DashboardPage() {
 
                 <div className="flex gap-2">
                   {isStopped && sandbox?.currentSkillPath && (
-                    <button onClick={handleWakeUp} className="px-4 py-2 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 text-xs font-medium transition-all">
+                    <button onClick={handleWakeUp} className="px-4 py-2 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 text-xs font-medium transition-all" aria-label="Resume Last Skill">
                       Resume Last Skill
                     </button>
                   )}
-                  <button onClick={handleDestroy} className="px-4 py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 text-xs font-medium transition-all">
+                  <button onClick={handleDestroy} className="px-4 py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 text-xs font-medium transition-all" aria-label="Destroy">
                     Destroy
                   </button>
                 </div>

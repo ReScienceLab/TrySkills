@@ -123,7 +123,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 
 function ThinkingDots() {
   return (
-    <div className="flex gap-1 py-2 px-1">
+    <div className="flex gap-1 py-2 px-1" role="status" aria-label="Agent is thinking">
       <div className="w-1.5 h-1.5 rounded-full bg-white/30 animate-bounce [animation-delay:0ms]" />
       <div className="w-1.5 h-1.5 rounded-full bg-white/30 animate-bounce [animation-delay:150ms]" />
       <div className="w-1.5 h-1.5 rounded-full bg-white/30 animate-bounce [animation-delay:300ms]" />
@@ -183,10 +183,17 @@ export function ChatPanel({
   }, [sessionId, initialSessionId])
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startedAt) / 1000))
-    }, 1000)
-    return () => clearInterval(timer)
+    let timer: ReturnType<typeof setInterval> | null = null
+    const start = () => {
+      if (!timer) timer = setInterval(() => {
+        setElapsed(Math.floor((Date.now() - startedAt) / 1000))
+      }, 1000)
+    }
+    const stop = () => { if (timer) { clearInterval(timer); timer = null } }
+    const onVisibility = () => { document.hidden ? stop() : start() }
+    start()
+    document.addEventListener("visibilitychange", onVisibility)
+    return () => { stop(); document.removeEventListener("visibilitychange", onVisibility) }
   }, [startedAt])
 
   useEffect(() => {
@@ -218,8 +225,8 @@ export function ChatPanel({
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] max-w-4xl mx-auto w-full">
       {/* TopBar */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 shrink-0">
-        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 shrink-0" aria-label={`Skill ${skillName} active for ${formatTime(elapsed)}`}>
+        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" aria-hidden="true" />
         <span className="text-sm text-white/70 font-mono">{skillName}</span>
         <span className="text-xs text-white/30 font-mono">{formatTime(elapsed)}</span>
         <div className="ml-auto flex items-center gap-2">
@@ -272,7 +279,9 @@ export function ChatPanel({
       {/* Input */}
       <div className="shrink-0 border-t border-white/10 px-4 py-3">
         <div className="flex items-end gap-2">
+          <label htmlFor="chat-message-input" className="sr-only">Message</label>
           <textarea
+            id="chat-message-input"
             ref={textareaRef}
             value={input}
             onChange={(e) => {
@@ -284,11 +293,12 @@ export function ChatPanel({
             placeholder="Message Hermes..."
             rows={1}
             disabled={isStreaming}
-            className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white/90 placeholder:text-white/25 outline-none focus:border-white/25 resize-none disabled:opacity-50 transition-colors"
+            className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white/90 placeholder:text-white/25 outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 focus:border-white/25 resize-none disabled:opacity-50 transition-colors"
           />
           {isStreaming ? (
             <button
               onClick={cancel}
+              aria-label="Cancel streaming response"
               className="px-4 py-2.5 bg-red-500/10 text-red-400 text-sm rounded-lg hover:bg-red-500/20 transition-all shrink-0"
             >
               Cancel
@@ -297,6 +307,7 @@ export function ChatPanel({
             <button
               onClick={handleSend}
               disabled={!input.trim()}
+              aria-label="Send message"
               className="px-4 py-2.5 bg-white text-black text-sm font-medium rounded-lg hover:bg-white/90 disabled:bg-white/10 disabled:text-white/30 transition-all shrink-0"
             >
               Send
