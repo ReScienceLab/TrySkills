@@ -414,7 +414,11 @@ export async function installSkill(
   } else if (!options?.skipConfigWrite) {
     // Running sandbox with config changes: gracefully restart gateway
     await sandbox.process.executeCommand(
-      `pkill -f "hermes.*gateway" 2>/dev/null; sleep 2; nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
+      `pkill -f "hermes.*gateway" 2>/dev/null || true`,
+    ).catch(() => {});
+    await new Promise((r) => setTimeout(r, 2000));
+    await sandbox.process.executeCommand(
+      `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
     ).catch(() => {});
     log("gateway restarted after config write");
   }
