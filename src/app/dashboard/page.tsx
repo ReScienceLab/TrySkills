@@ -10,15 +10,20 @@ import { GlowMesh } from "@/components/glow-mesh";
 import { SiteHeader } from "@/components/site-header";
 import { destroySandbox } from "@/lib/sandbox/daytona";
 import { useKeyStore } from "@/hooks/use-key-store";
+import { NousResearch } from "@lobehub/icons";
 
 interface SandboxLiveInfo {
+  id?: string;
   state?: string;
   cpu?: number;
   memory?: number;
   disk?: number;
   gpu?: number;
   target?: string;
+  snapshot?: string;
   autoStopInterval?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export default function DashboardPage() {
@@ -29,13 +34,16 @@ export default function DashboardPage() {
   const sandboxes = useQuery(api.sandboxes.list, isAuthenticated ? {} : "skip");
   const trials = useQuery(api.skillTrials.list, isAuthenticated ? {} : "skip");
   const removeSandbox = useMutation(api.sandboxes.remove);
-  const updatePoolState = useMutation(api.sandboxes.updatePoolState);
 
   const sandboxList = sandboxes ?? [];
-  const sandbox = sandboxList.find((s) => !s.sandboxId.startsWith("pending-"));
+  const sandbox = sandboxList.find((s) => !s.sandboxId.startsWith("pending-"))
+    ?? sandboxList.find((s) => s.sandboxId.startsWith("pending-"));
   const trialList = trials ?? [];
 
   const [liveInfo, setLiveInfo] = useState<SandboxLiveInfo | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const isRealSandbox = sandbox && !sandbox.sandboxId.startsWith("pending-");
 
   const fetchLiveInfo = useCallback(async (sandboxId: string) => {
     if (!config?.sandboxKey || sandboxId.startsWith("pending-")) return;
@@ -46,13 +54,13 @@ export default function DashboardPage() {
   }, [config?.sandboxKey]);
 
   useEffect(() => {
-    if (sandbox && config?.sandboxKey && !liveInfo) {
+    if (isRealSandbox && config?.sandboxKey && !liveInfo) {
       fetchLiveInfo(sandbox.sandboxId);
     }
-  }, [sandbox, config?.sandboxKey, fetchLiveInfo, liveInfo]);
+  }, [isRealSandbox, sandbox?.sandboxId, config?.sandboxKey, fetchLiveInfo, liveInfo]);
 
   const handleDestroy = async () => {
-    if (!sandbox || !config?.sandboxKey) return;
+    if (!isRealSandbox || !config?.sandboxKey) return;
     try { await destroySandbox(config.sandboxKey, sandbox.sandboxId); } catch {}
     await removeSandbox({ sandboxId: sandbox.sandboxId });
     setLiveInfo(null);
@@ -61,6 +69,13 @@ export default function DashboardPage() {
   const handleWakeUp = () => {
     if (!sandbox?.currentSkillPath) return;
     window.location.href = `/${sandbox.currentSkillPath}`;
+  };
+
+  const handleCopyId = () => {
+    if (!isRealSandbox) return;
+    navigator.clipboard.writeText(sandbox.sandboxId);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   if (!isLoaded) {
@@ -97,13 +112,34 @@ export default function DashboardPage() {
 
   const displayState = liveInfo?.state ?? sandbox?.state ?? "unknown";
   const poolState = sandbox?.poolState;
+  const isCreating = poolState === "creating";
   const isActive = poolState === "active" || displayState === "running" || displayState === "started";
   const isStopped = poolState === "stopped" || displayState === "stopped";
 
-  const formatTime = (ts: number) => {
+  const statusLabel = isCreating ? "creating" : isActive ? "active" : isStopped ? "stopped" : displayState;
+  const statusColor = isCreating
+    ? "text-blue-400/70 bg-blue-500/10"
+    : isActive
+      ? "text-green-400/70 bg-green-500/10"
+      : isStopped
+        ? "text-orange-400/70 bg-orange-500/10"
+        : "text-white/30 bg-white/5";
+  const dotColor = isCreating
+    ? "bg-blue-400 animate-pulse"
+    : isActive
+      ? "bg-green-500 animate-pulse"
+      : isStopped
+        ? "bg-white/20"
+        : "bg-white/10";
+
+  const formatTime = (ts: number | string) => {
     const d = new Date(ts);
     return d.toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   };
+
+  const cpu = liveInfo?.cpu ?? sandbox?.cpu;
+  const memory = liveInfo?.memory ?? sandbox?.memory;
+  const disk = sandbox?.disk;
 
   return (
     <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
@@ -118,38 +154,90 @@ export default function DashboardPage() {
           <div className="border border-white/10 bg-black/40 backdrop-blur-sm p-6 mb-8">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className={`w-2.5 h-2.5 rounded-full ${isActive ? "bg-green-500 animate-pulse" : isStopped ? "bg-white/20" : "bg-blue-400 animate-pulse"}`} />
+                <div className="relative">
+                  <NousResearch size={24} className="text-white/80" />
+                  <div className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full ${dotColor}`} />
+                </div>
                 <h2 className="text-lg font-medium text-white/90">Hermes Agent</h2>
               </div>
-              <span className={`text-xs font-mono px-2 py-1 rounded-full ${isActive ? "text-green-400/70 bg-green-500/10" : isStopped ? "text-orange-400/70 bg-orange-500/10" : "text-white/30 bg-white/5"}`}>
-                {isActive ? "active" : isStopped ? "stopped" : displayState}
+              <span className={`text-xs font-mono px-2 py-1 rounded-full ${statusColor}`}>
+                {statusLabel}
               </span>
             </div>
 
-            {sandbox ? (
+            {isCreating && !isRealSandbox ? (
+              <div className="text-sm text-blue-400/60 flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full border-2 border-blue-400/30 border-t-blue-400/70 animate-spin" />
+                Creating sandbox...
+              </div>
+            ) : isRealSandbox ? (
               <>
-                <div className="flex items-center gap-4 text-xs text-white/30 mb-4">
-                  {sandbox.sandboxId && (
-                    <span className="font-mono">{sandbox.sandboxId.slice(0, 12)}...</span>
+                <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-xs mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-white/30">ID</span>
+                    <span className="font-mono text-white/50 truncate">{sandbox.sandboxId}</span>
+                    <button
+                      onClick={handleCopyId}
+                      className="text-white/20 hover:text-white/50 transition-colors shrink-0"
+                      title="Copy sandbox ID"
+                    >
+                      {copied ? "✓" : "⎘"}
+                    </button>
+                  </div>
+                  {sandbox.region && (
+                    <div>
+                      <span className="text-white/30">Region </span>
+                      <span className="text-white/50">{sandbox.region.toUpperCase()}</span>
+                    </div>
                   )}
-                  {(liveInfo?.cpu || sandbox.cpu) && (
-                    <span>{liveInfo?.cpu ?? sandbox.cpu} vCPU</span>
+                  {cpu && (
+                    <div>
+                      <span className="text-white/30">CPU </span>
+                      <span className="text-white/50">{cpu} vCPU</span>
+                    </div>
                   )}
-                  {(liveInfo?.memory || sandbox.memory) && (
-                    <span>{liveInfo?.memory ?? sandbox.memory} GB RAM</span>
+                  {memory && (
+                    <div>
+                      <span className="text-white/30">Memory </span>
+                      <span className="text-white/50">{memory} GB</span>
+                    </div>
+                  )}
+                  {disk && (
+                    <div>
+                      <span className="text-white/30">Disk </span>
+                      <span className="text-white/50">{disk} GB</span>
+                    </div>
                   )}
                   {sandbox.currentSkillPath && (
-                    <span>Last: {sandbox.currentSkillPath.split("/").pop()}</span>
+                    <div>
+                      <span className="text-white/30">Current Skill </span>
+                      <span className="font-mono text-white/50">{sandbox.currentSkillPath}</span>
+                    </div>
+                  )}
+                  {(liveInfo?.createdAt || sandbox.createdAt) && (
+                    <div>
+                      <span className="text-white/30">Created </span>
+                      <span className="text-white/50">{formatTime(liveInfo?.createdAt ?? sandbox.createdAt)}</span>
+                    </div>
+                  )}
+                  {sandbox.lastHeartbeat && (
+                    <div>
+                      <span className="text-white/30">Last Heartbeat </span>
+                      <span className="text-white/50">{formatTime(sandbox.lastHeartbeat)}</span>
+                    </div>
                   )}
                 </div>
 
                 {sandbox.installedSkills && sandbox.installedSkills.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mb-4">
-                    {sandbox.installedSkills.map((s) => (
-                      <span key={s} className="text-[10px] font-mono px-2 py-0.5 bg-white/5 border border-white/10 text-white/40 rounded-full">
-                        {s.split("/").pop()}
-                      </span>
-                    ))}
+                  <div className="mb-4">
+                    <span className="text-xs text-white/30 block mb-1.5">Installed Skills</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {sandbox.installedSkills.map((s) => (
+                        <span key={s} className="text-[10px] font-mono px-2 py-0.5 bg-white/5 border border-white/10 text-white/40 rounded-full">
+                          {s.split("/").pop()}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
 
