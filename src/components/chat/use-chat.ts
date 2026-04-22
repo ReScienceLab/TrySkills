@@ -85,6 +85,12 @@ export function useChat(
     cancelRef.current?.();
     cancelRef.current = null;
     setIsStreaming(false);
+    // Remove partial assistant message to avoid replaying truncated content
+    setMessages((prev) =>
+      prev.length > 0 && prev[prev.length - 1]?.role === "assistant"
+        ? prev.slice(0, -1)
+        : prev,
+    );
   }, []);
 
   // Auto-init: send first message with retry
