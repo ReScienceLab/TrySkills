@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, use } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
 
@@ -13,6 +14,7 @@ async function computeConfigHash(provider: string, model: string, key: string): 
 import { useMutation, useQuery } from "convex/react";
 import { useConvexAuth } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { ConfigPanel, type LaunchConfig } from "@/components/config-panel";
 import { LaunchProgress, type LaunchMode } from "@/components/launch-progress";
 import { ChatPanel } from "@/components/chat/chat-panel";
@@ -37,6 +39,8 @@ export default function SkillPage({
 }) {
   const resolvedParams = use(params);
   const { skillPath } = resolvedParams;
+  const searchParams = useSearchParams();
+  const resumeSessionId = searchParams.get("session") ?? undefined;
   const { isSignedIn, isLoaded: authLoaded, userId } = useAuth();
   const { isAuthenticated } = useConvexAuth();
   const { config: savedConfig, loading: keysLoading } = useKeyStore();
@@ -51,6 +55,12 @@ export default function SkillPage({
   const userSandbox = useQuery(
     api.sandboxes.getSandbox,
     isAuthenticated ? {} : "skip",
+  );
+  const resumeSession = useQuery(
+    api.chatSessions.get,
+    resumeSessionId && isAuthenticated
+      ? { sessionId: resumeSessionId as Id<"chatSessions"> }
+      : "skip",
   );
 
   const resolved = useMemo(() => resolveSkillPath(skillPath), [skillPath]);
@@ -491,13 +501,21 @@ export default function SkillPage({
           )}
 
           {phase === "running" && session && (
+            resumeSessionId && resumeSession === undefined ? (
+              <div className="flex items-center justify-center py-20">
+                <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
+              </div>
+            ) : (
             <ChatPanel
               gatewayBaseUrl={session.gatewayBaseUrl || session.gatewayUrl}
               model={savedConfig?.model || "anthropic/claude-sonnet-4"}
               skillName={skillName}
+              skillPath={skillKey}
               startedAt={session.startedAt}
               providerId={savedConfig?.providerId}
               apiKey={savedConfig?.llmKey}
+              initialSessionId={resumeSession ? resumeSessionId : undefined}
+              initialMessages={resumeSession?.messages}
               onStop={handleStop}
               onTryAnother={handleTryAnother}
               onSessionError={async () => {
@@ -513,6 +531,7 @@ export default function SkillPage({
                 setPhase("config");
               }}
             />
+            )
           )}
         </div>
       </div>

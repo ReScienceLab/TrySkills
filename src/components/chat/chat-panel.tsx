@@ -135,9 +135,12 @@ export function ChatPanel({
   gatewayBaseUrl,
   model,
   skillName,
+  skillPath,
   startedAt,
   providerId,
   apiKey,
+  initialSessionId,
+  initialMessages,
   onStop,
   onTryAnother,
   onSessionError,
@@ -145,25 +148,39 @@ export function ChatPanel({
   gatewayBaseUrl: string
   model: string
   skillName: string
+  skillPath: string
   startedAt: number
   providerId?: string
   apiKey?: string
+  initialSessionId?: string
+  initialMessages?: { role: "user" | "assistant" | "system"; content: string }[]
   onStop: () => void
   onTryAnother?: () => void
   onSessionError?: () => void
 }) {
-  const { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, send, cancel } = useChat(
+  const { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, send, cancel } = useChat(
     gatewayBaseUrl,
     model,
     skillName,
     providerId,
     apiKey,
+    initialSessionId,
+    skillPath,
+    initialMessages,
   )
 
   const [input, setInput] = useState("")
   const [elapsed, setElapsed] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Keep browser URL in sync when session id changes (e.g. resume fallback creates new session)
+  useEffect(() => {
+    if (!sessionId || sessionId === initialSessionId) return
+    const url = new URL(window.location.href)
+    url.searchParams.set("session", sessionId)
+    window.history.replaceState({}, "", url.toString())
+  }, [sessionId, initialSessionId])
 
   useEffect(() => {
     const timer = setInterval(() => {

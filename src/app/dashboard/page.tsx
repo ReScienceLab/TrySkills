@@ -26,6 +26,8 @@ interface SandboxLiveInfo {
   updatedAt?: string;
 }
 
+const PAGE_SIZE = 20;
+
 export default function DashboardPage() {
   const { isSignedIn, isLoaded } = useAuth();
   const { isAuthenticated } = useConvexAuth();
@@ -33,7 +35,9 @@ export default function DashboardPage() {
 
   const sandboxes = useQuery(api.sandboxes.list, isAuthenticated ? {} : "skip");
   const trials = useQuery(api.skillTrials.list, isAuthenticated ? {} : "skip");
+  const chatSessionsList = useQuery(api.chatSessions.list, isAuthenticated ? {} : "skip");
   const removeSandbox = useMutation(api.sandboxes.remove);
+  const removeChatSession = useMutation(api.chatSessions.remove);
 
   const STALE_PENDING_MS = 5 * 60 * 1000;
   const sandboxList = sandboxes ?? [];
@@ -45,6 +49,9 @@ export default function DashboardPage() {
 
   const [liveInfo, setLiveInfo] = useState<SandboxLiveInfo | null>(null);
   const [copied, setCopied] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  const sessions = (chatSessionsList ?? []).filter((s) => s.messageCount > 0);
 
   const isRealSandbox = sandbox && !sandbox.sandboxId.startsWith("pending-");
 
@@ -61,6 +68,18 @@ export default function DashboardPage() {
       fetchLiveInfo(sandbox.sandboxId);
     }
   }, [isRealSandbox, sandbox?.sandboxId, config?.sandboxKey, fetchLiveInfo, liveInfo]);
+
+  const handleDeleteSession = async (sessionId: string) => {
+    try {
+      await removeChatSession({ sessionId: sessionId as Parameters<typeof removeChatSession>[0]["sessionId"] });
+    } catch {
+      // best effort
+    }
+  };
+
+  const handleResumeSession = (session: typeof sessions[0]) => {
+    window.location.href = `/${session.skillPath}?session=${session._id}`;
+  };
 
   const handleDestroy = async () => {
     if (!isRealSandbox || !config?.sandboxKey) return;
@@ -261,6 +280,70 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
+
+          {/* Chat Sessions */}
+          {sessions.length > 0 && (
+            <div className="border border-white/10 bg-black/40 backdrop-blur-sm p-6 mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-medium text-white/90">Chat Sessions</h2>
+              </div>
+
+              {sessions.length === 0 ? (
+                <div className="text-sm text-white/40">
+                  No chat sessions yet. Start chatting with a skill to create one.
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    {sessions.slice(0, visibleCount).map((session) => (
+                      <div
+                        key={session._id}
+                        className="flex items-center justify-between px-4 py-3 bg-white/5 border border-white/5 hover:border-white/10 transition-all"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-1.5 h-1.5 rounded-full bg-blue-400/40 shrink-0" />
+                          <div className="min-w-0">
+                            <div className="text-sm text-white/70 truncate">
+                              {session.title || "Untitled"}
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-white/30">
+                              <span className="font-mono">{session.model}</span>
+                              <span>&middot;</span>
+                              <span>{session.messageCount} messages</span>
+                              <span>&middot;</span>
+                              <span>{formatTime(session.updatedAt)}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => handleResumeSession(session)}
+                            className="px-3 py-1.5 text-xs text-blue-400/60 hover:text-blue-400 border border-blue-500/20 hover:border-blue-500/40 rounded transition-all"
+                          >
+                            Resume
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSession(session._id)}
+                            className="px-3 py-1.5 text-xs text-red-400/40 hover:text-red-400 border border-red-500/10 hover:border-red-500/30 rounded transition-all"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {sessions.length > visibleCount && (
+                    <button
+                      onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
+                      className="mt-3 w-full py-2 text-xs text-white/30 hover:text-white/60 border border-white/5 hover:border-white/10 transition-all"
+                    >
+                      Show more ({sessions.length - visibleCount} remaining)
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           {/* Skill Trial History */}
           <div className="border border-white/10 bg-black/40 backdrop-blur-sm p-6">

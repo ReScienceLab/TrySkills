@@ -10,6 +10,7 @@
 
 import type * as apiKeys from "../apiKeys.js";
 import type * as chatErrors from "../chatErrors.js";
+import type * as chatSessions from "../chatSessions.js";
 import type * as crons from "../crons.js";
 import type * as sandboxes from "../sandboxes.js";
 import type * as skillTrials from "../skillTrials.js";
@@ -24,6 +25,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   apiKeys: typeof apiKeys;
   chatErrors: typeof chatErrors;
+  chatSessions: typeof chatSessions;
   crons: typeof crons;
   sandboxes: typeof sandboxes;
   skillTrials: typeof skillTrials;
