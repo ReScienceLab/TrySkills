@@ -7,6 +7,13 @@ const PROVIDER_BILLING_URLS: Record<string, string> = {
   google: "https://aistudio.google.com/apikey",
 }
 
+const PROVIDER_KEY_URLS: Record<string, string> = {
+  openrouter: "https://openrouter.ai/keys",
+  anthropic: "https://console.anthropic.com/settings/keys",
+  openai: "https://platform.openai.com/api-keys",
+  google: "https://aistudio.google.com/apikey",
+}
+
 export async function POST(req: NextRequest) {
   const { providerId, apiKey } = (await req.json()) as {
     providerId: string
@@ -18,19 +25,19 @@ export async function POST(req: NextRequest) {
   }
 
   const billingUrl = PROVIDER_BILLING_URLS[providerId]
+  const keyUrl = PROVIDER_KEY_URLS[providerId]
 
   if (providerId === "openrouter") {
-    return checkOpenRouter(apiKey, billingUrl)
+    return checkOpenRouter(apiKey, billingUrl, keyUrl)
   }
 
-  // For providers without a credit-check API, do a lightweight key validation
-  // that can surface 401 (invalid key) or 402 (billing) errors
-  return checkGenericProvider(providerId, apiKey, billingUrl)
+  return checkGenericProvider(providerId, apiKey, billingUrl, keyUrl)
 }
 
 async function checkOpenRouter(
   apiKey: string,
   billingUrl: string,
+  keyUrl: string,
 ): Promise<NextResponse> {
   try {
     const res = await fetch("https://openrouter.ai/api/v1/key", {
@@ -41,8 +48,9 @@ async function checkOpenRouter(
     if (res.status === 401) {
       return NextResponse.json({
         ok: false,
+        errorType: "auth_error",
         error: "Your OpenRouter API key is invalid or expired.",
-        action: { label: "Get a new key", url: "https://openrouter.ai/keys" },
+        action: { label: "Get a new key", url: keyUrl },
       })
     }
 
@@ -54,25 +62,24 @@ async function checkOpenRouter(
     const info = data?.data
     if (!info) return NextResponse.json({ ok: true })
 
-    // Check if credits are exhausted
     if (info.limit_remaining !== null && info.limit_remaining !== undefined && info.limit_remaining <= 0) {
       return NextResponse.json({
         ok: false,
+        errorType: "credit_error",
         error: "Your OpenRouter credits are exhausted.",
         action: { label: "Add credits", url: billingUrl },
       })
     }
 
-    // Check free-tier daily limits
     if (info.is_free_tier && info.usage_daily >= 50) {
       return NextResponse.json({
         ok: false,
+        errorType: "credit_error",
         error: "You have reached the free-tier daily limit (50 requests). Purchase credits to continue.",
         action: { label: "Add credits", url: billingUrl },
       })
     }
 
-    // Warn if credits are running low (< $0.50 remaining)
     if (info.limit_remaining !== null && info.limit_remaining < 0.5) {
       return NextResponse.json({
         ok: true,
@@ -90,6 +97,7 @@ async function checkGenericProvider(
   providerId: string,
   apiKey: string,
   billingUrl: string | undefined,
+  keyUrl: string | undefined,
 ): Promise<NextResponse> {
   const endpoints: Record<string, { url: string; headers: Record<string, string> }> = {
     anthropic: {
@@ -118,14 +126,16 @@ async function checkGenericProvider(
     if (res.status === 401 || res.status === 403) {
       return NextResponse.json({
         ok: false,
+        errorType: "auth_error",
         error: `Your ${providerId} API key is invalid or expired.`,
-        action: billingUrl ? { label: "Update key", url: billingUrl } : undefined,
+        action: keyUrl ? { label: "Update key", url: keyUrl } : undefined,
       })
     }
 
     if (res.status === 402) {
       return NextResponse.json({
         ok: false,
+        errorType: "credit_error",
         error: `Your ${providerId} account has insufficient credits.`,
         action: billingUrl ? { label: "Add credits", url: billingUrl } : undefined,
       })
@@ -134,6 +144,7 @@ async function checkGenericProvider(
     if (res.status === 429) {
       return NextResponse.json({
         ok: false,
+        errorType: "rate_limit",
         error: "Rate limit reached. Please wait a moment and try again.",
       })
     }

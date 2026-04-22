@@ -1,6 +1,6 @@
 export type CreditCheckResult =
   | { ok: true; warning?: string }
-  | { ok: false; error: string; action?: { label: string; url: string } }
+  | { ok: false; error: string; errorType?: string; action?: { label: string; url: string } }
 
 export async function checkProviderCredit(
   providerId: string,
