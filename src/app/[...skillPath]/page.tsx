@@ -494,6 +494,11 @@ export default function SkillPage({
           )}
 
           {phase === "running" && session && (
+            resumeSessionId && resumeSession === undefined ? (
+              <div className="flex items-center justify-center py-20">
+                <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
+              </div>
+            ) : (
             <ChatPanel
               gatewayBaseUrl={session.gatewayBaseUrl || session.gatewayUrl}
               model={savedConfig?.model || "anthropic/claude-sonnet-4"}
@@ -502,7 +507,7 @@ export default function SkillPage({
               startedAt={session.startedAt}
               providerId={savedConfig?.providerId}
               apiKey={savedConfig?.llmKey}
-              initialSessionId={resumeSessionId}
+              initialSessionId={resumeSession ? resumeSessionId : undefined}
               initialMessages={resumeSession?.messages}
               onStop={handleStop}
               onTryAnother={handleTryAnother}
@@ -519,6 +524,7 @@ export default function SkillPage({
                 setPhase("config");
               }}
             />
+            )
           )}
         </div>
       </div>

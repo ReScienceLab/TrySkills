@@ -98,13 +98,23 @@ export const list = query({
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) return []
 
-    return await ctx.db
+    const sessions = await ctx.db
       .query("chatSessions")
       .withIndex("by_token", (q) =>
         q.eq("tokenIdentifier", identity.tokenIdentifier),
       )
       .order("desc")
       .take(100)
+
+    return sessions.map((s) => ({
+      _id: s._id,
+      skillPath: s.skillPath,
+      title: s.title,
+      model: s.model,
+      messageCount: s.messageCount,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+    }))
   },
 })
 
