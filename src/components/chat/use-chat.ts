@@ -3,6 +3,8 @@
 import { useState, useRef, useCallback, useEffect } from "react"
 import {
   chatStream,
+  createGatewaySession,
+  fetchSession,
   ProviderError,
   type ChatMessage,
   type ToolProgress,
@@ -163,6 +165,7 @@ export function useChat(
   skillName: string,
   providerId?: string,
   apiKey?: string,
+  initialSessionId?: string,
 ) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([])
@@ -170,6 +173,7 @@ export function useChat(
   const [error, setError] = useState<ChatError | null>(null)
   const [creditWarning, setCreditWarning] = useState<string | null>(null)
   const [sessionFailed, setSessionFailed] = useState(false)
+  const [sessionId, setSessionId] = useState<string | null>(initialSessionId ?? null)
 
   const cancelRef = useRef<(() => void) | null>(null)
   const initRef = useRef(false)
@@ -178,6 +182,7 @@ export function useChat(
   const preflightDoneRef = useRef(false)
   const preflightFailedRef = useRef(false)
   const turnIdRef = useRef(0)
+  const sessionIdRef = useRef<string | null>(initialSessionId ?? null)
 
   const handleError = useCallback(
     (err: Error) => {
@@ -191,6 +196,10 @@ export function useChat(
     async (meta: StreamDoneMeta) => {
       setIsStreaming(false)
       setToolCalls((prev) => prev.map((t) => ({ ...t, status: "done" as const })))
+      if (meta.sessionId && meta.sessionId !== sessionIdRef.current) {
+        sessionIdRef.current = meta.sessionId
+        setSessionId(meta.sessionId)
+      }
       if (!meta.hadContent) {
         const currentTurn = turnIdRef.current
         setError({ type: "empty_response", message: "Diagnosing..." })
@@ -204,7 +213,7 @@ export function useChat(
   )
 
   const stream = useCallback(
-    (allMessages: ChatMessage[]) => {
+    (allMessages: ChatMessage[], sid?: string) => {
       if (!gatewayBaseUrl) return
 
       currentContentRef.current = ""
@@ -238,6 +247,7 @@ export function useChat(
           onError: handleError,
         },
         model,
+        sid ?? sessionIdRef.current ?? undefined,
       )
       cancelRef.current = cancel
     },
@@ -263,7 +273,6 @@ export function useChat(
       retryTimerRef.current = null
     }
     setIsStreaming(false)
-    // Remove partial assistant message to avoid replaying truncated content
     setMessages((prev) =>
       prev.length > 0 && prev[prev.length - 1]?.role === "assistant"
         ? prev.slice(0, -1)
@@ -301,7 +310,7 @@ export function useChat(
       })
   }, [gatewayBaseUrl, providerId, apiKey])
 
-  // Auto-init: send first message with retry (waits for pre-flight check)
+  // Auto-init: create session + send first message (or resume existing session)
   useEffect(() => {
     if (!gatewayBaseUrl || initRef.current) return
 
@@ -315,59 +324,94 @@ export function useChat(
       const RETRY_DELAYS = [2000, 4000, 8000]
       let attempt = 0
 
-      const tryInit = () => {
-        const firstMsg: ChatMessage = { role: "user", content: `I want to try the ${skillName} skill` }
-        setMessages([firstMsg])
+      const tryInit = async () => {
+        try {
+          // If resuming a session, load existing messages
+          if (initialSessionId) {
+            const detail = await fetchSession(gatewayBaseUrl, initialSessionId)
+            const chatMessages: ChatMessage[] = (detail.messages || [])
+              .filter((m) => m.role === "user" || m.role === "assistant")
+              .map((m) => ({ role: m.role, content: m.content }))
+            if (chatMessages.length > 0) {
+              setMessages(chatMessages)
+              sessionIdRef.current = initialSessionId
+              setSessionId(initialSessionId)
+              return
+            }
+          }
 
-        const cancel = chatStream(
-          gatewayBaseUrl,
-          [firstMsg],
-          {
-            onDelta: (text) => {
-              currentContentRef.current += text
-              setMessages((prev) => {
-                const last = prev[prev.length - 1]
-                if (last?.role === "assistant") {
-                  return [...prev.slice(0, -1), { ...last, content: currentContentRef.current }]
+          // Create a new Gateway session
+          const sid = await createGatewaySession(gatewayBaseUrl, model)
+          sessionIdRef.current = sid
+          setSessionId(sid)
+
+          // Send first message using the session API
+          const firstMsg: ChatMessage = { role: "user", content: `I want to try the ${skillName} skill` }
+          setMessages([firstMsg])
+
+          currentContentRef.current = ""
+          setIsStreaming(true)
+
+          const cancel = chatStream(
+            gatewayBaseUrl,
+            [firstMsg],
+            {
+              onDelta: (text) => {
+                currentContentRef.current += text
+                setMessages((prev) => {
+                  const last = prev[prev.length - 1]
+                  if (last?.role === "assistant") {
+                    return [...prev.slice(0, -1), { ...last, content: currentContentRef.current }]
+                  }
+                  return [...prev, { role: "assistant", content: currentContentRef.current }]
+                })
+              },
+              onToolProgress: (tool: ToolProgress) => {
+                setToolCalls((prev) => [...prev, { name: tool.tool, emoji: tool.emoji, status: "running" }])
+              },
+              onDone: handleDone,
+              onError: (err) => {
+                const classified = classifyError(err, providerId)
+                if (classified.type === "credit_error" || classified.type === "auth_error") {
+                  setIsStreaming(false)
+                  setSessionFailed(true)
+                  setError(classified)
+                  return
                 }
-                return [...prev, { role: "assistant", content: currentContentRef.current }]
-              })
+                attempt++
+                if (attempt <= MAX_RETRIES) {
+                  setError({ type: "network", message: `Retrying (${attempt}/${MAX_RETRIES})...` })
+                  retryTimerRef.current = setTimeout(() => { void tryInit() }, RETRY_DELAYS[attempt - 1])
+                } else {
+                  setIsStreaming(false)
+                  setSessionFailed(true)
+                  setError(classified)
+                  initRef.current = false
+                }
+              },
             },
-            onToolProgress: (tool: ToolProgress) => {
-              setToolCalls((prev) => [...prev, { name: tool.tool, emoji: tool.emoji, status: "running" }])
-            },
-            onDone: handleDone,
-            onError: (err) => {
-              const classified = classifyError(err, providerId)
-              if (classified.type === "credit_error" || classified.type === "auth_error") {
-                setIsStreaming(false)
-                setSessionFailed(true)
-                setError(classified)
-                return
-              }
-              attempt++
-              if (attempt <= MAX_RETRIES) {
-                setError({ type: "network", message: `Retrying (${attempt}/${MAX_RETRIES})...` })
-                retryTimerRef.current = setTimeout(tryInit, RETRY_DELAYS[attempt - 1])
-              } else {
-                setIsStreaming(false)
-                setSessionFailed(true)
-                setError(classified)
-                initRef.current = false
-              }
-            },
-          },
-          model,
-        )
-        cancelRef.current = cancel
-        setIsStreaming(true)
-        currentContentRef.current = ""
+            model,
+            sid,
+          )
+          cancelRef.current = cancel
+        } catch (err) {
+          // Session creation failed, fall back to retry
+          attempt++
+          if (attempt <= MAX_RETRIES) {
+            setError({ type: "network", message: `Retrying (${attempt}/${MAX_RETRIES})...` })
+            retryTimerRef.current = setTimeout(() => { void tryInit() }, RETRY_DELAYS[attempt - 1])
+          } else {
+            setIsStreaming(false)
+            setSessionFailed(true)
+            setError(classifyError(err instanceof Error ? err : new Error(String(err)), providerId))
+            initRef.current = false
+          }
+        }
       }
 
-      tryInit()
+      void tryInit()
     }
 
-    // Wait for pre-flight credit check to finish before starting chat
     if (!preflightDoneRef.current) {
       pollTimer = setInterval(() => {
         if (preflightDoneRef.current) {
@@ -387,5 +431,5 @@ export function useChat(
 
   const isProviderError = error?.type === "credit_error" || error?.type === "auth_error" || error?.type === "rate_limit"
 
-  return { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, send, cancel }
+  return { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, send, cancel }
 }

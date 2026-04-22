@@ -11,6 +11,7 @@ import { SiteHeader } from "@/components/site-header";
 import { destroySandbox } from "@/lib/sandbox/daytona";
 import { useKeyStore } from "@/hooks/use-key-store";
 import { NousResearch } from "@lobehub/icons";
+import { fetchSessions, deleteGatewaySession, type SessionCompact } from "@/lib/sandbox/hermes-api";
 
 interface SandboxLiveInfo {
   id?: string;
@@ -25,6 +26,8 @@ interface SandboxLiveInfo {
   createdAt?: string;
   updatedAt?: string;
 }
+
+const PAGE_SIZE = 20;
 
 export default function DashboardPage() {
   const { isSignedIn, isLoaded } = useAuth();
@@ -46,6 +49,11 @@ export default function DashboardPage() {
   const [liveInfo, setLiveInfo] = useState<SandboxLiveInfo | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const [sessions, setSessions] = useState<SessionCompact[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
   const isRealSandbox = sandbox && !sandbox.sandboxId.startsWith("pending-");
 
   const fetchLiveInfo = useCallback(async (sandboxId: string) => {
@@ -56,11 +64,47 @@ export default function DashboardPage() {
     } catch {}
   }, [config?.sandboxKey]);
 
+  const loadSessions = useCallback(async () => {
+    if (!isRealSandbox || !sandbox?.gatewayUrl) return;
+    setSessionsLoading(true);
+    setSessionsError(null);
+    try {
+      const list = await fetchSessions(sandbox.gatewayUrl);
+      setSessions(list.filter((s) => s.message_count > 0));
+    } catch (err) {
+      setSessionsError(err instanceof Error ? err.message : "Failed to load sessions");
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, [isRealSandbox, sandbox?.gatewayUrl]);
+
   useEffect(() => {
     if (isRealSandbox && config?.sandboxKey && !liveInfo) {
       fetchLiveInfo(sandbox.sandboxId);
     }
   }, [isRealSandbox, sandbox?.sandboxId, config?.sandboxKey, fetchLiveInfo, liveInfo]);
+
+  useEffect(() => {
+    if (isRealSandbox && sandbox?.gatewayUrl) {
+      loadSessions();
+    }
+  }, [isRealSandbox, sandbox?.gatewayUrl, loadSessions]);
+
+  const handleDeleteSession = async (sessionId: string) => {
+    if (!sandbox?.gatewayUrl) return;
+    try {
+      await deleteGatewaySession(sandbox.gatewayUrl, sessionId);
+      setSessions((prev) => prev.filter((s) => s.session_id !== sessionId));
+    } catch {
+      // best effort
+    }
+  };
+
+  const handleResumeSession = (session: SessionCompact) => {
+    const skillPath = sandbox?.currentSkillPath;
+    if (!skillPath) return;
+    window.location.href = `/${skillPath}?session=${session.session_id}`;
+  };
 
   const handleDestroy = async () => {
     if (!isRealSandbox || !config?.sandboxKey) return;
@@ -261,6 +305,90 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
+
+          {/* Chat Sessions */}
+          {isRealSandbox && (
+            <div className="border border-white/10 bg-black/40 backdrop-blur-sm p-6 mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-medium text-white/90">Chat Sessions</h2>
+                {sessions.length > 0 && (
+                  <button
+                    onClick={loadSessions}
+                    className="text-xs text-white/30 hover:text-white/60 transition-colors"
+                  >
+                    Refresh
+                  </button>
+                )}
+              </div>
+
+              {sessionsLoading && sessions.length === 0 ? (
+                <div className="flex items-center gap-2 text-sm text-white/40">
+                  <div className="w-3 h-3 rounded-full border-2 border-white/20 border-t-white/50 animate-spin" />
+                  Loading sessions...
+                </div>
+              ) : sessionsError ? (
+                <div className="text-sm text-red-400/60">
+                  {sessionsError}
+                  <button onClick={loadSessions} className="ml-2 underline hover:text-red-400">
+                    Retry
+                  </button>
+                </div>
+              ) : sessions.length === 0 ? (
+                <div className="text-sm text-white/40">
+                  No chat sessions yet. Start chatting with a skill to create one.
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    {sessions.slice(0, visibleCount).map((session) => (
+                      <div
+                        key={session.session_id}
+                        className="flex items-center justify-between px-4 py-3 bg-white/5 border border-white/5 hover:border-white/10 transition-all"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-1.5 h-1.5 rounded-full bg-blue-400/40 shrink-0" />
+                          <div className="min-w-0">
+                            <div className="text-sm text-white/70 truncate">
+                              {session.title || "Untitled"}
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-white/30">
+                              <span className="font-mono">{session.model}</span>
+                              <span>&middot;</span>
+                              <span>{session.message_count} messages</span>
+                              <span>&middot;</span>
+                              <span>{formatTime(session.updated_at * 1000)}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => handleResumeSession(session)}
+                            className="px-3 py-1.5 text-xs text-blue-400/60 hover:text-blue-400 border border-blue-500/20 hover:border-blue-500/40 rounded transition-all"
+                          >
+                            Resume
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSession(session.session_id)}
+                            className="px-3 py-1.5 text-xs text-red-400/40 hover:text-red-400 border border-red-500/10 hover:border-red-500/30 rounded transition-all"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {sessions.length > visibleCount && (
+                    <button
+                      onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
+                      className="mt-3 w-full py-2 text-xs text-white/30 hover:text-white/60 border border-white/5 hover:border-white/10 transition-all"
+                    >
+                      Show more ({sessions.length - visibleCount} remaining)
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           {/* Skill Trial History */}
           <div className="border border-white/10 bg-black/40 backdrop-blur-sm p-6">

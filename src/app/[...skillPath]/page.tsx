@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, use } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
 
@@ -37,6 +38,8 @@ export default function SkillPage({
 }) {
   const resolvedParams = use(params);
   const { skillPath } = resolvedParams;
+  const searchParams = useSearchParams();
+  const resumeSessionId = searchParams.get("session") ?? undefined;
   const { isSignedIn, isLoaded: authLoaded, userId } = useAuth();
   const { isAuthenticated } = useConvexAuth();
   const { config: savedConfig, loading: keysLoading } = useKeyStore();
@@ -491,6 +494,7 @@ export default function SkillPage({
               startedAt={session.startedAt}
               providerId={savedConfig?.providerId}
               apiKey={savedConfig?.llmKey}
+              initialSessionId={resumeSessionId}
               onStop={handleStop}
               onTryAnother={handleTryAnother}
               onSessionError={async () => {

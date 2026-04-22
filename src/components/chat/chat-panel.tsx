@@ -138,6 +138,7 @@ export function ChatPanel({
   startedAt,
   providerId,
   apiKey,
+  initialSessionId,
   onStop,
   onTryAnother,
   onSessionError,
@@ -148,6 +149,7 @@ export function ChatPanel({
   startedAt: number
   providerId?: string
   apiKey?: string
+  initialSessionId?: string
   onStop: () => void
   onTryAnother?: () => void
   onSessionError?: () => void
@@ -158,6 +160,7 @@ export function ChatPanel({
     skillName,
     providerId,
     apiKey,
+    initialSessionId,
   )
 
   const [input, setInput] = useState("")
