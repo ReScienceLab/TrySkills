@@ -154,7 +154,7 @@ export function ChatPanel({
   onTryAnother?: () => void
   onSessionError?: () => void
 }) {
-  const { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, send, cancel } = useChat(
+  const { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, send, cancel } = useChat(
     gatewayBaseUrl,
     model,
     skillName,
@@ -167,6 +167,14 @@ export function ChatPanel({
   const [elapsed, setElapsed] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Keep browser URL in sync when session id changes (e.g. resume fallback creates new session)
+  useEffect(() => {
+    if (!sessionId || sessionId === initialSessionId) return
+    const url = new URL(window.location.href)
+    url.searchParams.set("session", sessionId)
+    window.history.replaceState({}, "", url.toString())
+  }, [sessionId, initialSessionId])
 
   useEffect(() => {
     const timer = setInterval(() => {

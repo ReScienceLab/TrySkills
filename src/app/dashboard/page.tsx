@@ -67,7 +67,8 @@ export default function DashboardPage() {
   const isGatewayReachable = isRealSandbox
     && sandbox?.gatewayUrl
     && sandbox.poolState !== "stopped"
-    && (sandbox.gatewayUrlCreatedAt ? Date.now() - sandbox.gatewayUrlCreatedAt < 50 * 60 * 1000 : false);
+    && (sandbox.gatewayUrlCreatedAt ? Date.now() - sandbox.gatewayUrlCreatedAt < 50 * 60 * 1000 : false)
+    && (sandbox.lastHeartbeat ? Date.now() - sandbox.lastHeartbeat < 30 * 60 * 1000 : true);
 
   const loadSessions = useCallback(async () => {
     if (!isGatewayReachable || !sandbox?.gatewayUrl) return;
