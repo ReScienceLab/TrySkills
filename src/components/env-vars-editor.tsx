@@ -35,15 +35,19 @@ export function EnvVarsEditor({
   })
   const [visibleIds, setVisibleIds] = useState<Set<string>>(new Set())
   const [showPresets, setShowPresets] = useState(false)
+  const localEditRef = useRef(false)
   const prevValueRef = useRef(value)
 
   useEffect(() => {
+    if (localEditRef.current) {
+      localEditRef.current = false
+      prevValueRef.current = value
+      return
+    }
     const prev = prevValueRef.current
-    const prevKeys = Object.keys(prev).sort().join(",")
-    const nextKeys = Object.keys(value).sort().join(",")
-    const prevVals = Object.keys(prev).sort().map(k => prev[k]).join(",")
-    const nextVals = Object.keys(value).sort().map(k => value[k]).join(",")
-    if (prevKeys !== nextKeys || prevVals !== nextVals) {
+    const prevJson = JSON.stringify(prev, Object.keys(prev).sort())
+    const nextJson = JSON.stringify(value, Object.keys(value).sort())
+    if (prevJson !== nextJson) {
       prevValueRef.current = value
       const entries = Object.entries(value)
       setRows(entries.length === 0 ? [] : entries.map(([k, v]) => ({ id: crypto.randomUUID(), key: k, value: v })))
@@ -58,6 +62,7 @@ export function EnvVarsEditor({
       const k = row.key.trim()
       if (k && row.value) result[k] = row.value
     }
+    localEditRef.current = true
     onChange(result)
   }
 
