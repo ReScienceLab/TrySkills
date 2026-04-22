@@ -166,7 +166,10 @@ export default function SkillPage({
           gatewayUrlCreatedAt: result.urlRefreshed ? Date.now() : undefined,
           installedSkills: [...new Set([
             ...(sandbox.installedSkills ?? []),
-            ...(result.discoveredSkills ?? []),
+            ...(result.discoveredSkills ?? []).filter((d: string) => {
+              const existing = sandbox.installedSkills ?? []
+              return !existing.some((e) => e.replace(/\//g, "--") === d)
+            }),
             skillPathStr,
           ])],
         }).catch(() => {});
@@ -261,7 +264,10 @@ export default function SkillPage({
       // Insert real record BEFORE deleting placeholder to avoid null window.
       // If insert fails, destroy sandbox to prevent orphan.
       try {
-        const allSkills = [...new Set([skillPathStr, ...(result.discoveredSkills ?? [])])];
+        const nativeSkills = (result.discoveredSkills ?? []).filter(
+          (d) => d !== skillPathStr.replace(/\//g, "--"),
+        )
+        const allSkills = [skillPathStr, ...nativeSkills];
         await createSandboxRecord({
           sandboxId: result.sandboxId,
           skillPath: skillPathStr,

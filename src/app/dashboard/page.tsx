@@ -237,7 +237,7 @@ export default function DashboardPage() {
                     <div className="flex flex-wrap gap-1.5">
                       {sandbox.installedSkills.map((s) => (
                         <span key={s} className="text-[10px] font-mono px-2 py-0.5 bg-white/5 border border-white/10 text-white/40 rounded-full">
-                          {s.split("/").pop()}
+                          {s.includes("/") ? s.split("/").pop() : s}
                         </span>
                       ))}
                     </div>

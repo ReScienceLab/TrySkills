@@ -18,14 +18,14 @@ const HERMES_HOME = "/root/.hermes";
 async function discoverSkillsOnDisk(sandbox: any): Promise<string[]> {
   try {
     const result = await sandbox.process.executeCommand(
-      `find ${HERMES_HOME}/skills -maxdepth 1 -mindepth 1 -type d -printf '%f\\n' 2>/dev/null || ls ${HERMES_HOME}/skills 2>/dev/null || true`,
+      `for d in ${HERMES_HOME}/skills/*/; do [ -f "$d/SKILL.md" ] && basename "$d"; done 2>/dev/null || true`,
     )
     const output = (result.result?.output ?? result.output ?? "").trim()
     if (!output) return []
     return output
       .split("\n")
       .filter((s: string) => s.trim())
-      .map((s: string) => s.trim().replace(/--/g, "/"))
+      .map((s: string) => s.trim())
   } catch {
     return []
   }
