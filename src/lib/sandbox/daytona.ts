@@ -88,14 +88,22 @@ function buildConfigYaml(model: string, provider: string, baseUrl?: string): str
   return lines.join("\n");
 }
 
-function buildEnvFile(providerEnvVar: string, apiKey: string): string {
-  return [
+function buildEnvFile(providerEnvVar: string, apiKey: string, extraEnvVars?: Record<string, string>): string {
+  const lines = [
     `${providerEnvVar}=${apiKey}`,
     "API_SERVER_ENABLED=true",
     "API_SERVER_CORS_ORIGINS=*",
     "GATEWAY_ALLOW_ALL_USERS=true",
-    "",
-  ].join("\n");
+  ]
+  if (extraEnvVars) {
+    for (const [key, value] of Object.entries(extraEnvVars)) {
+      if (key !== providerEnvVar) {
+        lines.push(`${key}=${value}`)
+      }
+    }
+  }
+  lines.push("")
+  return lines.join("\n")
 }
 
 /**
@@ -150,6 +158,7 @@ export async function createHermesSandbox(
           API_SERVER_ENABLED: "true",
           API_SERVER_CORS_ORIGINS: "*",
           GATEWAY_ALLOW_ALL_USERS: "true",
+          ...config.envVars,
         },
       },
       { timeout: 120 },
@@ -176,6 +185,7 @@ export async function createHermesSandbox(
             API_SERVER_ENABLED: "true",
             API_SERVER_CORS_ORIGINS: "*",
             GATEWAY_ALLOW_ALL_USERS: "true",
+            ...config.envVars,
           },
         },
         {
@@ -199,6 +209,7 @@ export async function createHermesSandbox(
             API_SERVER_ENABLED: "true",
             API_SERVER_CORS_ORIGINS: "*",
             GATEWAY_ALLOW_ALL_USERS: "true",
+            ...config.envVars,
           },
         } as unknown as Parameters<typeof daytona.create>[0],
         { timeout: 300 },
@@ -227,7 +238,7 @@ export async function createHermesSandbox(
   }
 
   await sandbox.process.executeCommand(
-    `mkdir -p ${HERMES_HOME} && cat > ${HERMES_HOME}/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
+    `mkdir -p ${HERMES_HOME} && cat > ${HERMES_HOME}/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey, config.envVars)}\nENVEOF`,
   ).catch(() => {});
   await sandbox.process.executeCommand(
     `cat > ${HERMES_HOME}/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.hermesProvider, providerMapping.baseUrl)}\nCFGEOF`,
@@ -354,7 +365,7 @@ export async function installSkill(
   if (!options?.skipConfigWrite) {
     setupTasks.push(
       sandbox.process.executeCommand(
-        `mkdir -p ${HERMES_HOME} && cat > ${HERMES_HOME}/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
+        `mkdir -p ${HERMES_HOME} && cat > ${HERMES_HOME}/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey, config.envVars)}\nENVEOF`,
       ).catch(() => {}),
       sandbox.process.executeCommand(
         `cat > ${HERMES_HOME}/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.hermesProvider, providerMapping.baseUrl)}\nCFGEOF`,

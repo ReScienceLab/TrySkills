@@ -261,6 +261,41 @@ describe("sandbox/daytona", () => {
     expect(serverCmd).toBeUndefined();
   });
 
+  it("passes extra envVars from config to sandbox create and .env file", async () => {
+    const configWithEnvVars: SandboxConfig = {
+      ...testConfig,
+      envVars: {
+        OPENAI_API_KEY: "sk-extra-openai",
+        GOOGLE_API_KEY: "AI-extra-google",
+      },
+    };
+
+    await createHermesSandbox(
+      configWithEnvVars,
+      "test-skill",
+      testSkillFiles,
+      () => {},
+    );
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        envVars: expect.objectContaining({
+          OPENROUTER_API_KEY: "sk-or-test-key",
+          OPENAI_API_KEY: "sk-extra-openai",
+          GOOGLE_API_KEY: "AI-extra-google",
+          API_SERVER_ENABLED: "true",
+        }),
+      }),
+      expect.anything(),
+    );
+
+    const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
+    const envCmd = allCmds.find((c: string) => c.includes(".env") && c.includes("ENVEOF"));
+    expect(envCmd).toBeDefined();
+    expect(envCmd).toContain("OPENAI_API_KEY=sk-extra-openai");
+    expect(envCmd).toContain("GOOGLE_API_KEY=AI-extra-google");
+  });
+
   it("gets signed preview URL on gateway port 8642", async () => {
     await createHermesSandbox(testConfig, "test", testSkillFiles, () => {});
     expect(mockGetSignedPreviewUrl).toHaveBeenCalledWith(8642, 3600);

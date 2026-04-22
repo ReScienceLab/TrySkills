@@ -165,6 +165,7 @@ export default function SkillPage({
             llmProvider: config.provider.id,
             llmApiKey: config.llmKey,
             llmModel: config.model,
+            envVars: config.envVars,
           },
           sandbox.sandboxId,
           skillPathStr,
@@ -263,6 +264,7 @@ export default function SkillPage({
           llmProvider: config.provider.id,
           llmApiKey: config.llmKey,
           llmModel: config.model,
+          envVars: config.envVars,
         },
         skillPathStr,
         skillFiles,
@@ -374,6 +376,7 @@ export default function SkillPage({
       model: savedConfig.model,
       llmKey: savedConfig.llmKey,
       sandboxKey: savedConfig.sandboxKey,
+      envVars: savedConfig.envVars,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSignedIn, keysLoading, savedConfig, phase]);
