@@ -53,7 +53,7 @@ export function ModelSelector({
           onChange={(e) => onChange(e.target.value)}
           placeholder={`e.g. ${provider.models[0]}`}
           aria-label={`Model for ${provider.name}`}
-          className="w-full px-4 py-2.5 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors placeholder:text-white/20"
+          className="w-full px-4 py-2.5 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 focus:border-white/30 transition-colors placeholder:text-white/20"
         />
         <datalist id={`models-${provider.id}`}>
           {provider.models.map((m) => (
@@ -69,7 +69,7 @@ export function ModelSelector({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       aria-label={`Model for ${provider.name}`}
-      className="w-full px-4 py-2.5 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors appearance-none cursor-pointer"
+      className="w-full px-4 py-2.5 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 focus:border-white/30 transition-colors appearance-none cursor-pointer"
     >
       {provider.models.map((m) => (
         <option key={m} value={m} className="bg-[#111] text-white">{m}</option>
@@ -129,7 +129,7 @@ export function ApiKeyInput({
             value={value}
             onChange={(e) => { onChange(e.target.value); setResult(null); }}
             placeholder={`${provider.keyPrefix}...`}
-            className="w-full px-4 py-2.5 pr-12 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors placeholder:text-white/20"
+            className="w-full px-4 py-2.5 pr-12 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 focus:border-white/30 transition-colors placeholder:text-white/20"
           />
           <button
             onClick={() => setVisible(!visible)}

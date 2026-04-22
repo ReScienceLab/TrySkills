@@ -170,7 +170,7 @@ function ConfigPanelForm({
               value={sandboxKey}
               onChange={(e) => setSandboxKey(e.target.value)}
               placeholder="dtn_..."
-              className="w-full px-4 py-2.5 pr-12 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus:border-white/30 transition-colors placeholder:text-white/20"
+              className="w-full px-4 py-2.5 pr-12 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 focus:border-white/30 transition-colors placeholder:text-white/20"
             />
             <button
               onClick={() => setShowSandboxKey(!showSandboxKey)}

@@ -185,11 +185,11 @@ export default function Home() {
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="https://skills.sh/owner/repo/skill-name"
-                className="flex-1 px-5 py-3.5 text-[#111] text-sm font-mono bg-transparent outline-none placeholder:text-gray-400"
+                className="flex-1 px-5 py-3.5 text-[#111] text-sm font-mono bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 placeholder:text-gray-400"
               />
               <button
                 type="submit"
-                className="px-5 py-3.5 bg-[#0a0a0a] text-white text-sm font-medium hover:bg-[#1a1a1a] transition-colors shrink-0"
+                className="px-5 py-3.5 bg-[#0a0a0a] text-white text-sm font-medium hover:bg-[#1a1a1a] transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-blue-500/50"
               >
                 Configure
               </button>

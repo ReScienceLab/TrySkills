@@ -23,6 +23,7 @@ export function GlowMesh() {
   const maskRef = useRef<HTMLImageElement | null>(null);
   const mouseRef = useRef<{ x: number; y: number }>({ x: -1000, y: -1000 });
   const rafRef = useRef<number>(0);
+  const reducedMotionRef = useRef(false);
 
   const init = useCallback(() => {
     const canvas = canvasRef.current;
@@ -48,6 +49,14 @@ export function GlowMesh() {
       });
     }
     nodesRef.current = nodes;
+  }, []);
+
+  useEffect(() => {
+    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+    reducedMotionRef.current = mql.matches;
+    const handler = (e: MediaQueryListEvent) => { reducedMotionRef.current = e.matches; };
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
   }, []);
 
   useEffect(() => {
@@ -79,6 +88,11 @@ export function GlowMesh() {
       const canvas = canvasRef.current;
       const ctx = canvas?.getContext("2d");
       if (!canvas || !ctx) {
+        rafRef.current = requestAnimationFrame(animate);
+        return;
+      }
+
+      if (reducedMotionRef.current) {
         rafRef.current = requestAnimationFrame(animate);
         return;
       }
