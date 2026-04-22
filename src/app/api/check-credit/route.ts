@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { auth } from "@clerk/nextjs/server"
 
 const PROVIDER_BILLING_URLS: Record<string, string> = {
   openrouter: "https://openrouter.ai/credits",
@@ -15,6 +16,11 @@ const PROVIDER_KEY_URLS: Record<string, string> = {
 }
 
 export async function POST(req: NextRequest) {
+  const { userId } = await auth()
+  if (!userId) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+  }
+
   const { providerId, apiKey } = (await req.json()) as {
     providerId: string
     apiKey: string
