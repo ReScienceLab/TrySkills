@@ -149,7 +149,7 @@ describe("sandbox/daytona", () => {
     expect(installCmd).toBeUndefined();
   });
 
-  it("uploads skill files to /home/daytona/.hermes/skills/", async () => {
+  it("uploads skill files to /root/.hermes/skills/", async () => {
     await createHermesSandbox(
       testConfig,
       "my-skill",
@@ -162,11 +162,11 @@ describe("sandbox/daytona", () => {
 
     expect(mockUploadFile).toHaveBeenCalledWith(
       expect.any(Buffer),
-      "/home/daytona/.hermes/skills/my-skill/SKILL.md",
+      "/root/.hermes/skills/my-skill/SKILL.md",
     );
     expect(mockUploadFile).toHaveBeenCalledWith(
       expect.any(Buffer),
-      "/home/daytona/.hermes/skills/my-skill/scripts/setup.sh",
+      "/root/.hermes/skills/my-skill/scripts/setup.sh",
     );
   });
 

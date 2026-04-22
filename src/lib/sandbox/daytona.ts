@@ -11,6 +11,7 @@ const GATEWAY_PORT = 8642;
 const SIGNED_URL_TTL_SECONDS = 3600;
 const SIGNED_URL_FRESH_MS = 50 * 60 * 1000;
 const COLD_RESOURCES = { cpu: 2, memory: 4, disk: 10 };
+const HERMES_HOME = "/root/.hermes";
 
 export interface SkillFile {
   path: string;
@@ -185,8 +186,8 @@ export async function createHermesSandbox(
   if (usedSnapshot) {
     onProgress("configuring", { usedSnapshot: true });
     await sandbox.process.executeCommand([
-      "mkdir -p /home/daytona/.hermes/skills /home/daytona/.hermes/logs",
-      "ln -sfn /opt/hermes-agent /home/daytona/.hermes/hermes-agent",
+      `mkdir -p ${HERMES_HOME}/skills ${HERMES_HOME}/logs`,
+      `ln -sfn /opt/hermes-agent ${HERMES_HOME}/hermes-agent`,
       "mkdir -p /home/daytona/.local/bin",
       "ln -sf /opt/hermes-agent/venv/bin/hermes /home/daytona/.local/bin/hermes",
     ].join(" && ")).catch(() => {});
@@ -200,13 +201,13 @@ export async function createHermesSandbox(
   }
 
   await sandbox.process.executeCommand(
-    `mkdir -p /home/daytona/.hermes && cat > /home/daytona/.hermes/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
+    `mkdir -p ${HERMES_HOME} && cat > ${HERMES_HOME}/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
   ).catch(() => {});
   await sandbox.process.executeCommand(
-    `cat > /home/daytona/.hermes/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider)}\nCFGEOF`,
+    `cat > ${HERMES_HOME}/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider)}\nCFGEOF`,
   ).catch(() => {});
 
-  const agentDir = usedSnapshot ? "/opt/hermes-agent" : "/home/daytona/.hermes/hermes-agent";
+  const agentDir = usedSnapshot ? "/opt/hermes-agent" : `${HERMES_HOME}/hermes-agent`;
 
   if (!usedSnapshot) {
     await sandbox.process.executeCommand(
@@ -218,7 +219,7 @@ export async function createHermesSandbox(
   onProgress("uploading");
   log("uploading skill files");
   for (const file of skillFiles) {
-    const destPath = `/home/daytona/.hermes/skills/${sanitizeSkillDir(skillName)}/${file.path}`;
+    const destPath = `${HERMES_HOME}/skills/${sanitizeSkillDir(skillName)}/${file.path}`;
     const dir = destPath.substring(0, destPath.lastIndexOf("/"));
     await sandbox.process.executeCommand(`mkdir -p "${dir}"`).catch(() => {});
     await sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
@@ -319,7 +320,7 @@ export async function installSkill(
 
   // Batch ALL mkdir into one command, then parallel uploads
   const allDirs = [...new Set(skillFiles.map((f) => {
-    const destPath = `/home/daytona/.hermes/skills/${sanitizeSkillDir(skillName)}/${f.path}`;
+    const destPath = `${HERMES_HOME}/skills/${sanitizeSkillDir(skillName)}/${f.path}`;
     return destPath.substring(0, destPath.lastIndexOf("/"));
   }))];
 
@@ -327,10 +328,10 @@ export async function installSkill(
   if (!options?.skipConfigWrite) {
     setupTasks.push(
       sandbox.process.executeCommand(
-        `mkdir -p /home/daytona/.hermes && cat > /home/daytona/.hermes/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
+        `mkdir -p ${HERMES_HOME} && cat > ${HERMES_HOME}/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
       ).catch(() => {}),
       sandbox.process.executeCommand(
-        `cat > /home/daytona/.hermes/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider)}\nCFGEOF`,
+        `cat > ${HERMES_HOME}/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider)}\nCFGEOF`,
       ).catch(() => {}),
     );
   }
@@ -346,7 +347,7 @@ export async function installSkill(
   // Pure parallel file uploads (no per-file mkdir)
   await Promise.all(
     skillFiles.map((file) => {
-      const destPath = `/home/daytona/.hermes/skills/${sanitizeSkillDir(skillName)}/${file.path}`;
+      const destPath = `${HERMES_HOME}/skills/${sanitizeSkillDir(skillName)}/${file.path}`;
       return sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
     }),
   );
