@@ -12,7 +12,7 @@ export function ProviderTabs({
   onChange: (id: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-1">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
       {PROVIDERS.map((p) => {
         const Icon = p.Icon;
         return (

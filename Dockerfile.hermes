@@ -35,12 +35,11 @@ RUN cd /opt/hermes-agent && if [ -f ui-tui/package.json ]; then cd ui-tui && npm
 # WhatsApp bridge dependencies (if present)
 RUN cd /opt/hermes-agent && if [ -f scripts/whatsapp-bridge/package.json ]; then cd scripts/whatsapp-bridge && npm install --silent 2>/dev/null; fi || true
 
-# Hermes WebUI
-RUN git clone --depth 1 https://github.com/nesquena/hermes-webui.git /opt/hermes-webui
-RUN cd /opt/hermes-webui && npm install --legacy-peer-deps 2>&1 || npm install --force 2>&1 || true
-
 # Pre-create hermes home directory
 RUN mkdir -p /home/daytona/.hermes/skills /home/daytona/.hermes/logs
+
+# Ensure daytona user can access everything
+RUN chmod -R a+rX /opt/hermes-agent && chmod -R a+rw /home/daytona/.hermes
 
 # Cleanup caches to reduce image size (preserve Playwright browsers)
 RUN rm -rf /root/.cache/pip /root/.cache/uv /tmp/* /var/tmp/*

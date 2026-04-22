@@ -1,88 +1,100 @@
-"use client";
+"use client"
 
-import { useState, useRef, useEffect } from "react";
-import ReactMarkdown from "react-markdown";
-import rehypeHighlight from "rehype-highlight";
-import { useChat, type ChatMessage, type ToolCall, type ApprovalRequest } from "./use-chat";
-import { respondApproval } from "@/lib/sandbox/hermes-api";
+import { useState, useRef, useEffect } from "react"
+import ReactMarkdown from "react-markdown"
+import rehypeHighlight from "rehype-highlight"
+import { useChat, type ToolCall, type ChatError } from "./use-chat"
+import type { ChatMessage } from "@/lib/sandbox/hermes-api"
 
 function ToolCard({ tool }: { tool: ToolCall }) {
-  const [expanded, setExpanded] = useState(false);
   return (
-    <div
-      className="my-1 bg-white/5 border border-white/10 rounded px-3 py-1.5 text-xs cursor-pointer"
-      onClick={() => setExpanded(!expanded)}
-    >
+    <div className="my-1 bg-white/5 border border-white/10 rounded px-3 py-1.5 text-xs">
       <div className="flex items-center gap-2">
         {tool.status === "running" ? (
           <div className="w-3 h-3 rounded-full border border-blue-400 border-t-transparent animate-spin" />
-        ) : tool.status === "error" ? (
-          <div className="w-3 h-3 rounded-full bg-red-500/60" />
         ) : (
           <div className="w-3 h-3 rounded-full bg-green-500/60" />
         )}
-        <span className="text-white/60 font-mono">{tool.name}</span>
-        {tool.duration != null && (
-          <span className="text-white/30 ml-auto">{(tool.duration / 1000).toFixed(1)}s</span>
-        )}
+        <span className="text-white/60 font-mono">{tool.emoji || "\u{1F527}"} {tool.name}</span>
         {tool.status === "running" && (
           <span className="text-blue-400/60 ml-auto">running...</span>
         )}
       </div>
-      {expanded && tool.args && (
-        <pre className="mt-1 text-white/30 text-[10px] overflow-x-auto">
-          {JSON.stringify(tool.args, null, 2)}
-        </pre>
-      )}
     </div>
-  );
+  )
 }
 
-function ApprovalCard({
-  approval,
-  webuiBaseUrl,
-  onDismiss,
+const ERROR_ICONS: Record<string, string> = {
+  credit_error: "\u{1F4B3}",
+  auth_error: "\u{1F511}",
+  rate_limit: "\u{23F3}",
+  empty_response: "\u{1F4ED}",
+  provider_error: "\u{26A0}\u{FE0F}",
+  network: "\u{1F310}",
+}
+
+const ERROR_COLORS: Record<string, { bg: string; border: string; text: string }> = {
+  credit_error: { bg: "bg-amber-500/10", border: "border-amber-500/20", text: "text-amber-400" },
+  auth_error: { bg: "bg-red-500/10", border: "border-red-500/20", text: "text-red-400" },
+  rate_limit: { bg: "bg-blue-500/10", border: "border-blue-500/20", text: "text-blue-400" },
+  empty_response: { bg: "bg-white/5", border: "border-white/10", text: "text-white/60" },
+  provider_error: { bg: "bg-red-500/10", border: "border-red-500/20", text: "text-red-400" },
+  network: { bg: "bg-red-500/10", border: "border-red-500/20", text: "text-red-400" },
+}
+
+function ErrorCard({
+  error,
+  sessionFailed,
+  isProviderError,
+  onSessionError,
 }: {
-  approval: ApprovalRequest;
-  webuiBaseUrl: string;
-  onDismiss: () => void;
+  error: ChatError
+  sessionFailed: boolean
+  isProviderError?: boolean
+  onSessionError?: () => void
 }) {
-  const [error, setError] = useState<string | null>(null);
-  const handleApprove = async (choice: "once" | "session" | "always" | "deny") => {
-    setError(null);
-    try {
-      await respondApproval(webuiBaseUrl, approval.sessionId, choice);
-      onDismiss();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send approval");
-    }
-  };
+  const colors = ERROR_COLORS[error.type] || ERROR_COLORS.provider_error
+  const icon = ERROR_ICONS[error.type] || "\u{26A0}\u{FE0F}"
 
   return (
-    <div className="mx-4 my-2 p-4 bg-amber-500/10 border border-amber-500/30 rounded">
-      <div className="text-sm text-amber-400 font-medium mb-1">Command Approval Required</div>
-      <pre className="text-xs text-white/70 bg-black/30 p-2 rounded mb-3 overflow-x-auto">
-        {approval.command}
-      </pre>
-      {approval.description && (
-        <p className="text-xs text-white/40 mb-3">{approval.description}</p>
-      )}
-      {error && (
-        <p className="text-xs text-red-400 mb-2">{error} -- try again</p>
-      )}
-      <div className="flex gap-2">
-        <button onClick={() => handleApprove("once")} className="px-3 py-1.5 bg-amber-500/20 text-amber-400 text-xs hover:bg-amber-500/30 rounded transition-all">
-          Allow once
-        </button>
-        <button onClick={() => handleApprove("session")} className="px-3 py-1.5 bg-white/5 text-white/50 text-xs hover:bg-white/10 rounded transition-all">
-          Allow for session
-        </button>
-        <button onClick={() => handleApprove("deny")} className="px-3 py-1.5 bg-red-500/10 text-red-400 text-xs hover:bg-red-500/20 rounded transition-all">
-          Deny
-        </button>
+    <div className={`p-3 ${colors.bg} border ${colors.border} rounded mb-4`}>
+      <div className="flex items-start gap-2">
+        <span className="text-base shrink-0">{icon}</span>
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm ${colors.text}`}>{error.message}</p>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {error.action && (
+              <a
+                href={error.action.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`inline-block px-3 py-1.5 ${colors.bg} hover:opacity-80 ${colors.text} text-xs rounded border ${colors.border} transition-all`}
+              >
+                {error.action.label} &rarr;
+              </a>
+            )}
+            {sessionFailed && !isProviderError && onSessionError && (
+              <button
+                onClick={onSessionError}
+                className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded text-xs transition-all"
+              >
+                Reconnect (create new sandbox)
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
-  );
+  )
+}
+
+function CreditWarningBanner({ message }: { message: string }) {
+  return (
+    <div className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-xs text-amber-400 flex items-center gap-2">
+      <span>{"\u{26A0}\u{FE0F}"}</span>
+      <span>{message}</span>
+    </div>
+  )
 }
 
 function MessageBubble({ msg }: { msg: ChatMessage }) {
@@ -93,24 +105,11 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
           <p className="text-sm text-white/90 whitespace-pre-wrap">{msg.content}</p>
         </div>
       </div>
-    );
+    )
   }
 
   return (
     <div className="mb-4">
-      {msg.reasoning && (
-        <details className="mb-2">
-          <summary className="text-xs text-amber-400/50 cursor-pointer hover:text-amber-400/70">
-            Thinking...
-          </summary>
-          <div className="text-xs text-white/25 mt-1 pl-3 border-l border-white/10 whitespace-pre-wrap">
-            {msg.reasoning}
-          </div>
-        </details>
-      )}
-      {msg.toolCalls?.map((tc, i) => (
-        <ToolCard key={`${tc.name}-${i}`} tool={tc} />
-      ))}
       {msg.content && (
         <div className="prose prose-invert prose-sm max-w-none text-white/85 [&_pre]:bg-white/5 [&_pre]:border [&_pre]:border-white/10 [&_pre]:rounded [&_code]:text-emerald-400/80 [&_a]:text-blue-400 [&_a:hover]:underline">
           <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
@@ -119,7 +118,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
         </div>
       )}
     </div>
-  );
+  )
 }
 
 function ThinkingDots() {
@@ -129,72 +128,75 @@ function ThinkingDots() {
       <div className="w-1.5 h-1.5 rounded-full bg-white/30 animate-bounce [animation-delay:150ms]" />
       <div className="w-1.5 h-1.5 rounded-full bg-white/30 animate-bounce [animation-delay:300ms]" />
     </div>
-  );
+  )
 }
 
 export function ChatPanel({
-  webuiBaseUrl,
+  gatewayBaseUrl,
   model,
   skillName,
   startedAt,
-  webuiUrl,
+  providerId,
+  apiKey,
   onStop,
   onTryAnother,
   onSessionError,
 }: {
-  webuiBaseUrl: string;
-  model: string;
-  skillName: string;
-  startedAt: number;
-  webuiUrl: string;
-  onStop: () => void;
-  onTryAnother?: () => void;
-  onSessionError?: () => void;
+  gatewayBaseUrl: string
+  model: string
+  skillName: string
+  startedAt: number
+  providerId?: string
+  apiKey?: string
+  onStop: () => void
+  onTryAnother?: () => void
+  onSessionError?: () => void
 }) {
-  const { messages, isStreaming, error, sessionFailed, approval, send, cancel, setApproval } = useChat(
-    webuiBaseUrl,
+  const { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, send, cancel } = useChat(
+    gatewayBaseUrl,
     model,
     skillName,
-  );
+    providerId,
+    apiKey,
+  )
 
-  const [input, setInput] = useState("");
-  const [elapsed, setElapsed] = useState(0);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [input, setInput] = useState("")
+  const [elapsed, setElapsed] = useState(0)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startedAt) / 1000));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [startedAt]);
+      setElapsed(Math.floor((Date.now() - startedAt) / 1000))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [startedAt])
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isStreaming]);
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages, isStreaming])
 
   const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s.toString().padStart(2, "0")}`;
-  };
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return `${m}:${s.toString().padStart(2, "0")}`
+  }
 
-  const handleSend = async () => {
-    if (!input.trim() || isStreaming) return;
-    const msg = input;
-    setInput("");
+  const handleSend = () => {
+    if (!input.trim() || isStreaming) return
+    send(input)
+    setInput("")
     if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = "auto"
     }
-    await send(msg);
-  };
+  }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+      e.preventDefault()
+      handleSend()
     }
-  };
+  }
 
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] max-w-4xl mx-auto w-full">
@@ -204,14 +206,6 @@ export function ChatPanel({
         <span className="text-sm text-white/70 font-mono">{skillName}</span>
         <span className="text-xs text-white/30 font-mono">{formatTime(elapsed)}</span>
         <div className="ml-auto flex items-center gap-2">
-          <a
-            href={webuiUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 border border-white/10 hover:border-white/20 rounded transition-all"
-          >
-            Open full WebUI
-          </a>
           {onTryAnother && (
             <button
               onClick={onTryAnother}
@@ -229,32 +223,30 @@ export function ChatPanel({
         </div>
       </div>
 
+      {/* Credit warning banner */}
+      {creditWarning && <CreditWarningBanner message={creditWarning} />}
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {messages.map((msg, i) => (
           <MessageBubble key={i} msg={msg} />
         ))}
+        {toolCalls.length > 0 && (
+          <div className="mb-2">
+            {toolCalls.map((tc, i) => (
+              <ToolCard key={`${tc.name}-${i}`} tool={tc} />
+            ))}
+          </div>
+        )}
         {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
           <ThinkingDots />
         )}
         {error && (
-          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded text-sm text-red-400 mb-4">
-            {error}
-            {sessionFailed && onSessionError && (
-              <button
-                onClick={onSessionError}
-                className="mt-2 block px-4 py-1.5 bg-red-500/20 hover:bg-red-500/30 rounded text-xs transition-all"
-              >
-                Reconnect (create new sandbox)
-              </button>
-            )}
-          </div>
-        )}
-        {approval && (
-          <ApprovalCard
-            approval={approval}
-            webuiBaseUrl={webuiBaseUrl}
-            onDismiss={() => setApproval(null)}
+          <ErrorCard
+            error={error}
+            sessionFailed={sessionFailed}
+            isProviderError={isProviderError}
+            onSessionError={onSessionError}
           />
         )}
         <div ref={messagesEndRef} />
@@ -267,9 +259,9 @@ export function ChatPanel({
             ref={textareaRef}
             value={input}
             onChange={(e) => {
-              setInput(e.target.value);
-              e.target.style.height = "auto";
-              e.target.style.height = Math.min(e.target.scrollHeight, 200) + "px";
+              setInput(e.target.value)
+              e.target.style.height = "auto"
+              e.target.style.height = Math.min(e.target.scrollHeight, 200) + "px"
             }}
             onKeyDown={handleKeyDown}
             placeholder="Message Hermes..."
@@ -296,5 +288,5 @@ export function ChatPanel({
         </div>
       </div>
     </div>
-  );
+  )
 }

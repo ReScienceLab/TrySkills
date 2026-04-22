@@ -7,6 +7,16 @@ const mockUploadFile = vi.fn();
 const mockExecuteCommand = vi.fn();
 const mockGetSignedPreviewUrl = vi.fn();
 
+vi.mock("@lobehub/icons", () => ({
+  OpenRouter: () => null,
+  Anthropic: () => null,
+  OpenAI: () => null,
+  Google: () => null,
+  NousResearch: () => null,
+  Kimi: () => null,
+  Minimax: () => null,
+}));
+
 vi.mock("@daytona/sdk", () => {
   return {
     Daytona: class MockDaytona {
@@ -45,10 +55,10 @@ describe("sandbox/daytona", () => {
     mockCreate.mockResolvedValue(mockSandbox);
     mockExecuteCommand.mockResolvedValue({ exitCode: 0 });
     mockGetSignedPreviewUrl.mockResolvedValue({
-      url: "https://8787-signedtoken.proxy.daytona.work",
+      url: "https://8642-signedtoken.proxy.daytona.work",
       token: "signedtoken",
       sandboxId: "sb-test-123",
-      port: 8787,
+      port: 8642,
     });
   });
 
@@ -77,8 +87,8 @@ describe("sandbox/daytona", () => {
 
     expect(session.sandboxId).toBe("sb-test-123");
     expect(session.state).toBe("running");
-    expect(session.webuiUrl).toContain("proxy.daytona.work");
-    expect(session.webuiBaseUrl).toContain("proxy.daytona.work");
+    expect(session.gatewayUrl).toContain("proxy.daytona.work");
+    expect(session.gatewayBaseUrl).toContain("proxy.daytona.work");
   });
 
   it("passes userId as label when provided", async () => {
@@ -149,7 +159,7 @@ describe("sandbox/daytona", () => {
     expect(installCmd).toBeUndefined();
   });
 
-  it("uploads skill files to /home/daytona/.hermes/skills/", async () => {
+  it("uploads skill files to /root/.hermes/skills/", async () => {
     await createHermesSandbox(
       testConfig,
       "my-skill",
@@ -162,11 +172,11 @@ describe("sandbox/daytona", () => {
 
     expect(mockUploadFile).toHaveBeenCalledWith(
       expect.any(Buffer),
-      "/home/daytona/.hermes/skills/my-skill/SKILL.md",
+      "/root/.hermes/skills/my-skill/SKILL.md",
     );
     expect(mockUploadFile).toHaveBeenCalledWith(
       expect.any(Buffer),
-      "/home/daytona/.hermes/skills/my-skill/scripts/setup.sh",
+      "/root/.hermes/skills/my-skill/scripts/setup.sh",
     );
   });
 
@@ -195,28 +205,73 @@ describe("sandbox/daytona", () => {
     }
   });
 
-  it("starts gateway and webui from /opt on snapshot path", async () => {
+  it("new providers map to correct env var names in sandbox", async () => {
+    for (const [providerId, expectedEnvVar] of [
+      ["kimi", "KIMI_API_KEY"],
+      ["minimax", "MINIMAX_API_KEY"],
+    ] as const) {
+      mockCreate.mockResolvedValue(mockSandbox);
+      await createHermesSandbox(
+        { ...testConfig, llmProvider: providerId, llmApiKey: "test-key" },
+        "test",
+        testSkillFiles,
+        () => {},
+      );
+
+      expect(mockCreate).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          envVars: expect.objectContaining({
+            [expectedEnvVar]: "test-key",
+          }),
+        }),
+        expect.anything(),
+      );
+    }
+  });
+
+  it("custom hermes providers (openai, nous) use OPENAI_API_KEY in sandbox", async () => {
+    for (const providerId of ["openai", "nous"] as const) {
+      mockCreate.mockResolvedValue(mockSandbox);
+      await createHermesSandbox(
+        { ...testConfig, llmProvider: providerId, llmApiKey: "test-key" },
+        "test",
+        testSkillFiles,
+        () => {},
+      );
+
+      expect(mockCreate).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          envVars: expect.objectContaining({
+            OPENAI_API_KEY: "test-key",
+          }),
+        }),
+        expect.anything(),
+      );
+    }
+  });
+
+  it("starts gateway from /opt on snapshot path", async () => {
     await createHermesSandbox(testConfig, "test", testSkillFiles, () => {});
 
     const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
     const gwCmd = allCmds.find((c: string) => c.includes("hermes") && c.includes("gateway"));
-    const webuiCmd = allCmds.find((c: string) => c.includes("server.py"));
     expect(gwCmd).toBeDefined();
-    expect(webuiCmd).toBeDefined();
-    expect(webuiCmd).toContain("8787");
+    // No WebUI (server.py) should be started -- only gateway
+    const serverCmd = allCmds.find((c: string) => c.includes("server.py"));
+    expect(serverCmd).toBeUndefined();
   });
 
-  it("gets signed preview URL on webui port 8787", async () => {
+  it("gets signed preview URL on gateway port 8642", async () => {
     await createHermesSandbox(testConfig, "test", testSkillFiles, () => {});
-    expect(mockGetSignedPreviewUrl).toHaveBeenCalledWith(8787, 3600);
+    expect(mockGetSignedPreviewUrl).toHaveBeenCalledWith(8642, 3600);
   });
 
   it("uses signed preview URL directly (no token query param)", async () => {
     mockGetSignedPreviewUrl.mockResolvedValue({
-      url: "https://8787-signedtoken.proxy.daytona.work",
+      url: "https://8642-signedtoken.proxy.daytona.work",
       token: "signedtoken",
       sandboxId: "sb-123",
-      port: 8787,
+      port: 8642,
     });
 
     const session = await createHermesSandbox(
@@ -226,11 +281,11 @@ describe("sandbox/daytona", () => {
       () => {},
     );
 
-    expect(session.webuiBaseUrl).toBe(
-      "https://8787-signedtoken.proxy.daytona.work",
+    expect(session.gatewayBaseUrl).toBe(
+      "https://8642-signedtoken.proxy.daytona.work",
     );
-    expect(session.webuiUrl).toBe(
-      "https://8787-signedtoken.proxy.daytona.work",
+    expect(session.gatewayUrl).toBe(
+      "https://8642-signedtoken.proxy.daytona.work",
     );
   });
 
@@ -280,7 +335,7 @@ describe("sandbox/daytona", () => {
       const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
       // Should NOT clean old skills (additive install)
       expect(allCmds.every((c: string) => !c.includes("rm -rf"))).toBe(true);
-      // Should NOT restart WebUI or gateway
+      // Should NOT restart gateway (already running)
       expect(allCmds.every((c: string) => !c.includes("pkill"))).toBe(true);
       expect(allCmds.every((c: string) => !c.includes("hermes gateway"))).toBe(true);
     });

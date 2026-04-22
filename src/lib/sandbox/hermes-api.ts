@@ -1,109 +1,165 @@
-export interface SSEEvent {
-  type: string;
-  data: Record<string, unknown>;
+export interface ChatMessage {
+  role: "user" | "assistant" | "system"
+  content: string
 }
 
-async function proxyPost(path: string, webuiBaseUrl: string, body?: Record<string, unknown>) {
-  const res = await fetch("/api/hermes", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ baseUrl: webuiBaseUrl, path, body }),
-  });
+export interface ToolProgress {
+  tool: string
+  emoji: string
+  label: string
+}
 
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-    console.error(`[hermes-api] proxy ${path} failed:`, data);
-    throw new Error(data.error || `Proxy request failed: ${res.status}`);
+export class ProviderError extends Error {
+  code: string | number | undefined
+  constructor(message: string, code?: string | number) {
+    super(message)
+    this.name = "ProviderError"
+    this.code = code
   }
-
-  return res.json();
 }
 
-export async function createSession(
-  webuiBaseUrl: string,
+export interface StreamDoneMeta {
+  hadContent: boolean
+}
+
+export interface StreamCallbacks {
+  onDelta: (text: string) => void
+  onToolProgress: (tool: ToolProgress) => void
+  onDone: (meta: StreamDoneMeta) => void
+  onError: (err: Error) => void
+}
+
+export function chatStream(
+  gatewayBaseUrl: string,
+  messages: ChatMessage[],
+  callbacks: StreamCallbacks,
   model?: string,
-): Promise<string> {
-  console.log("[hermes-api] createSession via proxy, baseUrl:", webuiBaseUrl);
-  const data = await proxyPost("/api/session/new", webuiBaseUrl, { model });
-  return data.session.session_id;
-}
-
-export async function sendMessage(
-  webuiBaseUrl: string,
-  sessionId: string,
-  message: string,
-  model?: string,
-): Promise<string> {
-  const data = await proxyPost("/api/chat/start", webuiBaseUrl, {
-    session_id: sessionId,
-    message,
-    model,
-  });
-  return data.stream_id;
-}
-
-export function streamResponse(
-  webuiBaseUrl: string,
-  streamId: string,
-  onEvent: (event: SSEEvent) => void,
-  onError: (error: Error) => void,
-  onEnd: () => void,
 ): () => void {
-  const streamUrl = new URL("/api/hermes/stream", window.location.origin);
-  streamUrl.searchParams.set("baseUrl", webuiBaseUrl);
-  streamUrl.searchParams.set("stream_id", streamId);
-  const es = new EventSource(streamUrl.toString());
+  let aborted = false
+  const controller = new AbortController()
 
-  const EVENTS = [
-    "token", "reasoning", "tool", "tool_complete", "done",
-    "error", "approval", "cancel", "apperror", "compressed", "title",
-    "stream_end", "title_status",
-  ];
+  void (async () => {
+    let hadContent = false
 
-  for (const eventType of EVENTS) {
-    es.addEventListener(eventType, (e: MessageEvent) => {
-      try {
-        const data = JSON.parse(e.data);
-        onEvent({ type: eventType, data });
-        if (eventType === "done" || eventType === "stream_end" || eventType === "error" || eventType === "cancel") {
-          es.close();
-          onEnd();
+    try {
+      const res = await fetch("/api/hermes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          baseUrl: gatewayBaseUrl,
+          path: "/v1/chat/completions",
+          stream: true,
+          body: {
+            model: model || "hermes",
+            messages,
+            stream: true,
+          },
+        }),
+        signal: controller.signal,
+      })
+
+      if (!res.ok || !res.body) {
+        const text = await res.text().catch(() => "")
+        const parsed = tryParseErrorJson(text)
+        if (parsed) {
+          throw new ProviderError(parsed.message, parsed.code)
         }
-      } catch {
-        // ignore parse errors
+        throw new Error(text || `Gateway error: ${res.status}`)
       }
-    });
-  }
 
-  es.onerror = () => {
-    es.close();
-    onError(new Error("SSE connection lost"));
-    onEnd();
-  };
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+      let currentEventType = ""
+
+      while (!aborted) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split("\n")
+        buffer = lines.pop() || ""
+
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            currentEventType = line.slice(7).trim()
+            continue
+          }
+          if (!line.startsWith("data: ")) continue
+          const data = line.slice(6)
+
+          if (data === "[DONE]") {
+            callbacks.onDone({ hadContent })
+            return
+          }
+
+          try {
+            const parsed = JSON.parse(data)
+
+            // Detect error payloads embedded in SSE stream
+            if (parsed.error) {
+              const errMsg = parsed.error.message || parsed.error.type || "Unknown provider error"
+              const errCode = parsed.error.code || parsed.error.type
+              callbacks.onError(new ProviderError(errMsg, errCode))
+              return
+            }
+
+            if (currentEventType === "hermes.tool.progress") {
+              callbacks.onToolProgress(parsed as ToolProgress)
+              currentEventType = ""
+              continue
+            }
+            currentEventType = ""
+
+            // Detect finish_reason: "error" (OpenRouter mid-stream format)
+            const finishReason = parsed.choices?.[0]?.finish_reason
+            if (finishReason === "error") {
+              const errMsg = parsed.error?.message || "Provider error during streaming"
+              callbacks.onError(new ProviderError(errMsg, parsed.error?.code))
+              return
+            }
+
+            const delta = parsed.choices?.[0]?.delta
+            if (delta?.content) {
+              hadContent = true
+              callbacks.onDelta(delta.content)
+            }
+
+            if (finishReason === "stop") {
+              callbacks.onDone({ hadContent })
+              return
+            }
+          } catch {
+            // ignore parse errors for non-JSON lines
+          }
+        }
+      }
+
+      if (!aborted) callbacks.onDone({ hadContent })
+    } catch (err) {
+      if (!aborted) {
+        callbacks.onError(err instanceof Error ? err : new Error(String(err)))
+      }
+    }
+  })()
 
   return () => {
-    es.close();
-  };
+    aborted = true
+    controller.abort()
+  }
 }
 
-export async function cancelStream(
-  webuiBaseUrl: string,
-  streamId: string,
-): Promise<void> {
-  const cancelUrl = new URL("/api/hermes", window.location.origin);
-  cancelUrl.searchParams.set("baseUrl", webuiBaseUrl);
-  cancelUrl.searchParams.set("path", "/api/chat/cancel");
-  cancelUrl.searchParams.set("stream_id", streamId);
-  await fetch(cancelUrl.toString()).catch(() => {});
-}
-
-export async function respondApproval(
-  webuiBaseUrl: string,
-  sessionId: string,
-  choice: "once" | "session" | "always" | "deny",
-): Promise<void> {
-  await proxyPost("/api/approval/respond", webuiBaseUrl, {
-    session_id: sessionId,
-    choice,
-  });
+function tryParseErrorJson(text: string): { message: string; code?: string | number } | null {
+  try {
+    const parsed = JSON.parse(text)
+    if (parsed.error?.message) {
+      return { message: parsed.error.message, code: parsed.error.code || parsed.error.type }
+    }
+    if (parsed.error && typeof parsed.error === "string") {
+      return { message: parsed.error }
+    }
+  } catch {
+    // not JSON
+  }
+  return null
 }

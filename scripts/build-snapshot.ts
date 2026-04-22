@@ -1,7 +1,7 @@
 /**
  * Build or rebuild the "hermes-ready" Daytona snapshot.
  *
- * This snapshot pre-installs hermes-agent, hermes-webui, and all dependencies
+ * This snapshot pre-installs hermes-agent and all dependencies
  * so that sandbox creation from this snapshot takes ~10-15s instead of ~3min.
  *
  * Usage:
@@ -57,12 +57,8 @@ const image = Image.base("ubuntu:22.04").runCommands(
   // Install WhatsApp bridge dependencies (if present)
   "cd /opt/hermes-agent && if [ -f scripts/whatsapp-bridge/package.json ]; then cd scripts/whatsapp-bridge && npm install --silent 2>/dev/null || true; fi",
 
-  // Clone and install hermes-webui
-  "git clone --depth 1 https://github.com/nesquena/hermes-webui.git /opt/hermes-webui",
-  "cd /opt/hermes-webui && npm install --legacy-peer-deps 2>&1 || npm install --force 2>&1 || true",
-
   // Pre-create hermes home directory structure
-  "mkdir -p /home/daytona/.hermes/skills /home/daytona/.hermes/logs",
+  "mkdir -p /root/.hermes/skills /root/.hermes/logs",
 );
 
 async function main() {

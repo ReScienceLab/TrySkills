@@ -5,7 +5,7 @@ export const create = mutation({
   args: {
     sandboxId: v.string(),
     skillPath: v.string(),
-    webuiUrl: v.string(),
+    gatewayUrl: v.string(),
     state: v.optional(v.string()),
     poolState: v.optional(v.union(
       v.literal("active"),
@@ -15,7 +15,7 @@ export const create = mutation({
     currentSkillPath: v.optional(v.string()),
     configHash: v.optional(v.string()),
     installedSkills: v.optional(v.array(v.string())),
-    webuiUrlCreatedAt: v.optional(v.number()),
+    gatewayUrlCreatedAt: v.optional(v.number()),
     cpu: v.optional(v.number()),
     memory: v.optional(v.number()),
     disk: v.optional(v.number()),
@@ -30,13 +30,13 @@ export const create = mutation({
       tokenIdentifier: identity.tokenIdentifier,
       sandboxId: args.sandboxId,
       skillPath: args.skillPath,
-      webuiUrl: args.webuiUrl,
+      gatewayUrl: args.gatewayUrl,
       state: args.state ?? "running",
       poolState: args.poolState,
       currentSkillPath: args.currentSkillPath,
       configHash: args.configHash,
       installedSkills: args.installedSkills,
-      webuiUrlCreatedAt: args.webuiUrlCreatedAt,
+      gatewayUrlCreatedAt: args.gatewayUrlCreatedAt,
       cpu: args.cpu,
       memory: args.memory,
       disk: args.disk,
@@ -155,11 +155,11 @@ export const getSandbox = query({
     return {
       status: "found" as const,
       sandboxId: sandbox.sandboxId,
-      webuiUrl: sandbox.webuiUrl,
+      gatewayUrl: sandbox.gatewayUrl,
       poolState: sandbox.poolState,
       configHash: sandbox.configHash,
       installedSkills: sandbox.installedSkills,
-      webuiUrlCreatedAt: sandbox.webuiUrlCreatedAt,
+      gatewayUrlCreatedAt: sandbox.gatewayUrlCreatedAt,
       lastHeartbeat: sandbox.lastHeartbeat,
       currentSkillPath: sandbox.currentSkillPath,
     };
@@ -206,7 +206,7 @@ export const acquireCreateLock = mutation({
       tokenIdentifier: identity.tokenIdentifier,
       sandboxId: placeholderId,
       skillPath: "",
-      webuiUrl: "",
+      gatewayUrl: "",
       state: "creating",
       poolState: "creating",
       createdAt: Date.now(),
@@ -239,7 +239,7 @@ export const findReusable = query({
     return {
       sandboxId: reusable.sandboxId,
       poolState: reusable.poolState,
-      webuiUrl: reusable.webuiUrl,
+      gatewayUrl: reusable.gatewayUrl,
     };
   },
 });
@@ -253,10 +253,10 @@ export const updatePoolState = mutation({
       v.literal("stopped"),
     ),
     currentSkillPath: v.optional(v.string()),
-    webuiUrl: v.optional(v.string()),
+    gatewayUrl: v.optional(v.string()),
     configHash: v.optional(v.string()),
     installedSkills: v.optional(v.array(v.string())),
-    webuiUrlCreatedAt: v.optional(v.number()),
+    gatewayUrlCreatedAt: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -273,8 +273,8 @@ export const updatePoolState = mutation({
       if (args.currentSkillPath !== undefined) {
         patch.currentSkillPath = args.currentSkillPath;
       }
-      if (args.webuiUrl !== undefined) {
-        patch.webuiUrl = args.webuiUrl;
+      if (args.gatewayUrl !== undefined) {
+        patch.gatewayUrl = args.gatewayUrl;
       }
       if (args.configHash !== undefined) {
         patch.configHash = args.configHash;
@@ -282,8 +282,8 @@ export const updatePoolState = mutation({
       if (args.installedSkills !== undefined) {
         patch.installedSkills = args.installedSkills;
       }
-      if (args.webuiUrlCreatedAt !== undefined) {
-        patch.webuiUrlCreatedAt = args.webuiUrlCreatedAt;
+      if (args.gatewayUrlCreatedAt !== undefined) {
+        patch.gatewayUrlCreatedAt = args.gatewayUrlCreatedAt;
       }
       await ctx.db.patch("sandboxes", sandbox._id, patch);
     }

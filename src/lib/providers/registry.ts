@@ -1,5 +1,7 @@
 import type { ComponentType } from "react";
-import { OpenRouter, Anthropic, OpenAI, Google } from "@lobehub/icons";
+import { OpenRouter, Anthropic, OpenAI, Google, NousResearch, Kimi, Minimax } from "@lobehub/icons";
+import { PROVIDER_DATA, type ProviderData } from "./provider-data";
+export { getProviderData } from "./provider-data";
 
 export interface IconProps {
   size?: number;
@@ -7,73 +9,24 @@ export interface IconProps {
   style?: React.CSSProperties;
 }
 
-export interface Provider {
-  id: string;
-  name: string;
+export interface Provider extends ProviderData {
   Icon: ComponentType<IconProps>;
-  keyPrefix: string;
-  keyUrl: string;
-  models: string[];
-  envVar: string;
-  allowCustomModel?: boolean;
-  checkEndpoint: string;
-  checkAuthHeader: (key: string) => Record<string, string>;
 }
 
-export const PROVIDERS: Provider[] = [
-  {
-    id: "openrouter",
-    name: "OpenRouter",
-    Icon: OpenRouter,
-    keyPrefix: "sk-or-",
-    keyUrl: "https://openrouter.ai/keys",
-    envVar: "OPENROUTER_API_KEY",
-    allowCustomModel: true,
-    checkEndpoint: "https://openrouter.ai/api/v1/models?supported_parameters=temperature&per_page=1",
-    checkAuthHeader: (key) => ({ Authorization: `Bearer ${key}` }),
-    models: [
-      "anthropic/claude-sonnet-4.6",
-      "anthropic/claude-opus-4.7",
-      "anthropic/claude-haiku-4.5",
-      "openai/gpt-5.4",
-      "openai/gpt-5.4-mini",
-      "google/gemini-2.5-flash",
-    ],
-  },
-  {
-    id: "anthropic",
-    name: "Anthropic",
-    Icon: Anthropic,
-    keyPrefix: "sk-ant-",
-    keyUrl: "https://console.anthropic.com/settings/keys",
-    envVar: "ANTHROPIC_API_KEY",
-    checkEndpoint: "https://api.anthropic.com/v1/models?limit=1",
-    checkAuthHeader: (key) => ({ "x-api-key": key, "anthropic-version": "2023-06-01" }),
-    models: ["claude-sonnet-4-6", "claude-opus-4-7", "claude-haiku-4-5"],
-  },
-  {
-    id: "openai",
-    name: "OpenAI",
-    Icon: OpenAI,
-    keyPrefix: "sk-",
-    keyUrl: "https://platform.openai.com/api-keys",
-    envVar: "OPENAI_API_KEY",
-    checkEndpoint: "https://api.openai.com/v1/models?limit=1",
-    checkAuthHeader: (key) => ({ Authorization: `Bearer ${key}` }),
-    models: ["gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"],
-  },
-  {
-    id: "google",
-    name: "Google AI",
-    Icon: Google,
-    keyPrefix: "AI",
-    keyUrl: "https://aistudio.google.com/apikey",
-    envVar: "GOOGLE_API_KEY",
-    checkEndpoint: "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1",
-    checkAuthHeader: (key) => ({ "x-goog-api-key": key }),
-    models: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"],
-  },
-];
+const ICON_MAP: Record<string, ComponentType<IconProps>> = {
+  openrouter: OpenRouter,
+  anthropic: Anthropic,
+  openai: OpenAI,
+  google: Google,
+  nous: NousResearch,
+  kimi: Kimi,
+  minimax: Minimax,
+};
+
+export const PROVIDERS: Provider[] = PROVIDER_DATA.map((p) => ({
+  ...p,
+  Icon: ICON_MAP[p.id] ?? OpenRouter,
+}));
 
 export function getProvider(id: string): Provider | undefined {
   return PROVIDERS.find((p) => p.id === id);
