@@ -105,7 +105,16 @@ export async function POST(request: NextRequest) {
 
     // Streaming passthrough for SSE responses
     if (stream && res.body) {
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        return NextResponse.json(
+          { error: text || `Gateway error: ${res.status}` },
+          { status: res.status },
+        );
+      }
       return new Response(res.body, {
+        status: res.status,
+        statusText: res.statusText,
         headers: {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-cache",

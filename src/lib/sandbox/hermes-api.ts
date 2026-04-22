@@ -51,6 +51,7 @@ export function chatStream(
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let currentEventType = "";
 
       while (!aborted) {
         const { done, value } = await reader.read();
@@ -60,7 +61,6 @@ export function chatStream(
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
 
-        let currentEventType = "";
         for (const line of lines) {
           if (line.startsWith("event: ")) {
             currentEventType = line.slice(7).trim();
