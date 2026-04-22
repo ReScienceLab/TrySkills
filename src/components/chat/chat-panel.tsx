@@ -158,7 +158,7 @@ export function ChatPanel({
   onTryAnother?: () => void
   onSessionError?: () => void
 }) {
-  const { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, send, cancel, setMessages } = useChat(
+  const { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, send, cancel } = useChat(
     gatewayBaseUrl,
     model,
     skillName,
@@ -166,19 +166,13 @@ export function ChatPanel({
     apiKey,
     initialSessionId,
     skillPath,
+    initialMessages,
   )
 
   const [input, setInput] = useState("")
   const [elapsed, setElapsed] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-
-  // Load initial messages for resumed sessions
-  useEffect(() => {
-    if (initialMessages && initialMessages.length > 0 && messages.length === 0) {
-      setMessages(initialMessages)
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep browser URL in sync when session id changes (e.g. resume fallback creates new session)
   useEffect(() => {

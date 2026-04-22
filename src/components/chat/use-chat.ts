@@ -168,8 +168,9 @@ export function useChat(
   apiKey?: string,
   initialSessionId?: string,
   skillPath?: string,
+  initialMessages?: ChatMessage[],
 ) {
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages ?? [])
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<ChatError | null>(null)
@@ -353,9 +354,8 @@ export function useChat(
 
       const tryInit = async () => {
         try {
-          // If resuming, initialSessionId is already set and messages will be
-          // loaded by the parent component via Convex query. Just skip init.
-          if (initialSessionId && messages.length > 0) {
+          // If resuming with pre-loaded messages, skip auto-init
+          if (initialMessages && initialMessages.length > 0) {
             return
           }
 
@@ -462,5 +462,5 @@ export function useChat(
 
   const isProviderError = error?.type === "credit_error" || error?.type === "auth_error" || error?.type === "rate_limit"
 
-  return { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, send, cancel, setMessages }
+  return { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, send, cancel }
 }
