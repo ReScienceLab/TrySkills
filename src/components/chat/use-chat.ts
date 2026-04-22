@@ -171,6 +171,7 @@ export function useChat(
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const preflightDoneRef = useRef(false)
   const preflightFailedRef = useRef(false)
+  const turnIdRef = useRef(0)
 
   const handleError = useCallback(
     (err: Error) => {
@@ -185,9 +186,12 @@ export function useChat(
       setIsStreaming(false)
       setToolCalls((prev) => prev.map((t) => ({ ...t, status: "done" as const })))
       if (!meta.hadContent) {
+        const currentTurn = turnIdRef.current
         setError({ type: "empty_response", message: "Diagnosing..." })
         const diagnosed = await diagnoseEmptyResponse(providerId, apiKey)
-        setError(diagnosed)
+        if (turnIdRef.current === currentTurn) {
+          setError(diagnosed)
+        }
       }
     },
     [providerId, apiKey],
@@ -198,6 +202,7 @@ export function useChat(
       if (!gatewayBaseUrl) return
 
       currentContentRef.current = ""
+      turnIdRef.current++
       setIsStreaming(true)
       setError(null)
       setToolCalls([])
