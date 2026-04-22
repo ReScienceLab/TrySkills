@@ -17,6 +17,13 @@ vi.mock("@/lib/providers/check-credit", () => ({
   checkProviderCredit: vi.fn().mockResolvedValue({ ok: true }),
 }))
 
+const mockCreateSession = vi.fn().mockResolvedValue("test-session-id")
+const mockAppendMessages = vi.fn().mockResolvedValue(null)
+
+vi.mock("convex/react", () => ({
+  useMutation: () => mockCreateSession,
+}))
+
 import { useChat } from "@/components/chat/use-chat"
 import { chatStream, ProviderError } from "@/lib/sandbox/hermes-api"
 
@@ -55,8 +62,10 @@ describe("useChat", () => {
       setTimeout(() => {
         callbacks.onDelta("Hello ")
         callbacks.onDelta("world")
-        callbacks.onDone({ hadContent: true })
       }, 10)
+      setTimeout(() => {
+        callbacks.onDone({ hadContent: true })
+      }, 50)
       return () => {}
     })
 
@@ -64,11 +73,16 @@ describe("useChat", () => {
       useChat("https://8642-abc.daytonaproxy01.net", "claude-3", "test-skill"),
     )
 
+    // Wait for chatStream to be called (after async session creation)
     await vi.waitFor(() => {
-      expect(result.current.isStreaming).toBe(false)
+      expect(mockChatStream).toHaveBeenCalled()
     })
 
-    expect(result.current.messages.some((m) => m.content.includes("Hello world"))).toBe(true)
+    // Wait for streaming to complete
+    await vi.waitFor(() => {
+      expect(result.current.messages.some((m) => m.content.includes("Hello world"))).toBe(true)
+    })
+
     expect(result.current.error).toBeNull()
   })
 
@@ -109,7 +123,6 @@ describe("useChat", () => {
 
     expect(result.current.error?.type).toBe("credit_error")
     expect(result.current.sessionFailed).toBe(true)
-    // Should NOT have retried (only 1 call)
     expect(mockChatStream).toHaveBeenCalledTimes(1)
   })
 
@@ -136,7 +149,9 @@ describe("useChat", () => {
 
   it("handles network errors with retry and sessionFailed", async () => {
     vi.useFakeTimers()
+    let callCount = 0
     mockChatStream.mockImplementation((_url, _msgs, callbacks) => {
+      callCount++
       setTimeout(() => callbacks.onError(new Error("Connection refused")), 5)
       return () => {}
     })
@@ -145,6 +160,10 @@ describe("useChat", () => {
       useChat("https://8642-abc.daytonaproxy01.net", "claude-3", "test-skill"),
     )
 
+    // Wait for createGatewaySession + initial chatStream call
+    await vi.advanceTimersByTimeAsync(100)
+
+    // Advance through retries
     for (let i = 0; i < 4; i++) {
       await vi.advanceTimersByTimeAsync(10000)
     }

@@ -96,7 +96,6 @@ export function chatStream(
           try {
             const parsed = JSON.parse(data)
 
-            // Detect error payloads embedded in SSE stream
             if (parsed.error) {
               const errMsg = parsed.error.message || parsed.error.type || "Unknown provider error"
               const errCode = parsed.error.code || parsed.error.type
@@ -111,7 +110,6 @@ export function chatStream(
             }
             currentEventType = ""
 
-            // Detect finish_reason: "error" (OpenRouter mid-stream format)
             const finishReason = parsed.choices?.[0]?.finish_reason
             if (finishReason === "error") {
               const errMsg = parsed.error?.message || "Provider error during streaming"

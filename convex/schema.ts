@@ -67,4 +67,20 @@ export default defineSchema({
   })
     .index("by_token", ["tokenIdentifier"])
     .index("by_sandbox", ["sandboxId"]),
+
+  chatSessions: defineTable({
+    tokenIdentifier: v.string(),
+    skillPath: v.string(),
+    title: v.string(),
+    model: v.string(),
+    messages: v.array(v.object({
+      role: v.union(v.literal("user"), v.literal("assistant"), v.literal("system")),
+      content: v.string(),
+    })),
+    messageCount: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_token", ["tokenIdentifier"])
+    .index("by_token_skill", ["tokenIdentifier", "skillPath"]),
 });
