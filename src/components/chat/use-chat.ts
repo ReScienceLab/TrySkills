@@ -3,14 +3,15 @@
 import { useState, useRef, useCallback, useEffect } from "react"
 import {
   chatStream,
-  createGatewaySession,
-  fetchSession,
   ProviderError,
   type ChatMessage,
   type ToolProgress,
   type StreamDoneMeta,
 } from "@/lib/sandbox/hermes-api"
 import { checkProviderCredit } from "@/lib/providers/check-credit"
+import { useMutation } from "convex/react"
+import { api } from "../../../convex/_generated/api"
+import type { Id } from "../../../convex/_generated/dataModel"
 
 export type ErrorType =
   | "provider_error"
@@ -166,6 +167,7 @@ export function useChat(
   providerId?: string,
   apiKey?: string,
   initialSessionId?: string,
+  skillPath?: string,
 ) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([])
@@ -184,6 +186,9 @@ export function useChat(
   const turnIdRef = useRef(0)
   const sessionIdRef = useRef<string | null>(initialSessionId ?? null)
 
+  const createSession = useMutation(api.chatSessions.create)
+  const appendMessages = useMutation(api.chatSessions.appendMessages)
+
   const handleError = useCallback(
     (err: Error) => {
       setIsStreaming(false)
@@ -196,10 +201,6 @@ export function useChat(
     async (meta: StreamDoneMeta) => {
       setIsStreaming(false)
       setToolCalls((prev) => prev.map((t) => ({ ...t, status: "done" as const })))
-      if (meta.sessionId && meta.sessionId !== sessionIdRef.current) {
-        sessionIdRef.current = meta.sessionId
-        setSessionId(meta.sessionId)
-      }
       if (!meta.hadContent) {
         const currentTurn = turnIdRef.current
         setError({ type: "empty_response", message: "Diagnosing..." })
@@ -212,8 +213,25 @@ export function useChat(
     [providerId, apiKey],
   )
 
+  // Save messages to Convex session after streaming completes
+  const saveToSession = useCallback(
+    async (userMsg: ChatMessage, assistantMsg: ChatMessage) => {
+      const sid = sessionIdRef.current
+      if (!sid) return
+      try {
+        await appendMessages({
+          sessionId: sid as Id<"chatSessions">,
+          messages: [userMsg, assistantMsg],
+        })
+      } catch {
+        // best effort
+      }
+    },
+    [appendMessages],
+  )
+
   const stream = useCallback(
-    (allMessages: ChatMessage[], sid?: string) => {
+    (allMessages: ChatMessage[]) => {
       if (!gatewayBaseUrl) return
 
       currentContentRef.current = ""
@@ -221,6 +239,8 @@ export function useChat(
       setIsStreaming(true)
       setError(null)
       setToolCalls([])
+
+      const lastUserMsg = allMessages[allMessages.length - 1]
 
       const cancel = chatStream(
         gatewayBaseUrl,
@@ -243,15 +263,22 @@ export function useChat(
               return [...prev, { name: tool.tool, emoji: tool.emoji, status: "running" }]
             })
           },
-          onDone: handleDone,
+          onDone: async (meta) => {
+            await handleDone(meta)
+            if (meta.hadContent && lastUserMsg) {
+              await saveToSession(
+                lastUserMsg,
+                { role: "assistant", content: currentContentRef.current },
+              )
+            }
+          },
           onError: handleError,
         },
         model,
-        sid ?? sessionIdRef.current ?? undefined,
       )
       cancelRef.current = cancel
     },
-    [gatewayBaseUrl, model, handleDone, handleError],
+    [gatewayBaseUrl, model, handleDone, handleError, saveToSession],
   )
 
   const send = useCallback(
@@ -310,7 +337,7 @@ export function useChat(
       })
   }, [gatewayBaseUrl, providerId, apiKey])
 
-  // Auto-init: create session + send first message (or resume existing session)
+  // Auto-init: create Convex session + send first message (or resume existing session)
   useEffect(() => {
     if (!gatewayBaseUrl || initRef.current) return
 
@@ -326,34 +353,22 @@ export function useChat(
 
       const tryInit = async () => {
         try {
-          // If resuming a session, load existing messages
-          if (initialSessionId) {
-            try {
-              const detail = await fetchSession(gatewayBaseUrl, initialSessionId)
-              const chatMessages: ChatMessage[] = (detail.messages || [])
-                .filter((m) => m.role === "user" || m.role === "assistant")
-                .map((m) => ({ role: m.role, content: m.content }))
-              if (chatMessages.length > 0) {
-                setMessages(chatMessages)
-                sessionIdRef.current = initialSessionId
-                setSessionId(initialSessionId)
-                return
-              }
-            } catch {
-              // Resume failed, fall through to create new session
-            }
+          // If resuming, initialSessionId is already set and messages will be
+          // loaded by the parent component via Convex query. Just skip init.
+          if (initialSessionId && messages.length > 0) {
+            return
           }
 
-          // Try to create a Gateway session; fall back to sessionless mode if unavailable
-          let sid: string | undefined
-          try {
-            sid = await createGatewaySession(gatewayBaseUrl, model)
-            sessionIdRef.current = sid
-            setSessionId(sid)
-          } catch {
-            // Gateway session API unavailable, clear any stale session ref and continue without session
-            sessionIdRef.current = null
-            setSessionId(null)
+          // Create a Convex session (if not already set from resume)
+          if (!sessionIdRef.current && skillPath) {
+            const sid = await createSession({
+              skillPath,
+              title: `${skillName} session`,
+              model,
+            })
+            const sidStr = sid as string
+            sessionIdRef.current = sidStr
+            setSessionId(sidStr)
           }
 
           const firstMsg: ChatMessage = { role: "user", content: `I want to try the ${skillName} skill` }
@@ -379,7 +394,15 @@ export function useChat(
               onToolProgress: (tool: ToolProgress) => {
                 setToolCalls((prev) => [...prev, { name: tool.tool, emoji: tool.emoji, status: "running" }])
               },
-              onDone: handleDone,
+              onDone: async (meta) => {
+                await handleDone(meta)
+                if (meta.hadContent) {
+                  await saveToSession(
+                    firstMsg,
+                    { role: "assistant", content: currentContentRef.current },
+                  )
+                }
+              },
               onError: (err) => {
                 const classified = classifyError(err, providerId)
                 if (classified.type === "credit_error" || classified.type === "auth_error") {
@@ -401,11 +424,9 @@ export function useChat(
               },
             },
             model,
-            sid,
           )
           cancelRef.current = cancel
         } catch (err) {
-          // Unexpected error, retry
           attempt++
           if (attempt <= MAX_RETRIES) {
             setError({ type: "network", message: `Retrying (${attempt}/${MAX_RETRIES})...` })
@@ -441,5 +462,5 @@ export function useChat(
 
   const isProviderError = error?.type === "credit_error" || error?.type === "auth_error" || error?.type === "rate_limit"
 
-  return { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, send, cancel }
+  return { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, send, cancel, setMessages }
 }

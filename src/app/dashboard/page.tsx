@@ -11,7 +11,6 @@ import { SiteHeader } from "@/components/site-header";
 import { destroySandbox } from "@/lib/sandbox/daytona";
 import { useKeyStore } from "@/hooks/use-key-store";
 import { NousResearch } from "@lobehub/icons";
-import { fetchSessions, deleteGatewaySession, type SessionCompact } from "@/lib/sandbox/hermes-api";
 
 interface SandboxLiveInfo {
   id?: string;
@@ -36,7 +35,9 @@ export default function DashboardPage() {
 
   const sandboxes = useQuery(api.sandboxes.list, isAuthenticated ? {} : "skip");
   const trials = useQuery(api.skillTrials.list, isAuthenticated ? {} : "skip");
+  const chatSessionsList = useQuery(api.chatSessions.list, isAuthenticated ? {} : "skip");
   const removeSandbox = useMutation(api.sandboxes.remove);
+  const removeChatSession = useMutation(api.chatSessions.remove);
 
   const STALE_PENDING_MS = 5 * 60 * 1000;
   const sandboxList = sandboxes ?? [];
@@ -48,11 +49,9 @@ export default function DashboardPage() {
 
   const [liveInfo, setLiveInfo] = useState<SandboxLiveInfo | null>(null);
   const [copied, setCopied] = useState(false);
-
-  const [sessions, setSessions] = useState<SessionCompact[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
-  const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  const sessions = (chatSessionsList ?? []).filter((s) => s.messageCount > 0);
 
   const isRealSandbox = sandbox && !sandbox.sandboxId.startsWith("pending-");
 
@@ -64,86 +63,22 @@ export default function DashboardPage() {
     } catch {}
   }, [config?.sandboxKey]);
 
-  const isGatewayReachable = isRealSandbox
-    && sandbox?.gatewayUrl
-    && sandbox.poolState !== "stopped"
-    && (sandbox.gatewayUrlCreatedAt ? Date.now() - sandbox.gatewayUrlCreatedAt < 50 * 60 * 1000 : false)
-    && (sandbox.lastHeartbeat ? Date.now() - sandbox.lastHeartbeat < 30 * 60 * 1000 : true);
-
-  const loadSessions = useCallback(async () => {
-    if (!isGatewayReachable || !sandbox?.gatewayUrl) return;
-    setSessionsLoading(true);
-    setSessionsError(null);
-    try {
-      const list = await fetchSessions(sandbox.gatewayUrl);
-      setSessions(list.filter((s) => s.message_count > 0));
-    } catch (err) {
-      setSessionsError(err instanceof Error ? err.message : "Failed to load sessions");
-    } finally {
-      setSessionsLoading(false);
-    }
-  }, [isGatewayReachable, sandbox?.gatewayUrl]);
-
   useEffect(() => {
     if (isRealSandbox && config?.sandboxKey && !liveInfo) {
       fetchLiveInfo(sandbox.sandboxId);
     }
   }, [isRealSandbox, sandbox?.sandboxId, config?.sandboxKey, fetchLiveInfo, liveInfo]);
 
-  useEffect(() => {
-    if (isGatewayReachable) {
-      loadSessions();
-    }
-  }, [isGatewayReachable, loadSessions]);
-
   const handleDeleteSession = async (sessionId: string) => {
-    if (!isGatewayReachable || !sandbox?.gatewayUrl) return;
     try {
-      await deleteGatewaySession(sandbox.gatewayUrl, sessionId);
-      setSessions((prev) => prev.filter((s) => s.session_id !== sessionId));
+      await removeChatSession({ sessionId: sessionId as Parameters<typeof removeChatSession>[0]["sessionId"] });
     } catch {
       // best effort
     }
   };
 
-  const resolveSessionSkillPath = (session: SessionCompact): string | null => {
-    const installed = sandbox?.installedSkills ?? []
-
-    // Match workspace dir name against installed skills' sanitized form
-    // Note: sanitizeSkillDir replaces / with --, which is lossy if a segment
-    // itself contains "--". In practice this collision is extremely rare since
-    // GitHub repos cannot contain "--" in their names.
-    if (session.workspace) {
-      const dirMatch = session.workspace.match(/skills\/(.+?)(?:\/|$)/)
-      if (dirMatch) {
-        const dirName = dirMatch[1]
-        const matches = installed.filter((sp) => sp.replace(/\//g, "--") === dirName)
-        if (matches.length === 1) return matches[0]
-        // Multiple collisions: prefer the one matching the session title
-        if (matches.length > 1) {
-          const titleMatch = matches.find((sp) => {
-            const name = sp.split("/").pop() || ""
-            return name && session.title?.toLowerCase().includes(name.toLowerCase())
-          })
-          return titleMatch ?? matches[0]
-        }
-      }
-    }
-
-    // Fallback: match installed skills against session title
-    for (const sp of installed) {
-      const name = sp.split("/").pop() || ""
-      if (name && session.title?.toLowerCase().includes(name.toLowerCase())) {
-        return sp
-      }
-    }
-    return sandbox?.currentSkillPath ?? null
-  };
-
-  const handleResumeSession = (session: SessionCompact) => {
-    const skillPath = resolveSessionSkillPath(session)
-    if (!skillPath) return
-    window.location.href = `/${skillPath}?session=${session.session_id}`
+  const handleResumeSession = (session: typeof sessions[0]) => {
+    window.location.href = `/${session.skillPath}?session=${session._id}`;
   };
 
   const handleDestroy = async () => {
@@ -347,39 +282,13 @@ export default function DashboardPage() {
           </div>
 
           {/* Chat Sessions */}
-          {isRealSandbox && (
+          {sessions.length > 0 && (
             <div className="border border-white/10 bg-black/40 backdrop-blur-sm p-6 mb-8">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-medium text-white/90">Chat Sessions</h2>
-                {sessions.length > 0 && (
-                  <button
-                    onClick={loadSessions}
-                    className="text-xs text-white/30 hover:text-white/60 transition-colors"
-                  >
-                    Refresh
-                  </button>
-                )}
               </div>
 
-              {!isGatewayReachable && sessions.length === 0 ? (
-                <div className="text-sm text-white/40">
-                  {isStopped
-                    ? "Sandbox is stopped. Resume a skill to view chat sessions."
-                    : "Gateway URL expired. Try a skill to refresh the connection."}
-                </div>
-              ) : sessionsLoading && sessions.length === 0 ? (
-                <div className="flex items-center gap-2 text-sm text-white/40">
-                  <div className="w-3 h-3 rounded-full border-2 border-white/20 border-t-white/50 animate-spin" />
-                  Loading sessions...
-                </div>
-              ) : sessionsError ? (
-                <div className="text-sm text-red-400/60">
-                  {sessionsError}
-                  <button onClick={loadSessions} className="ml-2 underline hover:text-red-400">
-                    Retry
-                  </button>
-                </div>
-              ) : sessions.length === 0 ? (
+              {sessions.length === 0 ? (
                 <div className="text-sm text-white/40">
                   No chat sessions yet. Start chatting with a skill to create one.
                 </div>
@@ -388,7 +297,7 @@ export default function DashboardPage() {
                   <div className="space-y-2">
                     {sessions.slice(0, visibleCount).map((session) => (
                       <div
-                        key={session.session_id}
+                        key={session._id}
                         className="flex items-center justify-between px-4 py-3 bg-white/5 border border-white/5 hover:border-white/10 transition-all"
                       >
                         <div className="flex items-center gap-3 min-w-0">
@@ -400,9 +309,9 @@ export default function DashboardPage() {
                             <div className="flex items-center gap-2 text-xs text-white/30">
                               <span className="font-mono">{session.model}</span>
                               <span>&middot;</span>
-                              <span>{session.message_count} messages</span>
+                              <span>{session.messageCount} messages</span>
                               <span>&middot;</span>
-                              <span>{formatTime(session.updated_at * 1000)}</span>
+                              <span>{formatTime(session.updatedAt)}</span>
                             </div>
                           </div>
                         </div>
@@ -414,7 +323,7 @@ export default function DashboardPage() {
                             Resume
                           </button>
                           <button
-                            onClick={() => handleDeleteSession(session.session_id)}
+                            onClick={() => handleDeleteSession(session._id)}
                             className="px-3 py-1.5 text-xs text-red-400/40 hover:text-red-400 border border-red-500/10 hover:border-red-500/30 rounded transition-all"
                           >
                             Delete

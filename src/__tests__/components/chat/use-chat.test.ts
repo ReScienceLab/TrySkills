@@ -3,8 +3,6 @@ import { renderHook } from "@testing-library/react"
 
 vi.mock("@/lib/sandbox/hermes-api", () => ({
   chatStream: vi.fn(),
-  createGatewaySession: vi.fn().mockResolvedValue("test-session-123"),
-  fetchSession: vi.fn().mockResolvedValue({ session_id: "test-session-123", messages: [], title: "Test", model: "claude-3", message_count: 0, created_at: 0, updated_at: 0, tool_calls: [] }),
   ProviderError: class ProviderError extends Error {
     code: string | number | undefined
     constructor(message: string, code?: string | number) {
@@ -17,6 +15,13 @@ vi.mock("@/lib/sandbox/hermes-api", () => ({
 
 vi.mock("@/lib/providers/check-credit", () => ({
   checkProviderCredit: vi.fn().mockResolvedValue({ ok: true }),
+}))
+
+const mockCreateSession = vi.fn().mockResolvedValue("test-session-id")
+const mockAppendMessages = vi.fn().mockResolvedValue(null)
+
+vi.mock("convex/react", () => ({
+  useMutation: () => mockCreateSession,
 }))
 
 import { useChat } from "@/components/chat/use-chat"
@@ -41,7 +46,6 @@ describe("useChat", () => {
         [{ role: "user", content: "I want to try the test-skill skill" }],
         expect.any(Object),
         "claude-3",
-        "test-session-123",
       )
     })
 
