@@ -77,8 +77,8 @@ describe("sandbox/daytona", () => {
 
     expect(session.sandboxId).toBe("sb-test-123");
     expect(session.state).toBe("running");
-    expect(session.webuiUrl).toContain("proxy.daytona.work");
-    expect(session.webuiBaseUrl).toContain("proxy.daytona.work");
+    expect(session.gatewayUrl).toContain("proxy.daytona.work");
+    expect(session.gatewayBaseUrl).toContain("proxy.daytona.work");
   });
 
   it("passes userId as label when provided", async () => {
@@ -201,9 +201,9 @@ describe("sandbox/daytona", () => {
     const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
     const gwCmd = allCmds.find((c: string) => c.includes("hermes") && c.includes("gateway"));
     expect(gwCmd).toBeDefined();
-    // No WebUI (server.py) should be started
-    const webuiCmd = allCmds.find((c: string) => c.includes("server.py"));
-    expect(webuiCmd).toBeUndefined();
+    // No WebUI (server.py) should be started -- only gateway
+    const serverCmd = allCmds.find((c: string) => c.includes("server.py"));
+    expect(serverCmd).toBeUndefined();
   });
 
   it("gets signed preview URL on gateway port 8642", async () => {
@@ -226,10 +226,10 @@ describe("sandbox/daytona", () => {
       () => {},
     );
 
-    expect(session.webuiBaseUrl).toBe(
+    expect(session.gatewayBaseUrl).toBe(
       "https://8642-signedtoken.proxy.daytona.work",
     );
-    expect(session.webuiUrl).toBe(
+    expect(session.gatewayUrl).toBe(
       "https://8642-signedtoken.proxy.daytona.work",
     );
   });
@@ -280,7 +280,7 @@ describe("sandbox/daytona", () => {
       const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
       // Should NOT clean old skills (additive install)
       expect(allCmds.every((c: string) => !c.includes("rm -rf"))).toBe(true);
-      // Should NOT restart WebUI or gateway
+      // Should NOT restart gateway (already running)
       expect(allCmds.every((c: string) => !c.includes("pkill"))).toBe(true);
       expect(allCmds.every((c: string) => !c.includes("hermes gateway"))).toBe(true);
     });

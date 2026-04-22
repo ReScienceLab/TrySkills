@@ -63,8 +63,6 @@ function buildEnvFile(providerEnvVar: string, apiKey: string): string {
   ].join("\n");
 }
 
-const BASE_ALLOWED_ORIGINS = "https://tryskills.sh,https://www.tryskills.sh";
-
 /**
  * Create a sandbox from the pre-baked "hermes-ready" snapshot.
  * This eliminates the ~2min install step — sandbox is ready in ~15s.
@@ -81,7 +79,6 @@ export async function createHermesSandbox(
   skillFiles: SkillFile[],
   onProgress: (step: SandboxState, meta?: { usedSnapshot?: boolean }) => void,
   userId?: string,
-  callerOrigin?: string,
 ): Promise<SandboxSession & { usedSnapshot: boolean }> {
   const t0 = Date.now();
   const log = (label: string) => console.log(`[daytona] createHermesSandbox ${label}: ${Date.now() - t0}ms`);
@@ -118,9 +115,6 @@ export async function createHermesSandbox(
           API_SERVER_ENABLED: "true",
           API_SERVER_CORS_ORIGINS: "*",
           GATEWAY_ALLOW_ALL_USERS: "true",
-          HERMES_WEBUI_ALLOWED_ORIGINS: callerOrigin
-            ? `${BASE_ALLOWED_ORIGINS},${callerOrigin}`
-            : BASE_ALLOWED_ORIGINS,
         },
       },
       { timeout: 120 },
@@ -147,9 +141,6 @@ export async function createHermesSandbox(
             API_SERVER_ENABLED: "true",
             API_SERVER_CORS_ORIGINS: "*",
             GATEWAY_ALLOW_ALL_USERS: "true",
-            HERMES_WEBUI_ALLOWED_ORIGINS: callerOrigin
-              ? `${BASE_ALLOWED_ORIGINS},${callerOrigin}`
-              : BASE_ALLOWED_ORIGINS,
           },
         },
         {
@@ -173,9 +164,6 @@ export async function createHermesSandbox(
             API_SERVER_ENABLED: "true",
             API_SERVER_CORS_ORIGINS: "*",
             GATEWAY_ALLOW_ALL_USERS: "true",
-            HERMES_WEBUI_ALLOWED_ORIGINS: callerOrigin
-              ? `${BASE_ALLOWED_ORIGINS},${callerOrigin}`
-              : BASE_ALLOWED_ORIGINS,
           },
         } as unknown as Parameters<typeof daytona.create>[0],
         { timeout: 300 },
@@ -243,12 +231,12 @@ export async function createHermesSandbox(
   const signedPreview = await sandbox.getSignedPreviewUrl(GATEWAY_PORT, SIGNED_URL_TTL_SECONDS);
   log("signed URL obtained");
   console.log("[daytona] createHermesSandbox signedPreview URL:", signedPreview.url);
-  const webuiUrl = signedPreview.url;
+  const gatewayUrl = signedPreview.url;
 
   return {
     sandboxId: sandbox.id,
-    webuiUrl,
-    webuiBaseUrl: webuiUrl,
+    gatewayUrl,
+    gatewayBaseUrl: gatewayUrl,
     state: "running",
     startedAt: Date.now(),
     cpu: sandbox.cpu,
@@ -273,8 +261,8 @@ export async function installSkill(
   onProgress: (step: SandboxState) => void,
   options?: {
     skipConfigWrite?: boolean;
-    existingWebuiUrl?: string;
-    webuiUrlCreatedAt?: number;
+    existingGatewayUrl?: string;
+    gatewayUrlCreatedAt?: number;
   },
 ): Promise<SandboxSession> {
   const t0 = Date.now();
@@ -357,23 +345,23 @@ export async function installSkill(
   log("health check passed");
 
   // Reuse existing signed URL if still fresh
-  const urlAge = options?.webuiUrlCreatedAt ? Date.now() - options.webuiUrlCreatedAt : Infinity;
-  let webuiUrl: string;
+  const urlAge = options?.gatewayUrlCreatedAt ? Date.now() - options.gatewayUrlCreatedAt : Infinity;
+  let gatewayUrl: string;
   let urlRefreshed = false;
-  if (options?.existingWebuiUrl && urlAge < SIGNED_URL_FRESH_MS) {
-    webuiUrl = options.existingWebuiUrl;
+  if (options?.existingGatewayUrl && urlAge < SIGNED_URL_FRESH_MS) {
+    gatewayUrl = options.existingGatewayUrl;
     log("reused existing signed URL");
   } else {
     const signedPreview = await sandbox.getSignedPreviewUrl(GATEWAY_PORT, SIGNED_URL_TTL_SECONDS);
-    webuiUrl = signedPreview.url;
+    gatewayUrl = signedPreview.url;
     urlRefreshed = true;
     log("new signed URL obtained");
   }
 
   return {
     sandboxId: sandbox.id,
-    webuiUrl,
-    webuiBaseUrl: webuiUrl,
+    gatewayUrl,
+    gatewayBaseUrl: gatewayUrl,
     urlRefreshed,
     state: "running",
     startedAt: Date.now(),

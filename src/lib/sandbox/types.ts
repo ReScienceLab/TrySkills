@@ -20,8 +20,8 @@ export interface SandboxConfig {
 
 export interface SandboxSession {
   sandboxId: string;
-  webuiUrl: string;
-  webuiBaseUrl: string;
+  gatewayUrl: string;
+  gatewayBaseUrl: string;
   state: SandboxState;
   startedAt: number;
   urlRefreshed?: boolean;

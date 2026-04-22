@@ -38,13 +38,13 @@ describe("sandbox/types", () => {
   it("SandboxSession is structurally valid", () => {
     const session: SandboxSession = {
       sandboxId: "sb-123",
-      webuiUrl: "https://preview.daytona.io/sb-123?prompt=test",
-      webuiBaseUrl: "https://preview.daytona.io/sb-123",
+      gatewayUrl: "https://preview.daytona.io/sb-123?prompt=test",
+      gatewayBaseUrl: "https://preview.daytona.io/sb-123",
       state: "running",
       startedAt: Date.now(),
     };
     expect(session.sandboxId).toBeTruthy();
-    expect(session.webuiUrl).toMatch(/^https:\/\//);
+    expect(session.gatewayUrl).toMatch(/^https:\/\//);
     expect(session.state).toBe("running");
     expect(session.startedAt).toBeGreaterThan(0);
   });

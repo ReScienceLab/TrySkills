@@ -91,8 +91,8 @@ export default function SkillPage({
       const isStopped = sandbox.poolState === "stopped";
       const skillInstalled = sandbox.installedSkills?.includes(skillPathStr) ?? false;
       const sameConfig = sandbox.configHash === configHash;
-      const urlFresh = sandbox.webuiUrlCreatedAt
-        ? Date.now() - sandbox.webuiUrlCreatedAt < 50 * 60 * 1000
+      const urlFresh = sandbox.gatewayUrlCreatedAt
+        ? Date.now() - sandbox.gatewayUrlCreatedAt < 50 * 60 * 1000
         : false;
       const heartbeatRecent = sandbox.lastHeartbeat
         ? Date.now() - sandbox.lastHeartbeat < 30 * 60 * 1000
@@ -102,8 +102,8 @@ export default function SkillPage({
       if (skillInstalled && sameConfig && !isStopped && urlFresh && heartbeatRecent) {
         const sess = {
           sandboxId: sandbox.sandboxId,
-          webuiUrl: sandbox.webuiUrl,
-          webuiBaseUrl: sandbox.webuiUrl,
+          gatewayUrl: sandbox.gatewayUrl,
+          gatewayBaseUrl: sandbox.gatewayUrl,
           state: "running" as const,
           startedAt: Date.now(),
         };
@@ -146,8 +146,8 @@ export default function SkillPage({
           },
           {
             skipConfigWrite: sameConfig,
-            existingWebuiUrl: sandbox.webuiUrl,
-            webuiUrlCreatedAt: sandbox.webuiUrlCreatedAt ?? undefined,
+            existingGatewayUrl: sandbox.gatewayUrl,
+            gatewayUrlCreatedAt: sandbox.gatewayUrlCreatedAt ?? undefined,
           },
         );
 
@@ -162,9 +162,9 @@ export default function SkillPage({
           sandboxId: sandbox.sandboxId,
           poolState: "active",
           currentSkillPath: skillPathStr,
-          webuiUrl: result.webuiUrl,
+          gatewayUrl: result.gatewayUrl,
           configHash: sameConfig ? undefined : configHash,
-          webuiUrlCreatedAt: result.urlRefreshed ? Date.now() : undefined,
+          gatewayUrlCreatedAt: result.urlRefreshed ? Date.now() : undefined,
         }).catch(() => {});
         addInstalledSkillMut({ sandboxId: sandbox.sandboxId, skillPath: skillPathStr }).catch(() => {});
         recordTrial({ sandboxId: sandbox.sandboxId, skillPath: skillPathStr, skillName }).catch(() => {});
@@ -261,13 +261,13 @@ export default function SkillPage({
         await createSandboxRecord({
           sandboxId: result.sandboxId,
           skillPath: skillPathStr,
-          webuiUrl: result.webuiUrl,
+          gatewayUrl: result.gatewayUrl,
           state: "running",
           poolState: "active",
           currentSkillPath: skillPathStr,
           configHash,
           installedSkills: [skillPathStr],
-          webuiUrlCreatedAt: Date.now(),
+          gatewayUrlCreatedAt: Date.now(),
           cpu: result.cpu,
           memory: result.memory,
           disk: result.disk,
@@ -485,7 +485,7 @@ export default function SkillPage({
 
           {phase === "running" && session && (
             <ChatPanel
-              gatewayBaseUrl={session.webuiBaseUrl || session.webuiUrl}
+              gatewayBaseUrl={session.gatewayBaseUrl || session.gatewayUrl}
               model={savedConfig?.model || "anthropic/claude-sonnet-4"}
               skillName={skillName}
               startedAt={session.startedAt}

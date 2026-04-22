@@ -13,7 +13,7 @@ export default defineSchema({
     tokenIdentifier: v.string(),
     sandboxId: v.string(),
     skillPath: v.string(),
-    webuiUrl: v.string(),
+    gatewayUrl: v.string(),
     state: v.string(),
     poolState: v.optional(v.union(
       v.literal("active"),
@@ -23,7 +23,7 @@ export default defineSchema({
     currentSkillPath: v.optional(v.string()),
     configHash: v.optional(v.string()),
     installedSkills: v.optional(v.array(v.string())),
-    webuiUrlCreatedAt: v.optional(v.number()),
+    gatewayUrlCreatedAt: v.optional(v.number()),
     cpu: v.optional(v.number()),
     memory: v.optional(v.number()),
     disk: v.optional(v.number()),
