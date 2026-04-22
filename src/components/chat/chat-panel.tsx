@@ -3,11 +3,12 @@
 import { useState, useRef, useEffect } from "react"
 import { Streamdown } from "streamdown"
 import { code } from "@streamdown/code"
+import { mermaid } from "@streamdown/mermaid"
 import "streamdown/styles.css"
 import { useChat, type ToolCall, type ChatError } from "./use-chat"
 import type { ChatMessage } from "@/lib/sandbox/hermes-api"
 
-const streamdownPlugins = { code }
+const streamdownPlugins = { code, mermaid }
 
 function ToolCard({ tool }: { tool: ToolCall }) {
   return (
