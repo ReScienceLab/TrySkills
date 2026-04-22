@@ -108,14 +108,24 @@ export default function DashboardPage() {
   const resolveSessionSkillPath = (session: SessionCompact): string | null => {
     const installed = sandbox?.installedSkills ?? []
 
-    // Match workspace dir name against installed skills' sanitized form (owner--repo--skill)
+    // Match workspace dir name against installed skills' sanitized form
+    // Note: sanitizeSkillDir replaces / with --, which is lossy if a segment
+    // itself contains "--". In practice this collision is extremely rare since
+    // GitHub repos cannot contain "--" in their names.
     if (session.workspace) {
       const dirMatch = session.workspace.match(/skills\/(.+?)(?:\/|$)/)
       if (dirMatch) {
         const dirName = dirMatch[1]
-        // Find installed skill whose sanitized form matches the dir name exactly
-        const matched = installed.find((sp) => sp.replace(/\//g, "--") === dirName)
-        if (matched) return matched
+        const matches = installed.filter((sp) => sp.replace(/\//g, "--") === dirName)
+        if (matches.length === 1) return matches[0]
+        // Multiple collisions: prefer the one matching the session title
+        if (matches.length > 1) {
+          const titleMatch = matches.find((sp) => {
+            const name = sp.split("/").pop() || ""
+            return name && session.title?.toLowerCase().includes(name.toLowerCase())
+          })
+          return titleMatch ?? matches[0]
+        }
       }
     }
 
