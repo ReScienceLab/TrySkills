@@ -170,6 +170,7 @@ export function useChat(
   const currentContentRef = useRef("")
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const preflightDoneRef = useRef(false)
+  const preflightFailedRef = useRef(false)
 
   const handleError = useCallback(
     (err: Error) => {
@@ -272,6 +273,7 @@ export function useChat(
     checkProviderCredit(providerId, apiKey)
       .then((result) => {
         if (!result.ok) {
+          preflightFailedRef.current = true
           setError({
             type: (result.errorType as ErrorType) || "credit_error",
             message: result.error,
@@ -295,7 +297,7 @@ export function useChat(
     let pollTimer: ReturnType<typeof setInterval>
 
     function startInit() {
-      if (initRef.current || !gatewayBaseUrl) return
+      if (initRef.current || !gatewayBaseUrl || preflightFailedRef.current) return
       initRef.current = true
 
       const MAX_RETRIES = 3
@@ -372,5 +374,7 @@ export function useChat(
     }
   }, [gatewayBaseUrl, model, skillName]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, send, cancel }
+  const isProviderError = error?.type === "credit_error" || error?.type === "auth_error" || error?.type === "rate_limit"
+
+  return { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, send, cancel }
 }

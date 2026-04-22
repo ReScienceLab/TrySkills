@@ -45,10 +45,12 @@ const ERROR_COLORS: Record<string, { bg: string; border: string; text: string }>
 function ErrorCard({
   error,
   sessionFailed,
+  isProviderError,
   onSessionError,
 }: {
   error: ChatError
   sessionFailed: boolean
+  isProviderError?: boolean
   onSessionError?: () => void
 }) {
   const colors = ERROR_COLORS[error.type] || ERROR_COLORS.provider_error
@@ -71,7 +73,7 @@ function ErrorCard({
                 {error.action.label} &rarr;
               </a>
             )}
-            {sessionFailed && onSessionError && (
+            {sessionFailed && !isProviderError && onSessionError && (
               <button
                 onClick={onSessionError}
                 className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded text-xs transition-all"
@@ -150,7 +152,7 @@ export function ChatPanel({
   onTryAnother?: () => void
   onSessionError?: () => void
 }) {
-  const { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, send, cancel } = useChat(
+  const { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, send, cancel } = useChat(
     gatewayBaseUrl,
     model,
     skillName,
@@ -243,6 +245,7 @@ export function ChatPanel({
           <ErrorCard
             error={error}
             sessionFailed={sessionFailed}
+            isProviderError={isProviderError}
             onSessionError={onSessionError}
           />
         )}
