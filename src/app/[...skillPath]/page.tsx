@@ -486,8 +486,7 @@ export default function SkillPage({
 
           {phase === "running" && session && (
             <ChatPanel
-              webuiBaseUrl={session.webuiBaseUrl || session.webuiUrl}
-              webuiUrl={session.webuiUrl}
+              gatewayBaseUrl={session.webuiBaseUrl || session.webuiUrl}
               model={savedConfig?.model || "anthropic/claude-sonnet-4"}
               skillName={skillName}
               startedAt={session.startedAt}

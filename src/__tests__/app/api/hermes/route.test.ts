@@ -14,11 +14,11 @@ describe("hermes proxy host validation", () => {
 
   it("allows valid Daytona signed preview URLs", () => {
     expect(isAllowedHost("https://8787-abc123def456.daytonaproxy01.net")).toBe(true);
-    expect(isAllowedHost("https://8787-gk1dusgvfsqnktjr.daytonaproxy01.net")).toBe(true);
+    expect(isAllowedHost("https://8642-gk1dusgvfsqnktjr.daytonaproxy01.net")).toBe(true);
     expect(isAllowedHost("https://3000-xyz789.daytonaproxy.net")).toBe(true);
-    expect(isAllowedHost("https://8787-abc123.daytonaproxy02.net")).toBe(true);
-    expect(isAllowedHost("https://8787-signedtoken.proxy.daytona.work")).toBe(true);
-    expect(isAllowedHost("https://8787-abc123.proxy.daytona.io")).toBe(true);
+    expect(isAllowedHost("https://8642-abc123.daytonaproxy02.net")).toBe(true);
+    expect(isAllowedHost("https://8642-signedtoken.proxy.daytona.work")).toBe(true);
+    expect(isAllowedHost("https://8642-abc123.proxy.daytona.io")).toBe(true);
   });
 
   it("blocks arbitrary external URLs", () => {

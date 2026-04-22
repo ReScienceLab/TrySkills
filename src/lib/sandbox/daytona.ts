@@ -3,12 +3,11 @@ import type { SandboxConfig, SandboxSession, SandboxState } from "./types";
 const SNAPSHOT_NAME = process.env.NEXT_PUBLIC_HERMES_SNAPSHOT || "hermes-ready";
 const HERMES_IMAGE = process.env.NEXT_PUBLIC_HERMES_IMAGE || "ghcr.io/resciencelab/hermes-ready:latest";
 const AUTO_STOP_MINUTES = 30;
-const AUTO_ARCHIVE_MINUTES = 60 * 24 * 2; // 2 days
-const AUTO_DELETE_MINUTES = 60 * 24 * 7; // 7 days
+const AUTO_ARCHIVE_MINUTES = 60 * 24 * 2;
+const AUTO_DELETE_MINUTES = 60 * 24 * 7;
 const HEALTH_TIMEOUT_MS = 120_000;
 const HEALTH_POLL_INTERVAL_MS = 500;
 const GATEWAY_PORT = 8642;
-const WEBUI_PORT = 8787;
 const SIGNED_URL_TTL_SECONDS = 3600;
 const SIGNED_URL_FRESH_MS = 50 * 60 * 1000;
 const COLD_RESOURCES = { cpu: 2, memory: 4, disk: 10 };
@@ -56,17 +55,6 @@ function buildEnvFile(providerEnvVar: string, apiKey: string): string {
     "API_SERVER_ENABLED=true",
     "API_SERVER_CORS_ORIGINS=*",
     "GATEWAY_ALLOW_ALL_USERS=true",
-    "",
-  ].join("\n");
-}
-
-function buildWebuiEnv(agentDir: string): string {
-  return [
-    `HERMES_WEBUI_AGENT_DIR=${agentDir}`,
-    `HERMES_WEBUI_PYTHON=${agentDir}/venv/bin/python3`,
-    "HERMES_WEBUI_HOST=0.0.0.0",
-    `HERMES_WEBUI_PORT=${WEBUI_PORT}`,
-    "HERMES_HOME=/home/daytona/.hermes",
     "",
   ].join("\n");
 }
@@ -219,16 +207,6 @@ export async function createHermesSandbox(
   ).catch(() => {});
 
   const agentDir = usedSnapshot ? "/opt/hermes-agent" : "/home/daytona/.hermes/hermes-agent";
-  const webuiDir = usedSnapshot ? "/opt/hermes-webui" : "/home/daytona/hermes-webui";
-  if (!usedSnapshot) {
-    await sandbox.process.executeCommand(
-      "git clone --depth 1 https://github.com/nesquena/hermes-webui.git /home/daytona/hermes-webui 2>&1",
-    ).catch(() => {});
-  }
-  await sandbox.process.executeCommand(
-    `cat > ${webuiDir}/.env << 'WEOF'\n${buildWebuiEnv(agentDir)}\nWEOF`,
-  ).catch(() => {});
-  log("config written");
 
   if (!usedSnapshot) {
     await sandbox.process.executeCommand(
@@ -247,31 +225,18 @@ export async function createHermesSandbox(
   }
 
   onProgress("starting");
-  log("skill files uploaded, starting gateway + webui");
+  log("skill files uploaded, starting gateway");
 
   const hermesCmd = `${agentDir}/venv/bin/hermes`;
-  const pythonCmd = `${agentDir}/venv/bin/python3`;
 
   await sandbox.process.executeCommand(
     `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
   ).catch(() => {});
 
-  await sandbox.process.executeCommand(
-    [
-      `cd ${webuiDir}`,
-      `export HERMES_WEBUI_AGENT_DIR=${agentDir}`,
-      `export HERMES_WEBUI_PYTHON=${pythonCmd}`,
-      "export HERMES_WEBUI_HOST=0.0.0.0",
-      `export HERMES_WEBUI_PORT=${WEBUI_PORT}`,
-      "export HERMES_HOME=/home/daytona/.hermes",
-      `nohup ${pythonCmd} server.py > /tmp/hermes-webui.log 2>&1 &`,
-    ].join(" && "),
-  ).catch(() => {});
-
   await waitForHealth(sandbox);
   log("health check passed");
 
-  const signedPreview = await sandbox.getSignedPreviewUrl(WEBUI_PORT, SIGNED_URL_TTL_SECONDS);
+  const signedPreview = await sandbox.getSignedPreviewUrl(GATEWAY_PORT, SIGNED_URL_TTL_SECONDS);
   log("signed URL obtained");
   console.log("[daytona] createHermesSandbox signedPreview URL:", signedPreview.url);
   const webuiUrl = signedPreview.url;
@@ -333,27 +298,14 @@ export async function installSkill(
       log("sandbox started from stopped");
 
       const agentDir = "/opt/hermes-agent";
-      const webuiDir = "/opt/hermes-webui";
       const hermesCmd = `${agentDir}/venv/bin/hermes`;
-      const pythonCmd = `${agentDir}/venv/bin/python3`;
 
       await Promise.all([
         sandbox.process.executeCommand(
           `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
         ).catch(() => {}),
-        sandbox.process.executeCommand(
-          [
-            `cd ${webuiDir}`,
-            `export HERMES_WEBUI_AGENT_DIR=${agentDir}`,
-            `export HERMES_WEBUI_PYTHON=${pythonCmd}`,
-            "export HERMES_WEBUI_HOST=0.0.0.0",
-            `export HERMES_WEBUI_PORT=${WEBUI_PORT}`,
-            "export HERMES_HOME=/home/daytona/.hermes",
-            `nohup ${pythonCmd} server.py > /tmp/hermes-webui.log 2>&1 &`,
-          ].join(" && "),
-        ).catch(() => {}),
       ]);
-      log("gateway + webui restarted");
+      log("gateway restarted");
     } else {
       throw new Error(`Sandbox in unexpected state: ${sandbox.state}`);
     }
@@ -416,7 +368,7 @@ export async function installSkill(
     webuiUrl = options.existingWebuiUrl;
     log("reused existing signed URL");
   } else {
-    const signedPreview = await sandbox.getSignedPreviewUrl(WEBUI_PORT, SIGNED_URL_TTL_SECONDS);
+    const signedPreview = await sandbox.getSignedPreviewUrl(GATEWAY_PORT, SIGNED_URL_TTL_SECONDS);
     webuiUrl = signedPreview.url;
     urlRefreshed = true;
     log("new signed URL obtained");
@@ -464,20 +416,11 @@ export async function findReusableSandbox(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function waitForHealth(sandbox: any): Promise<void> {
   const start = Date.now();
-  const gatewayCmd = `curl -sf http://localhost:${GATEWAY_PORT}/health 2>/dev/null`;
-  let gatewayReady = false;
+  const healthCmd = `curl -sf http://localhost:${GATEWAY_PORT}/health 2>/dev/null`;
   while (Date.now() - start < HEALTH_TIMEOUT_MS) {
     try {
-      if (!gatewayReady) {
-        const r = await sandbox.process.executeCommand(gatewayCmd);
-        if (r.exitCode === 0) gatewayReady = true;
-      }
-      if (gatewayReady) {
-        const r2 = await sandbox.process.executeCommand(
-          `curl -sf -o /dev/null http://localhost:${WEBUI_PORT}/ 2>/dev/null`,
-        );
-        if (r2.exitCode === 0) return;
-      }
+      const result = await sandbox.process.executeCommand(healthCmd);
+      if (result.exitCode === 0) return;
     } catch {
       // not ready yet
     }

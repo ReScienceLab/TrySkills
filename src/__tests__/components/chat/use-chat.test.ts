@@ -1,140 +1,101 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHook, act } from "@testing-library/react";
+import { renderHook } from "@testing-library/react";
 
 vi.mock("@/lib/sandbox/hermes-api", () => ({
-  createSession: vi.fn(),
-  sendMessage: vi.fn(),
-  streamResponse: vi.fn(),
-  cancelStream: vi.fn(),
+  chatStream: vi.fn(),
 }));
 
 import { useChat } from "@/components/chat/use-chat";
-import { createSession, sendMessage, streamResponse } from "@/lib/sandbox/hermes-api";
-import type { SSEEvent } from "@/lib/sandbox/hermes-api";
+import { chatStream } from "@/lib/sandbox/hermes-api";
 
-const mockCreateSession = vi.mocked(createSession);
-const mockSendMessage = vi.mocked(sendMessage);
-const mockStreamResponse = vi.mocked(streamResponse);
+const mockChatStream = vi.mocked(chatStream);
 
 describe("useChat", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockCreateSession.mockResolvedValue("session-123");
-    mockSendMessage.mockResolvedValue("stream-abc");
-    mockStreamResponse.mockReturnValue(() => {});
+    mockChatStream.mockReturnValue(() => {});
   });
 
-  it("auto-initializes session and sends first message", async () => {
+  it("auto-initializes with first message", async () => {
     const { result } = renderHook(() =>
-      useChat("https://8787-abc.daytonaproxy01.net", "claude-3", "test-skill"),
+      useChat("https://8642-abc.daytonaproxy01.net", "claude-3", "test-skill"),
     );
 
     await vi.waitFor(() => {
-      expect(mockCreateSession).toHaveBeenCalledWith(
-        "https://8787-abc.daytonaproxy01.net",
+      expect(mockChatStream).toHaveBeenCalledWith(
+        "https://8642-abc.daytonaproxy01.net",
+        [{ role: "user", content: "I want to try the test-skill skill" }],
+        expect.any(Object),
         "claude-3",
       );
     });
 
-    await vi.waitFor(() => {
-      expect(result.current.sessionId).toBe("session-123");
-    });
+    expect(result.current.isStreaming).toBe(true);
   });
 
-  it("does not init when webuiBaseUrl is null", () => {
+  it("does not init when gatewayBaseUrl is null", () => {
     renderHook(() => useChat(null, "claude-3", "test-skill"));
-    expect(mockCreateSession).not.toHaveBeenCalled();
+    expect(mockChatStream).not.toHaveBeenCalled();
   });
 
-  it("handles SSE token events", async () => {
-    let onEvent: ((event: SSEEvent) => void) | null = null;
-    let onEnd: (() => void) | null = null;
-
-    mockStreamResponse.mockImplementation((_url, _sid, _onEvent, _onError, _onEnd) => {
-      onEvent = _onEvent;
-      onEnd = _onEnd;
+  it("handles streaming delta", async () => {
+    mockChatStream.mockImplementation((_url, _msgs, callbacks) => {
+      setTimeout(() => {
+        callbacks.onDelta("Hello ");
+        callbacks.onDelta("world");
+        callbacks.onDone();
+      }, 10);
       return () => {};
     });
 
     const { result } = renderHook(() =>
-      useChat("https://8787-abc.daytonaproxy01.net", "claude-3", "test-skill"),
+      useChat("https://8642-abc.daytonaproxy01.net", "claude-3", "test-skill"),
     );
 
-    await vi.waitFor(() => expect(onEvent).not.toBeNull());
-
-    act(() => {
-      onEvent!({ type: "token", data: { text: "Hello " } });
-      onEvent!({ type: "token", data: { text: "world" } });
+    await vi.waitFor(() => {
+      expect(result.current.isStreaming).toBe(false);
     });
 
     expect(result.current.messages.some((m) => m.content.includes("Hello world"))).toBe(true);
-
-    act(() => {
-      onEvent!({ type: "done", data: {} });
-      onEnd!();
-    });
-
-    expect(result.current.isStreaming).toBe(false);
   });
 
-  it("handles SSE approval events with correct sessionId via ref", async () => {
-    let onEvent: ((event: SSEEvent) => void) | null = null;
-
-    mockStreamResponse.mockImplementation((_url, _sid, _onEvent, _onError, _onEnd) => {
-      onEvent = _onEvent;
-      return () => {};
-    });
-
-    const { result } = renderHook(() =>
-      useChat("https://8787-abc.daytonaproxy01.net", "claude-3", "test-skill"),
-    );
-
-    await vi.waitFor(() => expect(onEvent).not.toBeNull());
-
-    act(() => {
-      onEvent!({ type: "approval", data: { command: "rm -rf /", description: "dangerous" } });
-    });
-
-    expect(result.current.approval).not.toBeNull();
-    expect(result.current.approval?.sessionId).toBe("session-123");
-    expect(result.current.approval?.command).toBe("rm -rf /");
-  });
-
-  it("handles SSE error events", async () => {
-    let onEvent: ((event: SSEEvent) => void) | null = null;
-
-    mockStreamResponse.mockImplementation((_url, _sid, _onEvent, _onError, _onEnd) => {
-      onEvent = _onEvent;
-      return () => {};
-    });
-
-    const { result } = renderHook(() =>
-      useChat("https://8787-abc.daytonaproxy01.net", "claude-3", "test-skill"),
-    );
-
-    await vi.waitFor(() => expect(onEvent).not.toBeNull());
-
-    act(() => {
-      onEvent!({ type: "error", data: { message: "Something went wrong" } });
-    });
-
-    expect(result.current.error).toBe("Something went wrong");
-  });
-
-  it("handles createSession failure after retries", async () => {
+  it("handles error with retry and sessionFailed", async () => {
     vi.useFakeTimers();
-    mockCreateSession.mockRejectedValue(new Error("Connection refused"));
+    mockChatStream.mockImplementation((_url, _msgs, callbacks) => {
+      setTimeout(() => callbacks.onError(new Error("Connection refused")), 5);
+      return () => {};
+    });
 
     const { result } = renderHook(() =>
-      useChat("https://8787-abc.daytonaproxy01.net", "claude-3", "test-skill"),
+      useChat("https://8642-abc.daytonaproxy01.net", "claude-3", "test-skill"),
     );
 
-    // Advance through all retry delays (2s + 4s + 8s)
     for (let i = 0; i < 4; i++) {
       await vi.advanceTimersByTimeAsync(10000);
     }
 
     expect(result.current.error).toBe("Connection refused");
+    expect(result.current.sessionFailed).toBe(true);
     vi.useRealTimers();
+  });
+
+  it("handles tool progress events", async () => {
+    mockChatStream.mockImplementation((_url, _msgs, callbacks) => {
+      setTimeout(() => {
+        callbacks.onToolProgress({ tool: "skill_view", emoji: "📋", label: "skill_view" });
+        callbacks.onDone();
+      }, 10);
+      return () => {};
+    });
+
+    const { result } = renderHook(() =>
+      useChat("https://8642-abc.daytonaproxy01.net", "claude-3", "test-skill"),
+    );
+
+    await vi.waitFor(() => {
+      expect(result.current.toolCalls.length).toBeGreaterThan(0);
+    });
+
+    expect(result.current.toolCalls[0].name).toBe("skill_view");
   });
 });

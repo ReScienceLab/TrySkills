@@ -45,10 +45,10 @@ describe("sandbox/daytona", () => {
     mockCreate.mockResolvedValue(mockSandbox);
     mockExecuteCommand.mockResolvedValue({ exitCode: 0 });
     mockGetSignedPreviewUrl.mockResolvedValue({
-      url: "https://8787-signedtoken.proxy.daytona.work",
+      url: "https://8642-signedtoken.proxy.daytona.work",
       token: "signedtoken",
       sandboxId: "sb-test-123",
-      port: 8787,
+      port: 8642,
     });
   });
 
@@ -195,28 +195,28 @@ describe("sandbox/daytona", () => {
     }
   });
 
-  it("starts gateway and webui from /opt on snapshot path", async () => {
+  it("starts gateway from /opt on snapshot path", async () => {
     await createHermesSandbox(testConfig, "test", testSkillFiles, () => {});
 
     const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
     const gwCmd = allCmds.find((c: string) => c.includes("hermes") && c.includes("gateway"));
-    const webuiCmd = allCmds.find((c: string) => c.includes("server.py"));
     expect(gwCmd).toBeDefined();
-    expect(webuiCmd).toBeDefined();
-    expect(webuiCmd).toContain("8787");
+    // No WebUI (server.py) should be started
+    const webuiCmd = allCmds.find((c: string) => c.includes("server.py"));
+    expect(webuiCmd).toBeUndefined();
   });
 
-  it("gets signed preview URL on webui port 8787", async () => {
+  it("gets signed preview URL on gateway port 8642", async () => {
     await createHermesSandbox(testConfig, "test", testSkillFiles, () => {});
-    expect(mockGetSignedPreviewUrl).toHaveBeenCalledWith(8787, 3600);
+    expect(mockGetSignedPreviewUrl).toHaveBeenCalledWith(8642, 3600);
   });
 
   it("uses signed preview URL directly (no token query param)", async () => {
     mockGetSignedPreviewUrl.mockResolvedValue({
-      url: "https://8787-signedtoken.proxy.daytona.work",
+      url: "https://8642-signedtoken.proxy.daytona.work",
       token: "signedtoken",
       sandboxId: "sb-123",
-      port: 8787,
+      port: 8642,
     });
 
     const session = await createHermesSandbox(
@@ -227,10 +227,10 @@ describe("sandbox/daytona", () => {
     );
 
     expect(session.webuiBaseUrl).toBe(
-      "https://8787-signedtoken.proxy.daytona.work",
+      "https://8642-signedtoken.proxy.daytona.work",
     );
     expect(session.webuiUrl).toBe(
-      "https://8787-signedtoken.proxy.daytona.work",
+      "https://8642-signedtoken.proxy.daytona.work",
     );
   });
 

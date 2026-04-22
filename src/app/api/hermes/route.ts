@@ -14,8 +14,8 @@ function isAllowedHost(url: string): boolean {
 }
 
 /**
- * GET /api/hermes?baseUrl=...&path=...&stream_id=...
- * Proxy GET requests (e.g. cancel stream) to Hermes WebUI API.
+ * GET /api/hermes?baseUrl=...&path=...
+ * Proxy GET requests to Hermes Gateway API.
  */
 export async function GET(request: NextRequest) {
   const { userId } = await auth();
@@ -37,7 +37,6 @@ export async function GET(request: NextRequest) {
   try {
     const url = new URL(baseUrl);
     url.pathname = path;
-    // Forward remaining query params (e.g. stream_id)
     for (const [key, value] of request.nextUrl.searchParams.entries()) {
       if (key !== "baseUrl" && key !== "path") {
         url.searchParams.set(key, value);
@@ -64,10 +63,10 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * POST /api/hermes — Proxy JSON requests to Hermes WebUI API.
- * Runs server-side to bypass Daytona's browser preview warning page.
+ * POST /api/hermes — Proxy requests to Hermes Gateway API.
+ * Supports both JSON responses and streaming (SSE) passthrough.
  *
- * Body: { baseUrl: string, path: string, body?: object }
+ * Body: { baseUrl: string, path: string, stream?: boolean, body?: object }
  */
 export async function POST(request: NextRequest) {
   const { userId } = await auth();
@@ -75,14 +74,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  let payload: { baseUrl?: string; path?: string; body?: Record<string, unknown> };
+  let payload: { baseUrl?: string; path?: string; stream?: boolean; body?: Record<string, unknown> };
   try {
     payload = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { baseUrl, path, body } = payload;
+  const { baseUrl, path, stream, body } = payload;
   if (!baseUrl || !path) {
     return NextResponse.json({ error: "Missing baseUrl or path" }, { status: 400 });
   }
@@ -103,6 +102,17 @@ export async function POST(request: NextRequest) {
       },
       body: body ? JSON.stringify(body) : undefined,
     });
+
+    // Streaming passthrough for SSE responses
+    if (stream && res.body) {
+      return new Response(res.body, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      });
+    }
 
     const ct = res.headers.get("content-type") || "";
     if (!ct.includes("json")) {
