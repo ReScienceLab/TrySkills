@@ -226,7 +226,7 @@ export function ChatPanel({
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-80px)] w-full">
+    <div className="flex flex-col h-[calc(100vh-56px)] w-full">
       {/* TopBar */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 shrink-0" aria-label={`Skill ${skillName} active for ${formatTime(elapsed)}`}>
         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" aria-hidden="true" />

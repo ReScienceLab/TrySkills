@@ -20,7 +20,7 @@ export function FileViewer({
 }) {
   if (!filePath) {
     return (
-      <div className="flex-1 flex items-center justify-center text-xs text-white/20">
+      <div className="flex-1 flex items-center justify-center text-[11px] text-white/15">
         Select a file to preview
       </div>
     )
@@ -30,11 +30,11 @@ export function FileViewer({
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-white/10 shrink-0">
-        <span className="text-xs text-white/60 truncate flex-1 font-mono">{fileName}</span>
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/[0.06] shrink-0 bg-white/[0.02]">
+        <span className="text-[12px] text-white/50 truncate flex-1 font-mono">{fileName}</span>
         <button
           onClick={onClose}
-          className="text-white/30 hover:text-white/60 text-xs transition-colors"
+          className="text-white/20 hover:text-white/50 text-xs transition-colors p-0.5"
         >
           {"\u2715"}
         </button>
@@ -42,17 +42,17 @@ export function FileViewer({
 
       <div className="flex-1 overflow-auto min-h-0">
         {loading && (
-          <div className="flex items-center justify-center py-8">
-            <div className="w-5 h-5 rounded-full border-2 border-white/10 border-t-white/40 animate-spin" />
+          <div className="flex items-center justify-center py-12">
+            <div className="w-5 h-5 rounded-full border-2 border-white/10 border-t-white/30 animate-spin" />
           </div>
         )}
 
         {error && (
-          <div className="px-3 py-4 text-xs text-red-400/80">{error}</div>
+          <div className="px-4 py-6 text-[12px] text-red-400/60">{error}</div>
         )}
 
         {!loading && !error && content && content.type === "image" && (
-          <div className="p-3">
+          <div className="p-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={content.content}
@@ -63,7 +63,7 @@ export function FileViewer({
         )}
 
         {!loading && !error && content && content.type === "text" && isMarkdownFile(fileName) && (
-          <div className="px-3 py-2 prose prose-invert prose-sm max-w-none text-white/80 [&_pre]:bg-white/5 [&_pre]:border [&_pre]:border-white/10 [&_pre]:rounded [&_code]:text-emerald-400/80 text-xs">
+          <div className="px-4 py-3 prose prose-invert prose-sm max-w-none text-white/70 [&_pre]:bg-white/[0.03] [&_pre]:border [&_pre]:border-white/[0.06] [&_pre]:rounded [&_code]:text-emerald-400/70 text-[12px] leading-relaxed">
             <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
               {content.content}
             </ReactMarkdown>
@@ -71,7 +71,7 @@ export function FileViewer({
         )}
 
         {!loading && !error && content && content.type === "text" && !isMarkdownFile(fileName) && (
-          <pre className="px-3 py-2 text-[11px] leading-relaxed text-white/70 font-mono whitespace-pre-wrap break-all">
+          <pre className="px-4 py-3 text-[11px] leading-[1.7] text-white/50 font-mono whitespace-pre-wrap break-all selection:bg-white/10">
             {content.content}
           </pre>
         )}
