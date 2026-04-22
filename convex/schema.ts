@@ -54,4 +54,17 @@ export default defineSchema({
     skillName: v.string(),
     startedAt: v.number(),
   }).index("by_token", ["tokenIdentifier"]),
+
+  chatErrors: defineTable({
+    tokenIdentifier: v.string(),
+    sandboxId: v.string(),
+    skillPath: v.string(),
+    errorType: v.string(),
+    errorMessage: v.string(),
+    providerName: v.string(),
+    model: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_token", ["tokenIdentifier"])
+    .index("by_sandbox", ["sandboxId"]),
 });
