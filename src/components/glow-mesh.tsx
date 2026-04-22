@@ -69,7 +69,7 @@ export function GlowMesh() {
     );
     observer.observe(canvas);
     const handleVisibility = () => {
-      if (document.hidden) visibleRef.current = false;
+      visibleRef.current = !document.hidden;
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {

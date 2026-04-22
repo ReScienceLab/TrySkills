@@ -225,7 +225,7 @@ export function ChatPanel({
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] max-w-4xl mx-auto w-full">
       {/* TopBar */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 shrink-0" role="status" aria-label={`Skill ${skillName} active for ${formatTime(elapsed)}`}>
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 shrink-0" aria-label={`Skill ${skillName} active for ${formatTime(elapsed)}`}>
         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" aria-hidden="true" />
         <span className="text-sm text-white/70 font-mono">{skillName}</span>
         <span className="text-xs text-white/30 font-mono">{formatTime(elapsed)}</span>
