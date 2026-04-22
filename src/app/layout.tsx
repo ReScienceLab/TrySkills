@@ -28,6 +28,20 @@ export const metadata: Metadata = {
     title: "tryskills.sh",
     description: "One URL prefix to instantly try any agent skill.",
     type: "website",
+    images: [
+      {
+        url: "/og.png",
+        width: 1440,
+        height: 950,
+        alt: "TrySkills.sh — Add try to any skills.sh link and instantly try the skill",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "tryskills.sh",
+    description: "One URL prefix to instantly try any agent skill.",
+    images: ["/og.png"],
   },
 };
 
