@@ -144,6 +144,7 @@ export function ChatPanel({
   onStop,
   onTryAnother,
   onSessionError,
+  onToolComplete,
 }: {
   gatewayBaseUrl: string
   model: string
@@ -157,6 +158,7 @@ export function ChatPanel({
   onStop: () => void
   onTryAnother?: () => void
   onSessionError?: () => void
+  onToolComplete?: (toolName: string) => void
 }) {
   const { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, send, cancel } = useChat(
     gatewayBaseUrl,
@@ -167,6 +169,7 @@ export function ChatPanel({
     initialSessionId,
     skillPath,
     initialMessages,
+    onToolComplete,
   )
 
   const [input, setInput] = useState("")
@@ -223,7 +226,7 @@ export function ChatPanel({
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-80px)] max-w-4xl mx-auto w-full">
+    <div className="flex flex-col h-[calc(100vh-80px)] w-full">
       {/* TopBar */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 shrink-0" aria-label={`Skill ${skillName} active for ${formatTime(elapsed)}`}>
         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" aria-hidden="true" />

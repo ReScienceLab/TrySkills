@@ -169,6 +169,7 @@ export function useChat(
   initialSessionId?: string,
   skillPath?: string,
   initialMessages?: ChatMessage[],
+  onToolComplete?: (toolName: string) => void,
 ) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages ?? [])
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([])
@@ -186,6 +187,8 @@ export function useChat(
   const preflightFailedRef = useRef(false)
   const turnIdRef = useRef(0)
   const sessionIdRef = useRef<string | null>(initialSessionId ?? null)
+  const onToolCompleteRef = useRef(onToolComplete)
+  onToolCompleteRef.current = onToolComplete
 
   const createSession = useMutation(api.chatSessions.create)
   const appendMessages = useMutation(api.chatSessions.appendMessages)
@@ -259,12 +262,25 @@ export function useChat(
           },
           onToolProgress: (tool: ToolProgress) => {
             setToolCalls((prev) => {
+              const running = prev.filter((t) => t.status === "running")
+              for (const t of running) {
+                onToolCompleteRef.current?.(t.name)
+              }
               const existing = prev.find((t) => t.name === tool.tool && t.status === "running")
               if (existing) return prev
-              return [...prev, { name: tool.tool, emoji: tool.emoji, status: "running" }]
+              return [
+                ...prev.map((t) => t.status === "running" ? { ...t, status: "done" as const } : t),
+                { name: tool.tool, emoji: tool.emoji, status: "running" },
+              ]
             })
           },
           onDone: async (meta) => {
+            setToolCalls((prev) => {
+              for (const t of prev.filter((tc) => tc.status === "running")) {
+                onToolCompleteRef.current?.(t.name)
+              }
+              return prev.map((t) => ({ ...t, status: "done" as const }))
+            })
             await handleDone(meta)
             if (meta.hadContent && lastUserMsg) {
               await saveToSession(
@@ -392,9 +408,23 @@ export function useChat(
                 })
               },
               onToolProgress: (tool: ToolProgress) => {
-                setToolCalls((prev) => [...prev, { name: tool.tool, emoji: tool.emoji, status: "running" }])
+                setToolCalls((prev) => {
+                  for (const t of prev.filter((tc) => tc.status === "running")) {
+                    onToolCompleteRef.current?.(t.name)
+                  }
+                  return [
+                    ...prev.map((t) => t.status === "running" ? { ...t, status: "done" as const } : t),
+                    { name: tool.tool, emoji: tool.emoji, status: "running" },
+                  ]
+                })
               },
               onDone: async (meta) => {
+                setToolCalls((prev) => {
+                  for (const t of prev.filter((tc) => tc.status === "running")) {
+                    onToolCompleteRef.current?.(t.name)
+                  }
+                  return prev.map((t) => ({ ...t, status: "done" as const }))
+                })
                 await handleDone(meta)
                 if (meta.hadContent) {
                   await saveToSession(

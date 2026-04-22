@@ -26,7 +26,13 @@ import { useKeyStore } from "@/hooks/use-key-store";
 import { useHeartbeat } from "@/hooks/use-heartbeat";
 import { getProvider } from "@/lib/providers/registry";
 import { OnboardingModal } from "@/components/onboarding-modal";
+import { WorkspacePanel } from "@/components/workspace/workspace-panel";
+import { useWorkspace } from "@/hooks/use-workspace";
 import type { SandboxState, SandboxSession } from "@/lib/sandbox/types";
+
+function sanitizeSkillDir(skillPath: string): string {
+  return skillPath.replace(/\//g, "--");
+}
 
 type AppPhase = "config" | "launching" | "running";
 
@@ -82,6 +88,14 @@ export default function SkillPage({
   const userCancelled = useRef(false);
 
   useHeartbeat(session?.sandboxId ?? null, savedConfig?.sandboxKey ?? null);
+
+  const workspacePath = session ? `/root/.hermes/skills/${sanitizeSkillDir(skillKey)}` : null;
+  const workspace = useWorkspace(
+    session?.sandboxId ?? null,
+    savedConfig?.sandboxKey ?? null,
+    workspacePath,
+    phase === "running",
+  );
 
   const handleLaunch = async (config: LaunchConfig) => {
     launchAbortRef.current?.abort();
@@ -438,8 +452,79 @@ export default function SkillPage({
       <GlowMesh />
       <SiteHeader breadcrumb={`${owner}/${repo}/${skillName}`} />
 
-      <div className="flex-1 flex items-center justify-center relative z-10 px-6">
-        <div className="w-full max-w-[640px]">
+      {phase === "running" && session ? (
+        <div className="flex-1 flex relative z-10 overflow-hidden">
+          {/* Chat column */}
+          <div className="flex-1 min-w-0 px-4">
+            {resumeSessionId && resumeSession === undefined ? (
+              <div className="flex items-center justify-center py-20">
+                <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
+              </div>
+            ) : (
+              <ChatPanel
+                gatewayBaseUrl={session.gatewayBaseUrl || session.gatewayUrl}
+                model={savedConfig?.model || "anthropic/claude-sonnet-4"}
+                skillName={skillName}
+                skillPath={skillKey}
+                startedAt={session.startedAt}
+                providerId={savedConfig?.providerId}
+                apiKey={savedConfig?.llmKey}
+                initialSessionId={resumeSession ? resumeSessionId : undefined}
+                initialMessages={resumeSession?.messages}
+                onStop={handleStop}
+                onTryAnother={handleTryAnother}
+                onToolComplete={workspace.onToolComplete}
+                onSessionError={async () => {
+                  if (session?.sandboxId && launchConfigRef.current) {
+                    destroySandbox(launchConfigRef.current.sandboxKey, session.sandboxId).catch(() => {});
+                    await removeSandboxRecord({ sandboxId: session.sandboxId }).catch(() => {});
+                  }
+                  setSession(null);
+                  sessionRef.current = null;
+                  autoLaunchFired.current = false;
+                  autoLaunchLock.delete(skillKey);
+                  setPhase("config");
+                }}
+              />
+            )}
+          </div>
+
+          {/* Workspace panel */}
+          {workspace.panelOpen && (
+            <div className="w-[320px] shrink-0 hidden lg:flex">
+              <WorkspacePanel
+                entries={workspace.entries}
+                selectedFile={workspace.selectedFile}
+                fileContent={workspace.fileContent}
+                loadingTree={workspace.loadingTree}
+                loadingFile={workspace.loadingFile}
+                treeError={workspace.treeError}
+                fileError={workspace.fileError}
+                onSelectFile={workspace.selectFile}
+                onCloseFile={workspace.closeFile}
+                onRefresh={workspace.refreshTree}
+                onClose={() => workspace.setPanelOpen(false)}
+              />
+            </div>
+          )}
+
+          {/* Workspace toggle button (when panel is closed) */}
+          {!workspace.panelOpen && workspace.entries.length > 0 && (
+            <button
+              onClick={() => workspace.setPanelOpen(true)}
+              className="fixed right-4 top-20 z-20 hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 bg-white/5 border border-white/10 rounded text-xs text-white/50 hover:text-white/70 hover:bg-white/10 transition-all"
+              title="Open workspace"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+              </svg>
+              Files
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="flex-1 flex items-center justify-center relative z-10 px-6">
+          <div className="w-full max-w-[640px]">
           {phase === "config" && !authLoaded && (
             <div className="flex items-center justify-center py-20">
               <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
@@ -499,42 +584,9 @@ export default function SkillPage({
               />
             </div>
           )}
-
-          {phase === "running" && session && (
-            resumeSessionId && resumeSession === undefined ? (
-              <div className="flex items-center justify-center py-20">
-                <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
-              </div>
-            ) : (
-            <ChatPanel
-              gatewayBaseUrl={session.gatewayBaseUrl || session.gatewayUrl}
-              model={savedConfig?.model || "anthropic/claude-sonnet-4"}
-              skillName={skillName}
-              skillPath={skillKey}
-              startedAt={session.startedAt}
-              providerId={savedConfig?.providerId}
-              apiKey={savedConfig?.llmKey}
-              initialSessionId={resumeSession ? resumeSessionId : undefined}
-              initialMessages={resumeSession?.messages}
-              onStop={handleStop}
-              onTryAnother={handleTryAnother}
-              onSessionError={async () => {
-                // Sandbox may be dead -- destroy Daytona sandbox + clear record
-                if (session?.sandboxId && launchConfigRef.current) {
-                  destroySandbox(launchConfigRef.current.sandboxKey, session.sandboxId).catch(() => {});
-                  await removeSandboxRecord({ sandboxId: session.sandboxId }).catch(() => {});
-                }
-                setSession(null);
-                sessionRef.current = null;
-                autoLaunchFired.current = false;
-                autoLaunchLock.delete(skillKey);
-                setPhase("config");
-              }}
-            />
-            )
-          )}
         </div>
       </div>
+      )}
     </main>
   );
 }
