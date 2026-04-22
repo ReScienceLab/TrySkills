@@ -351,7 +351,9 @@ export function useChat(
             sessionIdRef.current = sid
             setSessionId(sid)
           } catch {
-            // Gateway session API unavailable, continue without session
+            // Gateway session API unavailable, clear any stale session ref and continue without session
+            sessionIdRef.current = null
+            setSessionId(null)
           }
 
           const firstMsg: ChatMessage = { role: "user", content: `I want to try the ${skillName} skill` }

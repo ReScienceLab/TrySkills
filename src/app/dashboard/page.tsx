@@ -106,16 +106,20 @@ export default function DashboardPage() {
   };
 
   const resolveSessionSkillPath = (session: SessionCompact): string | null => {
-    // Extract skill path from Gateway workspace (e.g. /root/.hermes/skills/owner--repo--skillName)
+    const installed = sandbox?.installedSkills ?? []
+
+    // Match workspace dir name against installed skills' sanitized form (owner--repo--skill)
     if (session.workspace) {
-      const match = session.workspace.match(/skills\/(.+)$/)
-      if (match) {
-        // Convert sanitized dir back to path: "owner--repo--skill" -> "owner/repo/skill"
-        return match[1].replace(/--/g, "/")
+      const dirMatch = session.workspace.match(/skills\/(.+?)(?:\/|$)/)
+      if (dirMatch) {
+        const dirName = dirMatch[1]
+        // Find installed skill whose sanitized form matches the dir name exactly
+        const matched = installed.find((sp) => sp.replace(/\//g, "--") === dirName)
+        if (matched) return matched
       }
     }
-    // Fallback: try matching installed skills against session title
-    const installed = sandbox?.installedSkills ?? []
+
+    // Fallback: match installed skills against session title
     for (const sp of installed) {
       const name = sp.split("/").pop() || ""
       if (name && session.title?.toLowerCase().includes(name.toLowerCase())) {
