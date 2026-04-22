@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/banner.png" alt="TrySkills.sh — Add try to any skills.sh link and instantly try the skill" />
+</p>
+
 # tryskills.sh
 
 **One URL prefix to instantly try any agent skill.**
