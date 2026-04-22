@@ -7,6 +7,16 @@ const mockUploadFile = vi.fn();
 const mockExecuteCommand = vi.fn();
 const mockGetSignedPreviewUrl = vi.fn();
 
+vi.mock("@lobehub/icons", () => ({
+  OpenRouter: () => null,
+  Anthropic: () => null,
+  OpenAI: () => null,
+  Google: () => null,
+  NousResearch: () => null,
+  Kimi: () => null,
+  Minimax: () => null,
+}));
+
 vi.mock("@daytona/sdk", () => {
   return {
     Daytona: class MockDaytona {
@@ -188,6 +198,51 @@ describe("sandbox/daytona", () => {
         expect.objectContaining({
           envVars: expect.objectContaining({
             [expectedEnvVar]: "test-key",
+          }),
+        }),
+        expect.anything(),
+      );
+    }
+  });
+
+  it("new providers map to correct env var names in sandbox", async () => {
+    for (const [providerId, expectedEnvVar] of [
+      ["kimi", "KIMI_API_KEY"],
+      ["minimax", "MINIMAX_API_KEY"],
+    ] as const) {
+      mockCreate.mockResolvedValue(mockSandbox);
+      await createHermesSandbox(
+        { ...testConfig, llmProvider: providerId, llmApiKey: "test-key" },
+        "test",
+        testSkillFiles,
+        () => {},
+      );
+
+      expect(mockCreate).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          envVars: expect.objectContaining({
+            [expectedEnvVar]: "test-key",
+          }),
+        }),
+        expect.anything(),
+      );
+    }
+  });
+
+  it("custom hermes providers (openai, nous) use OPENAI_API_KEY in sandbox", async () => {
+    for (const providerId of ["openai", "nous"] as const) {
+      mockCreate.mockResolvedValue(mockSandbox);
+      await createHermesSandbox(
+        { ...testConfig, llmProvider: providerId, llmApiKey: "test-key" },
+        "test",
+        testSkillFiles,
+        () => {},
+      );
+
+      expect(mockCreate).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          envVars: expect.objectContaining({
+            OPENAI_API_KEY: "test-key",
           }),
         }),
         expect.anything(),

@@ -1,4 +1,5 @@
 import type { SandboxConfig, SandboxSession, SandboxState } from "./types";
+import { getProviderData } from "@/lib/providers/provider-data";
 
 const SNAPSHOT_NAME = process.env.NEXT_PUBLIC_HERMES_SNAPSHOT || "hermes-ready";
 const HERMES_IMAGE = process.env.NEXT_PUBLIC_HERMES_IMAGE || "ghcr.io/resciencelab/hermes-ready:latest";
@@ -18,12 +19,15 @@ export interface SkillFile {
   content: string;
 }
 
-const PROVIDER_ENV_MAP: Record<string, { envVar: string; inferenceProvider: string }> = {
-  openrouter: { envVar: "OPENROUTER_API_KEY", inferenceProvider: "openrouter" },
-  anthropic: { envVar: "ANTHROPIC_API_KEY", inferenceProvider: "anthropic" },
-  openai: { envVar: "OPENAI_API_KEY", inferenceProvider: "openrouter" },
-  google: { envVar: "GOOGLE_API_KEY", inferenceProvider: "gemini" },
-};
+function resolveProviderMapping(llmProvider: string) {
+  const provider = getProviderData(llmProvider);
+  const envVar = provider?.hermesProvider === "custom"
+    ? "OPENAI_API_KEY"
+    : provider?.envVar ?? "OPENROUTER_API_KEY";
+  const hermesProvider = provider?.hermesProvider ?? "openrouter";
+  const baseUrl = provider?.baseUrl;
+  return { envVar, hermesProvider, baseUrl };
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let activeDaytona: any = null;
@@ -35,11 +39,16 @@ async function getDaytonaSDK() {
   return { Daytona };
 }
 
-function buildConfigYaml(model: string, inferenceProvider: string): string {
-  return [
+function buildConfigYaml(model: string, provider: string, baseUrl?: string): string {
+  const lines = [
     "model:",
     `  default: "${model}"`,
-    `  inference_provider: "${inferenceProvider}"`,
+    `  provider: "${provider}"`,
+  ];
+  if (baseUrl) {
+    lines.push(`  base_url: "${baseUrl}"`);
+  }
+  lines.push(
     "",
     "approvals:",
     "  mode: off",
@@ -50,7 +59,8 @@ function buildConfigYaml(model: string, inferenceProvider: string): string {
     "compression:",
     "  enabled: true",
     "  threshold: 0.50",
-  ].join("\n");
+  );
+  return lines.join("\n");
 }
 
 function buildEnvFile(providerEnvVar: string, apiKey: string): string {
@@ -92,7 +102,7 @@ export async function createHermesSandbox(
   });
   activeDaytona = daytona;
 
-  const providerMapping = PROVIDER_ENV_MAP[config.llmProvider] || PROVIDER_ENV_MAP.openrouter;
+  const providerMapping = resolveProviderMapping(config.llmProvider);
 
   onProgress("creating");
 
@@ -195,7 +205,7 @@ export async function createHermesSandbox(
     `mkdir -p ${HERMES_HOME} && cat > ${HERMES_HOME}/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
   ).catch(() => {});
   await sandbox.process.executeCommand(
-    `cat > ${HERMES_HOME}/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider)}\nCFGEOF`,
+    `cat > ${HERMES_HOME}/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.hermesProvider, providerMapping.baseUrl)}\nCFGEOF`,
   ).catch(() => {});
 
   const agentDir = usedSnapshot ? "/opt/hermes-agent" : `${HERMES_HOME}/hermes-agent`;
@@ -300,7 +310,7 @@ export async function installSkill(
   }
   log(`sandbox ready (state=${sandbox.state})`);
 
-  const providerMapping = PROVIDER_ENV_MAP[config.llmProvider] || PROVIDER_ENV_MAP.openrouter;
+  const providerMapping = resolveProviderMapping(config.llmProvider);
 
   onProgress("uploading");
   log(`uploading (skipConfig=${!!options?.skipConfigWrite}, files=${skillFiles.length})`);
@@ -318,7 +328,7 @@ export async function installSkill(
         `mkdir -p ${HERMES_HOME} && cat > ${HERMES_HOME}/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey)}\nENVEOF`,
       ).catch(() => {}),
       sandbox.process.executeCommand(
-        `cat > ${HERMES_HOME}/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.inferenceProvider)}\nCFGEOF`,
+        `cat > ${HERMES_HOME}/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.hermesProvider, providerMapping.baseUrl)}\nCFGEOF`,
       ).catch(() => {}),
     );
   }
