@@ -300,14 +300,11 @@ export async function installSkill(
       await daytona.start(sandbox, 60);
       log("sandbox started from stopped");
 
-      const agentDir = "/opt/hermes-agent";
-      const hermesCmd = `${agentDir}/venv/bin/hermes`;
+      const hermesCmd = `$(test -f /opt/hermes-agent/venv/bin/hermes && echo /opt/hermes-agent/venv/bin/hermes || echo ${HERMES_HOME}/hermes-agent/venv/bin/hermes)`;
 
-      await Promise.all([
-        sandbox.process.executeCommand(
-          `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
-        ).catch(() => {}),
-      ]);
+      await sandbox.process.executeCommand(
+        `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
+      ).catch(() => {});
       log("gateway restarted");
     } else {
       throw new Error(`Sandbox in unexpected state: ${sandbox.state}`);

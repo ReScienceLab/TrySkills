@@ -142,6 +142,16 @@ async function checkGenericProvider(
     }
 
     if (res.status === 429) {
+      const body = await res.text().catch(() => "")
+      const isQuotaExhausted = /quota|billing|exceeded.*current|insufficient.*fund/i.test(body)
+      if (isQuotaExhausted) {
+        return NextResponse.json({
+          ok: false,
+          errorType: "credit_error",
+          error: `Your ${providerId} account has exceeded its quota or billing limit.`,
+          action: billingUrl ? { label: "Check billing", url: billingUrl } : undefined,
+        })
+      }
       return NextResponse.json({
         ok: false,
         errorType: "rate_limit",
