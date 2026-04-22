@@ -13,6 +13,7 @@ export interface ProviderData {
   checkAuthHeader: (key: string) => Record<string, string>
   checkMethod?: "GET" | "POST"
   checkBody?: (key: string) => string
+  resolveCheckEndpoint?: (key: string) => string
 }
 
 export const PROVIDER_DATA: ProviderData[] = [
@@ -104,6 +105,10 @@ export const PROVIDER_DATA: ProviderData[] = [
     hermesProvider: "kimi-coding",
     checkEndpoint: "https://api.moonshot.ai/v1/models",
     checkAuthHeader: (key) => ({ Authorization: `Bearer ${key}` }),
+    resolveCheckEndpoint: (key) =>
+      key.startsWith("sk-kimi-")
+        ? "https://api.kimi.com/coding/v1/models"
+        : "https://api.moonshot.ai/v1/models",
     models: ["kimi-k2.6", "kimi-k2.5", "moonshot-v1-128k"],
   },
   {
@@ -114,11 +119,12 @@ export const PROVIDER_DATA: ProviderData[] = [
     envVar: "MINIMAX_API_KEY",
     hermesProvider: "minimax",
     baseUrl: "https://api.minimax.io/anthropic",
-    checkEndpoint: "https://api.minimax.io/v1/chat/completions",
+    checkEndpoint: "https://api.minimax.io/anthropic/v1/messages",
     checkMethod: "POST",
     checkAuthHeader: (key) => ({
-      Authorization: `Bearer ${key}`,
+      "x-api-key": key,
       "Content-Type": "application/json",
+      "anthropic-version": "2023-06-01",
     }),
     checkBody: () => JSON.stringify({
       model: "MiniMax-M2.5",

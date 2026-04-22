@@ -35,6 +35,9 @@ const PROVIDER_BILLING_URLS: Record<string, string> = {
   anthropic: "https://console.anthropic.com/settings/billing",
   openai: "https://platform.openai.com/settings/organization/billing",
   google: "https://aistudio.google.com/apikey",
+  nous: "https://portal.nousresearch.com",
+  kimi: "https://platform.kimi.ai/console/top-up",
+  minimax: "https://platform.minimax.io/user-center/basic-information",
 }
 
 const PROVIDER_KEY_URLS: Record<string, string> = {
@@ -42,6 +45,9 @@ const PROVIDER_KEY_URLS: Record<string, string> = {
   anthropic: "https://console.anthropic.com/settings/keys",
   openai: "https://platform.openai.com/api-keys",
   google: "https://aistudio.google.com/apikey",
+  nous: "https://portal.nousresearch.com",
+  kimi: "https://platform.kimi.ai/console/api-keys",
+  minimax: "https://platform.minimax.io/user-center/basic-information/interface-key",
 }
 
 function classifyError(err: Error, providerId?: string): ChatError {

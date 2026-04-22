@@ -26,7 +26,11 @@ export async function POST(req: NextRequest) {
       fetchInit.body = provider.checkBody(apiKey);
     }
 
-    const res = await fetch(provider.checkEndpoint, fetchInit);
+    const endpoint = provider.resolveCheckEndpoint
+      ? provider.resolveCheckEndpoint(apiKey)
+      : provider.checkEndpoint;
+
+    const res = await fetch(endpoint, fetchInit);
 
     if (res.ok) {
       return NextResponse.json({ ok: true });

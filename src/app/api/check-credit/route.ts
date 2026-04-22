@@ -6,6 +6,9 @@ const PROVIDER_BILLING_URLS: Record<string, string> = {
   anthropic: "https://console.anthropic.com/settings/billing",
   openai: "https://platform.openai.com/settings/organization/billing",
   google: "https://aistudio.google.com/apikey",
+  nous: "https://portal.nousresearch.com",
+  kimi: "https://platform.kimi.ai/console/top-up",
+  minimax: "https://platform.minimax.io/user-center/basic-information",
 }
 
 const PROVIDER_KEY_URLS: Record<string, string> = {
@@ -13,6 +16,9 @@ const PROVIDER_KEY_URLS: Record<string, string> = {
   anthropic: "https://console.anthropic.com/settings/keys",
   openai: "https://platform.openai.com/api-keys",
   google: "https://aistudio.google.com/apikey",
+  nous: "https://portal.nousresearch.com",
+  kimi: "https://platform.kimi.ai/console/api-keys",
+  minimax: "https://platform.minimax.io/user-center/basic-information/interface-key",
 }
 
 export async function POST(req: NextRequest) {
@@ -117,6 +123,20 @@ async function checkGenericProvider(
     google: {
       url: "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1",
       headers: { "x-goog-api-key": apiKey },
+    },
+    nous: {
+      url: "https://inference-api.nousresearch.com/v1/models",
+      headers: { Authorization: `Bearer ${apiKey}` },
+    },
+    kimi: {
+      url: apiKey.startsWith("sk-kimi-")
+        ? "https://api.kimi.com/coding/v1/models"
+        : "https://api.moonshot.ai/v1/models",
+      headers: { Authorization: `Bearer ${apiKey}` },
+    },
+    minimax: {
+      url: "https://api.minimax.io/anthropic/v1/messages",
+      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
     },
   }
 
