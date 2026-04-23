@@ -55,6 +55,14 @@ function findSkillDir(
       return { dir, dirName };
     });
 
+  // 0. Full path match: skillName contains slashes (e.g. "category/sub-skill")
+  if (skillName.includes("/")) {
+    const fullPathMatch = skillDirs.find(
+      (d) => d.dir === skillName || d.dir.endsWith(`/${skillName}`),
+    );
+    if (fullPathMatch) return fullPathMatch.dir;
+  }
+
   // 1. Exact match: directory name equals skillName
   const exact = skillDirs.find((d) => d.dirName === skillName);
   if (exact) return exact.dir;
