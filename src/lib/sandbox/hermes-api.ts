@@ -60,6 +60,7 @@ export function chatStream(
     let rawContent = ""
     let inThinkBlock = false
     let thinkBuffer = ""
+    let thinkDecided = false
 
     try {
       const res = await fetch("/api/hermes", {
@@ -173,10 +174,8 @@ export function chatStream(
             if (delta?.content) {
               rawContent += delta.content
 
-              // Buffer partial tag prefix until we can decide: if the
-              // accumulated rawContent is a prefix of "<think>" but not
-              // yet the full tag, keep buffering without emitting.
-              if (!inThinkBlock) {
+              // <think> tag fallback: only attempt detection once at stream start
+              if (!thinkDecided && !inThinkBlock) {
                 const trimmed = rawContent.trimStart()
                 const TAG = "<think>"
                 if (trimmed.length < TAG.length && TAG.startsWith(trimmed)) {
@@ -184,6 +183,7 @@ export function chatStream(
                   continue
                 }
                 if (trimmed.startsWith(TAG)) {
+                  thinkDecided = true
                   inThinkBlock = true
                   thinkBuffer = trimmed.slice(TAG.length)
                   const closeIdx = thinkBuffer.indexOf("</think>")
@@ -201,6 +201,11 @@ export function chatStream(
                   }
                   continue
                 }
+                // Not a think tag -- flush all buffered rawContent as visible
+                thinkDecided = true
+                hadContent = true
+                callbacks.onDelta(rawContent)
+                continue
               }
 
               if (inThinkBlock) {

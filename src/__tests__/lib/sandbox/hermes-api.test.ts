@@ -381,4 +381,74 @@ describe("hermes-api chatStream", () => {
     expect(onDelta).not.toHaveBeenCalled()
     expect(onDone).toHaveBeenCalledWith({ hadContent: false })
   })
+
+  it("does not duplicate reasoning when visible text follows think block", async () => {
+    const sseBody = [
+      'data: {"choices":[{"delta":{"content":"<think>"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{"content":"reasoning here"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{"content":"</think>"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{"content":"answer1"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{"content":" answer2"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
+      "",
+    ].join("\n")
+
+    global.fetch = mockFetch(sseBody)
+
+    const onDelta = vi.fn()
+    const onDone = vi.fn()
+    const onError = vi.fn()
+    const onToolProgress = vi.fn()
+    const onReasoning = vi.fn()
+
+    chatStream("https://example.com", [{ role: "user", content: "hi" }], {
+      onDelta,
+      onDone,
+      onError,
+      onToolProgress,
+      onReasoning,
+    })
+
+    await vi.waitFor(() => expect(onDone).toHaveBeenCalled())
+
+    // onDelta should receive visible text only, not reasoning duplication
+    const allDelta = onDelta.mock.calls.map((c) => c[0]).join("")
+    expect(allDelta).toContain("answer1")
+    expect(allDelta).toContain("answer2")
+    expect(allDelta).not.toContain("reasoning here")
+    expect(allDelta).not.toContain("<think>")
+  })
+
+  it("flushes buffered prefix when content is not a think tag", async () => {
+    const sseBody = [
+      'data: {"choices":[{"delta":{"content":"<t"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{"content":"acos>"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
+      "",
+    ].join("\n")
+
+    global.fetch = mockFetch(sseBody)
+
+    const onDelta = vi.fn()
+    const onDone = vi.fn()
+    const onError = vi.fn()
+    const onToolProgress = vi.fn()
+    const onReasoning = vi.fn()
+
+    chatStream("https://example.com", [{ role: "user", content: "hi" }], {
+      onDelta,
+      onDone,
+      onError,
+      onToolProgress,
+      onReasoning,
+    })
+
+    await vi.waitFor(() => expect(onDone).toHaveBeenCalled())
+
+    // Both chunks must be emitted -- the buffered "<t" must not be lost
+    const allDelta = onDelta.mock.calls.map((c) => c[0]).join("")
+    expect(allDelta).toBe("<tacos>")
+    expect(onReasoning).not.toHaveBeenCalled()
+    expect(onDone).toHaveBeenCalledWith({ hadContent: true })
+  })
 })
