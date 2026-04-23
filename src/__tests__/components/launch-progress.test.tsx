@@ -9,7 +9,7 @@ describe("LaunchProgress", () => {
     );
     expect(screen.getByText("Creating sandbox")).toBeInTheDocument();
     expect(screen.getByText("Configuring environment")).toBeInTheDocument();
-    expect(screen.getByText("Uploading skill")).toBeInTheDocument();
+    expect(screen.getByText("Installing skill")).toBeInTheDocument();
     expect(screen.getByText("Starting agent")).toBeInTheDocument();
     expect(screen.getByText("Ready")).toBeInTheDocument();
   });
@@ -21,7 +21,7 @@ describe("LaunchProgress", () => {
     expect(container.textContent).toContain("Creating sandbox");
     expect(container.textContent).toContain("Installing Hermes Agent");
     expect(container.textContent).toContain("Configuring environment");
-    expect(container.textContent).toContain("Uploading skill");
+    expect(container.textContent).toContain("Installing skill");
     expect(container.textContent).toContain("Starting agent");
     expect(container.textContent).toContain("Ready");
   });

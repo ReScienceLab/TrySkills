@@ -39,9 +39,10 @@ async function discoverSkillsOnDisk(sandbox: any): Promise<string[]> {
   }
 }
 
-export interface SkillFile {
-  path: string;
-  content: string;
+export interface SkillSource {
+  owner: string
+  repo: string
+  skillName: string
 }
 
 function resolveProviderMapping(llmProvider: string) {
@@ -133,10 +134,50 @@ function sanitizeSkillDir(skillName: string): string {
   return skillName.replace(/\//g, "--");
 }
 
+const SAFE_SHELL_SEGMENT = /^[a-zA-Z0-9_.\-\/]+$/
+
+function shellSafe(value: string): string | null {
+  if (!value || !SAFE_SHELL_SEGMENT.test(value)) return null
+  return value
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function npxSkillsInstall(
+  sandbox: any,
+  source: SkillSource,
+  destDir: string,
+  log: (label: string) => void,
+): Promise<void> {
+  const owner = shellSafe(source.owner)
+  const repo = shellSafe(source.repo)
+  const skill = shellSafe(source.skillName)
+  const safeDest = shellSafe(destDir)
+  if (!owner || !repo || !skill || !safeDest) {
+    throw new Error("Unsafe characters in skill source")
+  }
+
+  // npx skills CLI matches by canonical skill name (leaf segment only)
+  const leafName = skill.split("/").pop() || skill
+
+  const cmd = `npx -y skills add ${owner}/${repo} --skill "${leafName}" --agent universal -g -y --copy 2>&1`
+  const result = await sandbox.process.executeCommand(cmd)
+  if (result.exitCode !== 0) {
+    const output = result.result || ""
+    throw new Error(`npx skills add failed (exit ${result.exitCode}): ${output.slice(0, 200)}`)
+  }
+  log("npx skills add succeeded")
+
+  // Remove existing dir/symlink then create fresh symlink
+  await sandbox.process.executeCommand(
+    `rm -rf ${HERMES_HOME}/skills/${safeDest} && ln -sfn /root/.agents/skills/${leafName} ${HERMES_HOME}/skills/${safeDest}`
+  )
+  log("symlinked to hermes skills dir")
+}
+
 export async function createHermesSandbox(
   config: SandboxConfig,
   skillName: string,
-  skillFiles: SkillFile[],
+  skillSource: SkillSource,
   onProgress: (step: SandboxState, meta?: { usedSnapshot?: boolean }) => void,
   userId?: string,
 ): Promise<SandboxSession & { usedSnapshot: boolean }> {
@@ -272,13 +313,8 @@ export async function createHermesSandbox(
   }
 
   onProgress("uploading");
-  log("uploading skill files");
-  for (const file of skillFiles) {
-    const destPath = `${HERMES_HOME}/skills/${sanitizeSkillDir(skillName)}/${file.path}`;
-    const dir = destPath.substring(0, destPath.lastIndexOf("/"));
-    await sandbox.process.executeCommand(`mkdir -p "${dir}"`).catch(() => {});
-    await sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
-  }
+  const destDir = sanitizeSkillDir(skillName)
+  await npxSkillsInstall(sandbox, skillSource, destDir, log)
 
   onProgress("starting");
   log("skill files uploaded, starting gateway");
@@ -325,7 +361,7 @@ export async function installSkill(
   config: SandboxConfig,
   sandboxId: string,
   skillName: string,
-  skillFiles: SkillFile[],
+  skillSource: SkillSource,
   onProgress: (step: SandboxState) => void,
   options?: {
     skipConfigWrite?: boolean;
@@ -365,13 +401,7 @@ export async function installSkill(
   const providerMapping = resolveProviderMapping(config.llmProvider);
 
   onProgress("uploading");
-  log(`uploading (skipConfig=${!!options?.skipConfigWrite}, files=${skillFiles.length})`);
-
-  // Batch ALL mkdir into one command, then parallel uploads
-  const allDirs = [...new Set(skillFiles.map((f) => {
-    const destPath = `${HERMES_HOME}/skills/${sanitizeSkillDir(skillName)}/${f.path}`;
-    return destPath.substring(0, destPath.lastIndexOf("/"));
-  }))];
+  log(`installing (skipConfig=${!!options?.skipConfigWrite})`)
 
   const setupTasks: Promise<unknown>[] = [];
   if (!options?.skipConfigWrite) {
@@ -384,23 +414,12 @@ export async function installSkill(
       ).catch(() => {}),
     );
   }
-  // One mkdir for ALL directories (batched)
-  if (allDirs.length > 0) {
-    setupTasks.push(
-      sandbox.process.executeCommand(`mkdir -p ${allDirs.map((d) => `"${d}"`).join(" ")}`).catch(() => {}),
-    );
-  }
   await Promise.all(setupTasks);
-  log("setup done (mkdir + config)");
+  log("config done");
 
-  // Pure parallel file uploads (no per-file mkdir)
-  await Promise.all(
-    skillFiles.map((file) => {
-      const destPath = `${HERMES_HOME}/skills/${sanitizeSkillDir(skillName)}/${file.path}`;
-      return sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
-    }),
-  );
-  log("files uploaded");
+  const destDir = sanitizeSkillDir(skillName)
+  await npxSkillsInstall(sandbox, skillSource, destDir, log)
+  log("skill installed");
 
   const hermesCmd = `$(test -f /opt/hermes-agent/venv/bin/hermes && echo /opt/hermes-agent/venv/bin/hermes || echo ${HERMES_HOME}/hermes-agent/venv/bin/hermes)`;
 
