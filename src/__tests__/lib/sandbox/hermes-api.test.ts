@@ -312,4 +312,73 @@ describe("hermes-api chatStream", () => {
     expect(onReasoning).toHaveBeenCalled()
     expect(onDelta).toHaveBeenCalledWith("visible answer")
   })
+
+  it("handles chunk-split <think> tag without leaking partial tag", async () => {
+    const sseBody = [
+      'data: {"choices":[{"delta":{"content":"<thi"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{"content":"nk>"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{"content":"secret reasoning"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{"content":"</think>"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{"content":"visible"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
+      "",
+    ].join("\n")
+
+    global.fetch = mockFetch(sseBody)
+
+    const onDelta = vi.fn()
+    const onDone = vi.fn()
+    const onError = vi.fn()
+    const onToolProgress = vi.fn()
+    const onReasoning = vi.fn()
+
+    chatStream("https://example.com", [{ role: "user", content: "hi" }], {
+      onDelta,
+      onDone,
+      onError,
+      onToolProgress,
+      onReasoning,
+    })
+
+    await vi.waitFor(() => expect(onDone).toHaveBeenCalled())
+
+    expect(onReasoning).toHaveBeenCalled()
+    expect(onDelta).toHaveBeenCalledWith("visible")
+    // Verify no partial tag leaked to onDelta
+    for (const call of onDelta.mock.calls) {
+      expect(call[0]).not.toContain("<thi")
+      expect(call[0]).not.toContain("nk>")
+      expect(call[0]).not.toContain("<think>")
+    }
+  })
+
+  it("reports hadContent=false when only reasoning and no visible text", async () => {
+    const sseBody = [
+      'data: {"choices":[{"delta":{"content":"<think>only reasoning</think>"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
+      "",
+    ].join("\n")
+
+    global.fetch = mockFetch(sseBody)
+
+    const onDelta = vi.fn()
+    const onDone = vi.fn()
+    const onError = vi.fn()
+    const onToolProgress = vi.fn()
+    const onReasoning = vi.fn()
+
+    chatStream("https://example.com", [{ role: "user", content: "hi" }], {
+      onDelta,
+      onDone,
+      onError,
+      onToolProgress,
+      onReasoning,
+    })
+
+    await vi.waitFor(() => expect(onDone).toHaveBeenCalled())
+
+    expect(onReasoning).toHaveBeenCalled()
+    expect(onDelta).not.toHaveBeenCalled()
+    expect(onDone).toHaveBeenCalledWith({ hadContent: false })
+  })
 })

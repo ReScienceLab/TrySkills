@@ -101,7 +101,7 @@ function ToolCard({ tool }: { tool: ToolCall }) {
             {Object.entries(tool.args!).map(([k, v]) => (
               <div key={k} className="text-[11px] leading-relaxed font-mono">
                 <span className="text-blue-400">{k}</span>{" "}
-                <span className="text-white/40 break-all">{v}</span>
+                <span className="text-white/40 break-all">{typeof v === "string" ? v : JSON.stringify(v)}</span>
               </div>
             ))}
           </div>

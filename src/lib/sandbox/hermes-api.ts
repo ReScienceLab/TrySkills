@@ -171,24 +171,36 @@ export function chatStream(
 
             const delta = parsed.choices?.[0]?.delta
             if (delta?.content) {
-              hadContent = true
               rawContent += delta.content
 
-              // <think> tag fallback for models that embed reasoning in content
-              if (!inThinkBlock && rawContent.trimStart().startsWith("<think>")) {
-                inThinkBlock = true
-                thinkBuffer = rawContent.trimStart().slice(7) // strip <think>
-                const closeIdx = thinkBuffer.indexOf("</think>")
-                if (closeIdx !== -1) {
-                  callbacks.onReasoning?.(thinkBuffer.slice(0, closeIdx))
-                  inThinkBlock = false
-                  const remaining = thinkBuffer.slice(closeIdx + 8).replace(/^\s+/, "")
-                  thinkBuffer = ""
-                  if (remaining) callbacks.onDelta(remaining)
-                } else {
-                  callbacks.onReasoning?.(thinkBuffer)
+              // Buffer partial tag prefix until we can decide: if the
+              // accumulated rawContent is a prefix of "<think>" but not
+              // yet the full tag, keep buffering without emitting.
+              if (!inThinkBlock) {
+                const trimmed = rawContent.trimStart()
+                const TAG = "<think>"
+                if (trimmed.length < TAG.length && TAG.startsWith(trimmed)) {
+                  // Still ambiguous -- could become <think>, keep buffering
+                  continue
                 }
-                continue
+                if (trimmed.startsWith(TAG)) {
+                  inThinkBlock = true
+                  thinkBuffer = trimmed.slice(TAG.length)
+                  const closeIdx = thinkBuffer.indexOf("</think>")
+                  if (closeIdx !== -1) {
+                    callbacks.onReasoning?.(thinkBuffer.slice(0, closeIdx))
+                    inThinkBlock = false
+                    const remaining = thinkBuffer.slice(closeIdx + 8).replace(/^\s+/, "")
+                    thinkBuffer = ""
+                    if (remaining) {
+                      hadContent = true
+                      callbacks.onDelta(remaining)
+                    }
+                  } else {
+                    callbacks.onReasoning?.(thinkBuffer)
+                  }
+                  continue
+                }
               }
 
               if (inThinkBlock) {
@@ -199,13 +211,17 @@ export function chatStream(
                   inThinkBlock = false
                   const remaining = thinkBuffer.slice(closeIdx + 8).replace(/^\s+/, "")
                   thinkBuffer = ""
-                  if (remaining) callbacks.onDelta(remaining)
+                  if (remaining) {
+                    hadContent = true
+                    callbacks.onDelta(remaining)
+                  }
                 } else {
                   callbacks.onReasoning?.(delta.content)
                 }
                 continue
               }
 
+              hadContent = true
               callbacks.onDelta(delta.content)
             }
 
