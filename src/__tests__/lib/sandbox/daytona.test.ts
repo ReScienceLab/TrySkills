@@ -6,6 +6,11 @@ const mockDelete = vi.fn();
 const mockUploadFile = vi.fn();
 const mockExecuteCommand = vi.fn();
 const mockGetSignedPreviewUrl = vi.fn();
+const mockFetchSkillDirectory = vi.fn();
+
+vi.mock("@/lib/skill/resolver", () => ({
+  fetchSkillDirectory: (...args: unknown[]) => mockFetchSkillDirectory(...args),
+}));
 
 vi.mock("@lobehub/icons", () => ({
   OpenRouter: () => null,
@@ -28,8 +33,9 @@ vi.mock("@daytona/sdk", () => {
   };
 });
 
-import { createHermesSandbox, destroySandbox, installSkill, type SkillFile, type SkillSource } from "@/lib/sandbox/daytona";
+import { createHermesSandbox, destroySandbox, installSkill, type SkillSource } from "@/lib/sandbox/daytona";
 import type { SandboxConfig, SandboxState } from "@/lib/sandbox/types";
+import type { ResolvedSkill } from "@/lib/skill/resolver";
 
 describe("sandbox/daytona", () => {
   const mockSandbox = {
@@ -46,20 +52,26 @@ describe("sandbox/daytona", () => {
     llmModel: "anthropic/claude-sonnet-4",
   };
 
-  const testSkillFiles: SkillFile[] = [
-    { path: "SKILL.md", content: "---\nname: test\n---\n# Test" },
-  ];
-
   const testSkillSource: SkillSource = {
     owner: "test-owner",
     repo: "test-repo",
     skillName: "test-skill",
   };
 
+  const testResolved: ResolvedSkill = {
+    owner: "test-owner",
+    repo: "test-repo",
+    skillName: "test-skill",
+    rawBaseUrl: "https://api.github.com/repos/test-owner/test-repo/contents/test-skill",
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockCreate.mockResolvedValue(mockSandbox);
     mockExecuteCommand.mockResolvedValue({ exitCode: 0 });
+    mockFetchSkillDirectory.mockResolvedValue([
+      { path: "SKILL.md", content: "# Fallback" },
+    ]);
     mockGetSignedPreviewUrl.mockResolvedValue({
       url: "https://8642-signedtoken.proxy.daytona.work",
       token: "signedtoken",
@@ -75,7 +87,7 @@ describe("sandbox/daytona", () => {
       testConfig,
       "test-skill",
       testSkillSource,
-      testSkillFiles,
+      testResolved,
       (step) => progress.push(step),
     );
 
@@ -103,7 +115,7 @@ describe("sandbox/daytona", () => {
       testConfig,
       "test-skill",
       testSkillSource,
-      testSkillFiles,
+      testResolved,
       () => {},
       "user-123",
     );
@@ -130,7 +142,7 @@ describe("sandbox/daytona", () => {
       testConfig,
       "test-skill",
       testSkillSource,
-      testSkillFiles,
+      testResolved,
       (step) => progress.push(step),
     );
 
@@ -146,7 +158,7 @@ describe("sandbox/daytona", () => {
       testConfig,
       "test-skill",
       testSkillSource,
-      testSkillFiles,
+      testResolved,
       (step) => progress.push(step),
     );
 
@@ -159,7 +171,7 @@ describe("sandbox/daytona", () => {
   });
 
   it("links pre-installed agent from /opt on snapshot path", async () => {
-    await createHermesSandbox(testConfig, "my-skill", testSkillSource, testSkillFiles, () => {});
+    await createHermesSandbox(testConfig, "my-skill", testSkillSource, testResolved, () => {});
 
     const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
     const linkCmd = allCmds.find((c: string) => c.includes("/opt/hermes-agent"));
@@ -174,9 +186,7 @@ describe("sandbox/daytona", () => {
       testConfig,
       "my-skill",
       testSkillSource,
-      [
-        { path: "SKILL.md", content: "# Skill" },
-      ],
+      testResolved,
       () => {},
     );
 
@@ -189,25 +199,26 @@ describe("sandbox/daytona", () => {
   });
 
   it("falls back to file upload when clone fails", async () => {
-    // Make clone script return exit code 1
     mockExecuteCommand.mockImplementation((cmd: string) => {
       if (typeof cmd === "string" && cmd.includes("git clone")) {
         return Promise.resolve({ exitCode: 1, result: "" });
       }
       return Promise.resolve({ exitCode: 0, result: "" });
     });
+    mockFetchSkillDirectory.mockResolvedValue([
+      { path: "SKILL.md", content: "# Skill" },
+      { path: "scripts/setup.sh", content: "#!/bin/bash" },
+    ]);
 
     await createHermesSandbox(
       testConfig,
       "my-skill",
       testSkillSource,
-      [
-        { path: "SKILL.md", content: "# Skill" },
-        { path: "scripts/setup.sh", content: "#!/bin/bash" },
-      ],
+      testResolved,
       () => {},
     );
 
+    expect(mockFetchSkillDirectory).toHaveBeenCalledWith(testResolved);
     expect(mockUploadFile).toHaveBeenCalledWith(
       expect.any(Buffer),
       "/root/.hermes/skills/my-skill/SKILL.md",
@@ -229,7 +240,7 @@ describe("sandbox/daytona", () => {
         { ...testConfig, llmProvider: providerId, llmApiKey: "test-key" },
         "test",
         testSkillSource,
-        testSkillFiles,
+        testResolved,
         () => {},
       );
 
@@ -254,7 +265,7 @@ describe("sandbox/daytona", () => {
         { ...testConfig, llmProvider: providerId, llmApiKey: "test-key" },
         "test",
         testSkillSource,
-        testSkillFiles,
+        testResolved,
         () => {},
       );
 
@@ -276,7 +287,7 @@ describe("sandbox/daytona", () => {
         { ...testConfig, llmProvider: providerId, llmApiKey: "test-key" },
         "test",
         testSkillSource,
-        testSkillFiles,
+        testResolved,
         () => {},
       );
 
@@ -292,7 +303,7 @@ describe("sandbox/daytona", () => {
   });
 
   it("starts gateway from /opt on snapshot path", async () => {
-    await createHermesSandbox(testConfig, "test", testSkillSource, testSkillFiles, () => {});
+    await createHermesSandbox(testConfig, "test", testSkillSource, testResolved, () => {});
 
     const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
     const gwCmd = allCmds.find((c: string) => c.includes("hermes") && c.includes("gateway"));
@@ -315,7 +326,7 @@ describe("sandbox/daytona", () => {
       configWithEnvVars,
       "test-skill",
       testSkillSource,
-      testSkillFiles,
+      testResolved,
       () => {},
     );
 
@@ -339,7 +350,7 @@ describe("sandbox/daytona", () => {
   });
 
   it("gets signed preview URL on gateway port 8642", async () => {
-    await createHermesSandbox(testConfig, "test", testSkillSource, testSkillFiles, () => {});
+    await createHermesSandbox(testConfig, "test", testSkillSource, testResolved, () => {});
     expect(mockGetSignedPreviewUrl).toHaveBeenCalledWith(8642, 3600);
   });
 
@@ -355,7 +366,7 @@ describe("sandbox/daytona", () => {
       testConfig,
       "test",
       testSkillSource,
-      testSkillFiles,
+      testResolved,
       () => {},
     );
 
@@ -369,7 +380,7 @@ describe("sandbox/daytona", () => {
 
   describe("destroySandbox", () => {
     it("deletes sandbox via active reference", async () => {
-      await createHermesSandbox(testConfig, "test", testSkillSource, testSkillFiles, () => {});
+      await createHermesSandbox(testConfig, "test", testSkillSource, testResolved, () => {});
 
       await destroySandbox("test-daytona-key", "sb-test-123");
       expect(mockDelete).toHaveBeenCalled();
@@ -378,7 +389,7 @@ describe("sandbox/daytona", () => {
     it("falls back to get+delete for unknown sandbox", async () => {
       mockGet.mockResolvedValue(mockSandbox);
 
-      await createHermesSandbox(testConfig, "test", testSkillSource, testSkillFiles, () => {});
+      await createHermesSandbox(testConfig, "test", testSkillSource, testResolved, () => {});
       await destroySandbox("test-daytona-key", "sb-test-123");
 
       await destroySandbox("test-key", "sb-unknown-456");
@@ -404,7 +415,7 @@ describe("sandbox/daytona", () => {
         "sb-test-123",
         "new-skill",
         testSkillSource,
-        [{ path: "SKILL.md", content: "# New" }],
+        testResolved,
         (step) => progress.push(step),
       );
 
@@ -424,7 +435,7 @@ describe("sandbox/daytona", () => {
       mockGet.mockResolvedValue({ ...mockSandbox, state: "error" });
 
       await expect(
-        installSkill(testConfig, "sb-test-123", "test", testSkillSource, testSkillFiles, () => {}),
+        installSkill(testConfig, "sb-test-123", "test", testSkillSource, testResolved, () => {}),
       ).rejects.toThrow("unexpected state");
     });
   });

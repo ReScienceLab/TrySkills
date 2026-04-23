@@ -1,5 +1,6 @@
 import type { SandboxConfig, SandboxSession, SandboxState } from "./types";
 import { getProviderData } from "@/lib/providers/provider-data";
+import { fetchSkillDirectory, type ResolvedSkill } from "@/lib/skill/resolver";
 
 const SNAPSHOT_NAME = process.env.NEXT_PUBLIC_HERMES_SNAPSHOT || "hermes-ready";
 const HERMES_IMAGE = process.env.NEXT_PUBLIC_HERMES_IMAGE || "ghcr.io/resciencelab/hermes-ready:latest";
@@ -150,9 +151,12 @@ async function cloneSkillOnSandbox(
   const candidates = [
     skillName,
     `skills/${skillName}`,
+    `${repo}/${skillName}`,
     `.agents/skills/${skillName}`,
     `.claude/skills/${skillName}`,
     `plugin/skills/${skillName}`,
+    `plugins/${owner}/skills/${skillName}`,
+    `src/skills/${skillName}`,
   ]
   const candidateChecks = candidates.map((c) => `[ -f "$TMP/${c}/SKILL.md" -o -f "$TMP/${c}/skill.md" ] && echo "${c}"`).join("\n")
 
@@ -192,7 +196,7 @@ export async function createHermesSandbox(
   config: SandboxConfig,
   skillName: string,
   skillSource: SkillSource,
-  skillFiles: SkillFile[],
+  resolved: ResolvedSkill,
   onProgress: (step: SandboxState, meta?: { usedSnapshot?: boolean }) => void,
   userId?: string,
 ): Promise<SandboxSession & { usedSnapshot: boolean }> {
@@ -330,8 +334,9 @@ export async function createHermesSandbox(
   onProgress("uploading");
   const destDir = sanitizeSkillDir(skillName)
   const cloned = await cloneSkillOnSandbox(sandbox, skillSource, destDir, log)
-  if (!cloned && skillFiles.length > 0) {
-    log("clone failed, falling back to file upload")
+  if (!cloned) {
+    log("clone failed, falling back to browser fetch + upload")
+    const skillFiles = await fetchSkillDirectory(resolved)
     for (const file of skillFiles) {
       const destPath = `${HERMES_HOME}/skills/${destDir}/${file.path}`
       const dir = destPath.substring(0, destPath.lastIndexOf("/"))
@@ -386,7 +391,7 @@ export async function installSkill(
   sandboxId: string,
   skillName: string,
   skillSource: SkillSource,
-  skillFiles: SkillFile[],
+  resolved: ResolvedSkill,
   onProgress: (step: SandboxState) => void,
   options?: {
     skipConfigWrite?: boolean;
@@ -444,8 +449,9 @@ export async function installSkill(
 
   const destDir = sanitizeSkillDir(skillName)
   const cloned = await cloneSkillOnSandbox(sandbox, skillSource, destDir, log)
-  if (!cloned && skillFiles.length > 0) {
-    log("clone failed, falling back to file upload")
+  if (!cloned) {
+    log("clone failed, falling back to browser fetch + upload")
+    const skillFiles = await fetchSkillDirectory(resolved)
     const allDirs = [...new Set(skillFiles.map((f) => {
       const destPath = `${HERMES_HOME}/skills/${destDir}/${f.path}`
       return destPath.substring(0, destPath.lastIndexOf("/"))
