@@ -9,6 +9,13 @@ export interface DiscoveredSkill {
   icon?: string
 }
 
+const KNOWN_SKILL_DIR_PREFIXES = [
+  "skills/",
+  ".agents/skills/",
+  "plugin/skills/",
+  "src/skills/",
+]
+
 const EXCLUDED_DIR_PREFIXES = [
   ".claude/skills/",
   ".github/",
@@ -57,12 +64,24 @@ export async function discoverSkills(
         const { meta } = parseSkillFrontmatter(content)
 
         const dirPath = item.path.replace(/\/SKILL\.md$/i, "")
-        const skillName = dirPath.split("/").pop() || dirPath
+        let skillName = dirPath
+
+        // Strip known directory prefixes to get the skill-relative name
+        for (const prefix of KNOWN_SKILL_DIR_PREFIXES) {
+          if (skillName.startsWith(prefix)) {
+            skillName = skillName.slice(prefix.length)
+            break
+          }
+        }
+
+        const displayName = (meta.name && meta.name !== "Unknown Skill")
+          ? meta.name
+          : skillName.split("/").pop() || skillName
 
         return {
           skillName,
           skillPath: `/${owner}/${repo}/${skillName}`,
-          name: meta.name || skillName,
+          name: displayName,
           description: meta.description || "",
           icon: meta.icon,
         } satisfies DiscoveredSkill

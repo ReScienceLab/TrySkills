@@ -195,5 +195,64 @@ describe("discoverSkills", () => {
     const skills = await discoverSkills("owner", "repo")
     expect(skills).toHaveLength(1)
     expect(skills[0].skillName).toBe("my-skill")
+    expect(skills[0].name).toBe("my-skill")
+  })
+
+  it("preserves full skill path for nested directories", async () => {
+    mockGithubFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        tree: [
+          { path: "skills/category/sub-skill/SKILL.md", type: "blob" },
+          { path: "deep/nested/skill/SKILL.md", type: "blob" },
+        ],
+      }),
+    })
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => "---\nname: Sub Skill\ndescription: Nested\n---\n",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => "---\nname: Deep Skill\ndescription: Deep\n---\n",
+      })
+
+    const skills = await discoverSkills("owner", "repo")
+    expect(skills).toHaveLength(2)
+    const sub = skills.find((s) => s.name === "Sub Skill")
+    const deep = skills.find((s) => s.name === "Deep Skill")
+    expect(sub?.skillPath).toBe("/owner/repo/category/sub-skill")
+    expect(deep?.skillPath).toBe("/owner/repo/deep/nested/skill")
+  })
+
+  it("strips known skill directory prefixes", async () => {
+    mockGithubFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        tree: [
+          { path: "skills/baoyu-comic/SKILL.md", type: "blob" },
+          { path: ".agents/skills/polish/SKILL.md", type: "blob" },
+        ],
+      }),
+    })
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => "---\nname: Comic\ndescription: Comics\n---\n",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => "---\nname: Polish\ndescription: Polish\n---\n",
+      })
+
+    const skills = await discoverSkills("owner", "repo")
+    expect(skills).toHaveLength(2)
+    const comic = skills.find((s) => s.name === "Comic")
+    const polish = skills.find((s) => s.name === "Polish")
+    expect(comic?.skillPath).toBe("/owner/repo/baoyu-comic")
+    expect(polish?.skillPath).toBe("/owner/repo/polish")
   })
 })
