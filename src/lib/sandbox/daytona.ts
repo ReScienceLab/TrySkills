@@ -39,6 +39,12 @@ async function discoverSkillsOnDisk(sandbox: any): Promise<string[]> {
   }
 }
 
+export interface SkillSource {
+  owner: string
+  repo: string
+  skillName: string
+}
+
 export interface SkillFile {
   path: string;
   content: string;
@@ -133,9 +139,59 @@ function sanitizeSkillDir(skillName: string): string {
   return skillName.replace(/\//g, "--");
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function cloneSkillOnSandbox(
+  sandbox: any,
+  source: SkillSource,
+  destDir: string,
+  log: (label: string) => void,
+): Promise<boolean> {
+  const { owner, repo, skillName } = source
+  const candidates = [
+    skillName,
+    `skills/${skillName}`,
+    `.agents/skills/${skillName}`,
+    `.claude/skills/${skillName}`,
+    `plugin/skills/${skillName}`,
+  ]
+  const candidateChecks = candidates.map((c) => `[ -f "$TMP/${c}/SKILL.md" -o -f "$TMP/${c}/skill.md" ] && echo "${c}"`).join("\n")
+
+  const script = `set -e
+DEST="${HERMES_HOME}/skills/${destDir}"
+REPO="https://github.com/${owner}/${repo}.git"
+TMP=$(mktemp -d)
+git clone --depth 1 --filter=blob:none --sparse "$REPO" "$TMP" 2>/dev/null
+cd "$TMP"
+git sparse-checkout set ${candidates.map((c) => `"${c}"`).join(" ")} 2>/dev/null || true
+FOUND=$(
+${candidateChecks}
+)
+FOUND=$(echo "$FOUND" | head -1)
+if [ -z "$FOUND" ]; then
+  rm -rf "$TMP"
+  exit 1
+fi
+rm -rf "$DEST"
+mkdir -p "$DEST"
+cp -r "$TMP/$FOUND"/. "$DEST/"
+rm -rf "$TMP"
+exit 0`
+
+  try {
+    const result = await sandbox.process.executeCommand(script)
+    const ok = result.exitCode === 0
+    log(`cloneSkill ${ok ? "succeeded" : "failed"} (dest=${destDir})`)
+    return ok
+  } catch {
+    log("cloneSkill threw exception")
+    return false
+  }
+}
+
 export async function createHermesSandbox(
   config: SandboxConfig,
   skillName: string,
+  skillSource: SkillSource,
   skillFiles: SkillFile[],
   onProgress: (step: SandboxState, meta?: { usedSnapshot?: boolean }) => void,
   userId?: string,
@@ -272,12 +328,16 @@ export async function createHermesSandbox(
   }
 
   onProgress("uploading");
-  log("uploading skill files");
-  for (const file of skillFiles) {
-    const destPath = `${HERMES_HOME}/skills/${sanitizeSkillDir(skillName)}/${file.path}`;
-    const dir = destPath.substring(0, destPath.lastIndexOf("/"));
-    await sandbox.process.executeCommand(`mkdir -p "${dir}"`).catch(() => {});
-    await sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
+  const destDir = sanitizeSkillDir(skillName)
+  const cloned = await cloneSkillOnSandbox(sandbox, skillSource, destDir, log)
+  if (!cloned && skillFiles.length > 0) {
+    log("clone failed, falling back to file upload")
+    for (const file of skillFiles) {
+      const destPath = `${HERMES_HOME}/skills/${destDir}/${file.path}`
+      const dir = destPath.substring(0, destPath.lastIndexOf("/"))
+      await sandbox.process.executeCommand(`mkdir -p "${dir}"`).catch(() => {})
+      await sandbox.fs.uploadFile(Buffer.from(file.content), destPath)
+    }
   }
 
   onProgress("starting");
@@ -325,6 +385,7 @@ export async function installSkill(
   config: SandboxConfig,
   sandboxId: string,
   skillName: string,
+  skillSource: SkillSource,
   skillFiles: SkillFile[],
   onProgress: (step: SandboxState) => void,
   options?: {
@@ -365,13 +426,7 @@ export async function installSkill(
   const providerMapping = resolveProviderMapping(config.llmProvider);
 
   onProgress("uploading");
-  log(`uploading (skipConfig=${!!options?.skipConfigWrite}, files=${skillFiles.length})`);
-
-  // Batch ALL mkdir into one command, then parallel uploads
-  const allDirs = [...new Set(skillFiles.map((f) => {
-    const destPath = `${HERMES_HOME}/skills/${sanitizeSkillDir(skillName)}/${f.path}`;
-    return destPath.substring(0, destPath.lastIndexOf("/"));
-  }))];
+  log(`installing (skipConfig=${!!options?.skipConfigWrite})`)
 
   const setupTasks: Promise<unknown>[] = [];
   if (!options?.skipConfigWrite) {
@@ -384,23 +439,28 @@ export async function installSkill(
       ).catch(() => {}),
     );
   }
-  // One mkdir for ALL directories (batched)
-  if (allDirs.length > 0) {
-    setupTasks.push(
-      sandbox.process.executeCommand(`mkdir -p ${allDirs.map((d) => `"${d}"`).join(" ")}`).catch(() => {}),
-    );
-  }
   await Promise.all(setupTasks);
-  log("setup done (mkdir + config)");
+  log("config done");
 
-  // Pure parallel file uploads (no per-file mkdir)
-  await Promise.all(
-    skillFiles.map((file) => {
-      const destPath = `${HERMES_HOME}/skills/${sanitizeSkillDir(skillName)}/${file.path}`;
-      return sandbox.fs.uploadFile(Buffer.from(file.content), destPath);
-    }),
-  );
-  log("files uploaded");
+  const destDir = sanitizeSkillDir(skillName)
+  const cloned = await cloneSkillOnSandbox(sandbox, skillSource, destDir, log)
+  if (!cloned && skillFiles.length > 0) {
+    log("clone failed, falling back to file upload")
+    const allDirs = [...new Set(skillFiles.map((f) => {
+      const destPath = `${HERMES_HOME}/skills/${destDir}/${f.path}`
+      return destPath.substring(0, destPath.lastIndexOf("/"))
+    }))]
+    if (allDirs.length > 0) {
+      await sandbox.process.executeCommand(`mkdir -p ${allDirs.map((d) => `"${d}"`).join(" ")}`).catch(() => {})
+    }
+    await Promise.all(
+      skillFiles.map((file) => {
+        const destPath = `${HERMES_HOME}/skills/${destDir}/${file.path}`
+        return sandbox.fs.uploadFile(Buffer.from(file.content), destPath)
+      }),
+    )
+  }
+  log("skill installed");
 
   const hermesCmd = `$(test -f /opt/hermes-agent/venv/bin/hermes && echo /opt/hermes-agent/venv/bin/hermes || echo ${HERMES_HOME}/hermes-agent/venv/bin/hermes)`;
 

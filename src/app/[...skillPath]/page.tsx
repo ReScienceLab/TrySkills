@@ -24,7 +24,7 @@ import { ChatPanel } from "@/components/chat/chat-panel";
 import { GlowMesh } from "@/components/glow-mesh";
 import { SiteHeader } from "@/components/site-header";
 import { resolveSkillPath, fetchSkillDirectory, fetchSkillContent } from "@/lib/skill/resolver";
-import { createHermesSandbox, destroySandbox, installSkill } from "@/lib/sandbox/daytona";
+import { createHermesSandbox, destroySandbox, installSkill, type SkillSource } from "@/lib/sandbox/daytona";
 import { useKeyStore } from "@/hooks/use-key-store";
 import { useHeartbeat } from "@/hooks/use-heartbeat";
 import { getProvider } from "@/lib/providers/registry";
@@ -189,7 +189,8 @@ export default function SkillPage({
       setSandboxState(isStopped ? "starting" : "uploading");
 
       try {
-        const skillFiles = await fetchSkillDirectory(resolved);
+        const skillSource: SkillSource = { owner, repo, skillName }
+        const skillFiles = await fetchSkillDirectory(resolved)
         if (abort.signal.aborted) return;
 
         const result = await installSkill(
@@ -202,6 +203,7 @@ export default function SkillPage({
           },
           sandbox.sandboxId,
           skillPathStr,
+          skillSource,
           skillFiles,
           (step) => {
             if (abort.signal.aborted) return;
@@ -285,6 +287,7 @@ export default function SkillPage({
     setSandboxState("creating");
 
     try {
+      const skillSource: SkillSource = { owner, repo, skillName }
       const skillFiles = await fetchSkillDirectory(resolved);
       if (abort.signal.aborted) {
         removeSandboxRecord({ sandboxId: placeholderId }).catch(() => {});
@@ -300,6 +303,7 @@ export default function SkillPage({
           envVars: config.envVars,
         },
         skillPathStr,
+        skillSource,
         skillFiles,
         (step, meta) => {
           if (abort.signal.aborted) return;

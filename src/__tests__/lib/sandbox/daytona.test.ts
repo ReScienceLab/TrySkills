@@ -28,7 +28,7 @@ vi.mock("@daytona/sdk", () => {
   };
 });
 
-import { createHermesSandbox, destroySandbox, installSkill, type SkillFile } from "@/lib/sandbox/daytona";
+import { createHermesSandbox, destroySandbox, installSkill, type SkillFile, type SkillSource } from "@/lib/sandbox/daytona";
 import type { SandboxConfig, SandboxState } from "@/lib/sandbox/types";
 
 describe("sandbox/daytona", () => {
@@ -50,6 +50,12 @@ describe("sandbox/daytona", () => {
     { path: "SKILL.md", content: "---\nname: test\n---\n# Test" },
   ];
 
+  const testSkillSource: SkillSource = {
+    owner: "test-owner",
+    repo: "test-repo",
+    skillName: "test-skill",
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockCreate.mockResolvedValue(mockSandbox);
@@ -68,6 +74,7 @@ describe("sandbox/daytona", () => {
     const session = await createHermesSandbox(
       testConfig,
       "test-skill",
+      testSkillSource,
       testSkillFiles,
       (step) => progress.push(step),
     );
@@ -95,6 +102,7 @@ describe("sandbox/daytona", () => {
     await createHermesSandbox(
       testConfig,
       "test-skill",
+      testSkillSource,
       testSkillFiles,
       () => {},
       "user-123",
@@ -121,6 +129,7 @@ describe("sandbox/daytona", () => {
     const session = await createHermesSandbox(
       testConfig,
       "test-skill",
+      testSkillSource,
       testSkillFiles,
       (step) => progress.push(step),
     );
@@ -136,6 +145,7 @@ describe("sandbox/daytona", () => {
     await createHermesSandbox(
       testConfig,
       "test-skill",
+      testSkillSource,
       testSkillFiles,
       (step) => progress.push(step),
     );
@@ -149,7 +159,7 @@ describe("sandbox/daytona", () => {
   });
 
   it("links pre-installed agent from /opt on snapshot path", async () => {
-    await createHermesSandbox(testConfig, "my-skill", testSkillFiles, () => {});
+    await createHermesSandbox(testConfig, "my-skill", testSkillSource, testSkillFiles, () => {});
 
     const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
     const linkCmd = allCmds.find((c: string) => c.includes("/opt/hermes-agent"));
@@ -159,10 +169,38 @@ describe("sandbox/daytona", () => {
     expect(installCmd).toBeUndefined();
   });
 
-  it("uploads skill files to /root/.hermes/skills/", async () => {
+  it("clones skill from GitHub on sandbox (primary path)", async () => {
     await createHermesSandbox(
       testConfig,
       "my-skill",
+      testSkillSource,
+      [
+        { path: "SKILL.md", content: "# Skill" },
+      ],
+      () => {},
+    );
+
+    const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
+    const cloneCmd = allCmds.find((c: string) => c.includes("git clone"));
+    expect(cloneCmd).toBeDefined();
+    expect(cloneCmd).toContain("test-owner/test-repo");
+    // Upload should NOT be called when clone succeeds
+    expect(mockUploadFile).not.toHaveBeenCalled();
+  });
+
+  it("falls back to file upload when clone fails", async () => {
+    // Make clone script return exit code 1
+    mockExecuteCommand.mockImplementation((cmd: string) => {
+      if (typeof cmd === "string" && cmd.includes("git clone")) {
+        return Promise.resolve({ exitCode: 1, result: "" });
+      }
+      return Promise.resolve({ exitCode: 0, result: "" });
+    });
+
+    await createHermesSandbox(
+      testConfig,
+      "my-skill",
+      testSkillSource,
       [
         { path: "SKILL.md", content: "# Skill" },
         { path: "scripts/setup.sh", content: "#!/bin/bash" },
@@ -190,6 +228,7 @@ describe("sandbox/daytona", () => {
       await createHermesSandbox(
         { ...testConfig, llmProvider: providerId, llmApiKey: "test-key" },
         "test",
+        testSkillSource,
         testSkillFiles,
         () => {},
       );
@@ -214,6 +253,7 @@ describe("sandbox/daytona", () => {
       await createHermesSandbox(
         { ...testConfig, llmProvider: providerId, llmApiKey: "test-key" },
         "test",
+        testSkillSource,
         testSkillFiles,
         () => {},
       );
@@ -235,6 +275,7 @@ describe("sandbox/daytona", () => {
       await createHermesSandbox(
         { ...testConfig, llmProvider: providerId, llmApiKey: "test-key" },
         "test",
+        testSkillSource,
         testSkillFiles,
         () => {},
       );
@@ -251,7 +292,7 @@ describe("sandbox/daytona", () => {
   });
 
   it("starts gateway from /opt on snapshot path", async () => {
-    await createHermesSandbox(testConfig, "test", testSkillFiles, () => {});
+    await createHermesSandbox(testConfig, "test", testSkillSource, testSkillFiles, () => {});
 
     const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
     const gwCmd = allCmds.find((c: string) => c.includes("hermes") && c.includes("gateway"));
@@ -273,6 +314,7 @@ describe("sandbox/daytona", () => {
     await createHermesSandbox(
       configWithEnvVars,
       "test-skill",
+      testSkillSource,
       testSkillFiles,
       () => {},
     );
@@ -297,7 +339,7 @@ describe("sandbox/daytona", () => {
   });
 
   it("gets signed preview URL on gateway port 8642", async () => {
-    await createHermesSandbox(testConfig, "test", testSkillFiles, () => {});
+    await createHermesSandbox(testConfig, "test", testSkillSource, testSkillFiles, () => {});
     expect(mockGetSignedPreviewUrl).toHaveBeenCalledWith(8642, 3600);
   });
 
@@ -312,6 +354,7 @@ describe("sandbox/daytona", () => {
     const session = await createHermesSandbox(
       testConfig,
       "test",
+      testSkillSource,
       testSkillFiles,
       () => {},
     );
@@ -326,7 +369,7 @@ describe("sandbox/daytona", () => {
 
   describe("destroySandbox", () => {
     it("deletes sandbox via active reference", async () => {
-      await createHermesSandbox(testConfig, "test", testSkillFiles, () => {});
+      await createHermesSandbox(testConfig, "test", testSkillSource, testSkillFiles, () => {});
 
       await destroySandbox("test-daytona-key", "sb-test-123");
       expect(mockDelete).toHaveBeenCalled();
@@ -335,7 +378,7 @@ describe("sandbox/daytona", () => {
     it("falls back to get+delete for unknown sandbox", async () => {
       mockGet.mockResolvedValue(mockSandbox);
 
-      await createHermesSandbox(testConfig, "test", testSkillFiles, () => {});
+      await createHermesSandbox(testConfig, "test", testSkillSource, testSkillFiles, () => {});
       await destroySandbox("test-daytona-key", "sb-test-123");
 
       await destroySandbox("test-key", "sb-unknown-456");
@@ -360,6 +403,7 @@ describe("sandbox/daytona", () => {
         testConfig,
         "sb-test-123",
         "new-skill",
+        testSkillSource,
         [{ path: "SKILL.md", content: "# New" }],
         (step) => progress.push(step),
       );
@@ -368,8 +412,9 @@ describe("sandbox/daytona", () => {
       expect(session.sandboxId).toBe("sb-test-123");
 
       const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
-      // Should NOT clean old skills (additive install)
-      expect(allCmds.every((c: string) => !c.includes("rm -rf"))).toBe(true);
+      // Clone should be attempted
+      const cloneCmd = allCmds.find((c: string) => c.includes("git clone"));
+      expect(cloneCmd).toBeDefined();
       // Should restart gateway after config rewrite so new env vars take effect
       const gwCmd = allCmds.find((c: string) => c.includes("hermes") && c.includes("gateway"));
       expect(gwCmd).toBeDefined();
@@ -379,7 +424,7 @@ describe("sandbox/daytona", () => {
       mockGet.mockResolvedValue({ ...mockSandbox, state: "error" });
 
       await expect(
-        installSkill(testConfig, "sb-test-123", "test", testSkillFiles, () => {}),
+        installSkill(testConfig, "sb-test-123", "test", testSkillSource, testSkillFiles, () => {}),
       ).rejects.toThrow("unexpected state");
     });
   });
