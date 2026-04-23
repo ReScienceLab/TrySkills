@@ -15,12 +15,17 @@ const COLD_RESOURCES = { cpu: 2, memory: 4, disk: 10 };
 const HERMES_HOME = "/root/.hermes";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getCommandOutput(result: any): string {
+  return (result.result?.output ?? result.output ?? result.result ?? "").toString().trim()
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function discoverSkillsOnDisk(sandbox: any): Promise<string[]> {
   try {
     const result = await sandbox.process.executeCommand(
       `for d in ${HERMES_HOME}/skills/*/; do [ -f "$d/SKILL.md" ] && basename "$d"; done 2>/dev/null || true`,
     )
-    const output = (result.result?.output ?? result.output ?? "").trim()
+    const output = getCommandOutput(result)
     if (!output) return []
     return output
       .split("\n")
@@ -166,7 +171,7 @@ async function npxSkillsInstall(
   const cmd = `npx -y skills add ${owner}/${repo} --skill "${leafName}" --agent universal -g -y --copy 2>&1`
   const result = await sandbox.process.executeCommand(cmd)
   if (result.exitCode !== 0) {
-    const output = result.result || ""
+    const output = getCommandOutput(result)
     throw new Error(`npx skills add failed (exit ${result.exitCode}): ${output.slice(0, 200)}`)
   }
   log("npx skills add succeeded")
