@@ -1,6 +1,5 @@
 import type { SandboxConfig, SandboxSession, SandboxState } from "./types";
 import { getProviderData } from "@/lib/providers/provider-data";
-import { fetchSkillDirectory, type ResolvedSkill } from "@/lib/skill/resolver";
 
 const SNAPSHOT_NAME = process.env.NEXT_PUBLIC_HERMES_SNAPSHOT || "hermes-ready";
 const HERMES_IMAGE = process.env.NEXT_PUBLIC_HERMES_IMAGE || "ghcr.io/resciencelab/hermes-ready:latest";
@@ -44,11 +43,6 @@ export interface SkillSource {
   owner: string
   repo: string
   skillName: string
-}
-
-export interface SkillFile {
-  path: string;
-  content: string;
 }
 
 function resolveProviderMapping(llmProvider: string) {
@@ -148,69 +142,39 @@ function shellSafe(value: string): string | null {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function cloneSkillOnSandbox(
+async function npxSkillsInstall(
   sandbox: any,
   source: SkillSource,
   destDir: string,
   log: (label: string) => void,
-): Promise<boolean> {
+): Promise<void> {
   const owner = shellSafe(source.owner)
   const repo = shellSafe(source.repo)
   const skill = shellSafe(source.skillName)
   const safeDest = shellSafe(destDir)
   if (!owner || !repo || !skill || !safeDest) {
-    log("cloneSkill skipped: unsafe characters in source")
-    return false
+    throw new Error("Unsafe characters in skill source")
   }
 
-  const candidates = [
-    skill,
-    `skills/${skill}`,
-    `${repo}/${skill}`,
-    `.agents/skills/${skill}`,
-    `.claude/skills/${skill}`,
-    `plugin/skills/${skill}`,
-    `plugins/${owner}/skills/${skill}`,
-  ]
-  const candidateChecks = candidates.map((c) => `[ -f "$TMP/${c}/SKILL.md" -o -f "$TMP/${c}/skill.md" ] && echo "${c}"`).join("\n")
-
-  const script = `set -e
-DEST="${HERMES_HOME}/skills/${safeDest}"
-REPO="https://github.com/${owner}/${repo}.git"
-TMP=$(mktemp -d)
-git clone --depth 1 --filter=blob:none --sparse "$REPO" "$TMP" 2>/dev/null
-cd "$TMP"
-git sparse-checkout set ${candidates.map((c) => `"${c}"`).join(" ")} 2>/dev/null || true
-FOUND=$(
-${candidateChecks}
-)
-FOUND=$(echo "$FOUND" | head -1)
-if [ -z "$FOUND" ]; then
-  rm -rf "$TMP"
-  exit 1
-fi
-rm -rf "$DEST"
-mkdir -p "$DEST"
-cp -r "$TMP/$FOUND"/. "$DEST/"
-rm -rf "$TMP"
-exit 0`
-
-  try {
-    const result = await sandbox.process.executeCommand(script)
-    const ok = result.exitCode === 0
-    log(`cloneSkill ${ok ? "succeeded" : "failed"} (dest=${destDir})`)
-    return ok
-  } catch {
-    log("cloneSkill threw exception")
-    return false
+  const cmd = `npx -y skills add ${owner}/${repo} --skill "${skill}" --agent universal -g -y --copy 2>&1`
+  const result = await sandbox.process.executeCommand(cmd)
+  if (result.exitCode !== 0) {
+    const output = result.result || ""
+    throw new Error(`npx skills add failed (exit ${result.exitCode}): ${output.slice(0, 200)}`)
   }
+  log("npx skills add succeeded")
+
+  // Symlink from ~/.agents/skills/{skill} to ~/.hermes/skills/{destDir}
+  await sandbox.process.executeCommand(
+    `ln -sfn /root/.agents/skills/${skill} ${HERMES_HOME}/skills/${safeDest}`
+  )
+  log("symlinked to hermes skills dir")
 }
 
 export async function createHermesSandbox(
   config: SandboxConfig,
   skillName: string,
   skillSource: SkillSource,
-  resolved: ResolvedSkill,
   onProgress: (step: SandboxState, meta?: { usedSnapshot?: boolean }) => void,
   userId?: string,
 ): Promise<SandboxSession & { usedSnapshot: boolean }> {
@@ -347,17 +311,7 @@ export async function createHermesSandbox(
 
   onProgress("uploading");
   const destDir = sanitizeSkillDir(skillName)
-  const cloned = await cloneSkillOnSandbox(sandbox, skillSource, destDir, log)
-  if (!cloned) {
-    log("clone failed, falling back to browser fetch + upload")
-    const skillFiles = await fetchSkillDirectory(resolved)
-    for (const file of skillFiles) {
-      const destPath = `${HERMES_HOME}/skills/${destDir}/${file.path}`
-      const dir = destPath.substring(0, destPath.lastIndexOf("/"))
-      await sandbox.process.executeCommand(`mkdir -p "${dir}"`).catch(() => {})
-      await sandbox.fs.uploadFile(Buffer.from(file.content), destPath)
-    }
-  }
+  await npxSkillsInstall(sandbox, skillSource, destDir, log)
 
   onProgress("starting");
   log("skill files uploaded, starting gateway");
@@ -405,7 +359,6 @@ export async function installSkill(
   sandboxId: string,
   skillName: string,
   skillSource: SkillSource,
-  resolved: ResolvedSkill,
   onProgress: (step: SandboxState) => void,
   options?: {
     skipConfigWrite?: boolean;
@@ -462,24 +415,7 @@ export async function installSkill(
   log("config done");
 
   const destDir = sanitizeSkillDir(skillName)
-  const cloned = await cloneSkillOnSandbox(sandbox, skillSource, destDir, log)
-  if (!cloned) {
-    log("clone failed, falling back to browser fetch + upload")
-    const skillFiles = await fetchSkillDirectory(resolved)
-    const allDirs = [...new Set(skillFiles.map((f) => {
-      const destPath = `${HERMES_HOME}/skills/${destDir}/${f.path}`
-      return destPath.substring(0, destPath.lastIndexOf("/"))
-    }))]
-    if (allDirs.length > 0) {
-      await sandbox.process.executeCommand(`mkdir -p ${allDirs.map((d) => `"${d}"`).join(" ")}`).catch(() => {})
-    }
-    await Promise.all(
-      skillFiles.map((file) => {
-        const destPath = `${HERMES_HOME}/skills/${destDir}/${file.path}`
-        return sandbox.fs.uploadFile(Buffer.from(file.content), destPath)
-      }),
-    )
-  }
+  await npxSkillsInstall(sandbox, skillSource, destDir, log)
   log("skill installed");
 
   const hermesCmd = `$(test -f /opt/hermes-agent/venv/bin/hermes && echo /opt/hermes-agent/venv/bin/hermes || echo ${HERMES_HOME}/hermes-agent/venv/bin/hermes)`;

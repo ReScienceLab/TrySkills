@@ -203,7 +203,6 @@ export default function SkillPage({
           sandbox.sandboxId,
           skillPathStr,
           skillSource,
-          resolved,
           (step) => {
             if (abort.signal.aborted) return;
             setSandboxState(step as SandboxState);
@@ -302,7 +301,6 @@ export default function SkillPage({
         },
         skillPathStr,
         skillSource,
-        resolved,
         (step, meta) => {
           if (abort.signal.aborted) return;
           setSandboxState(step as SandboxState);
