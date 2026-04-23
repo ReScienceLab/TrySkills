@@ -4,9 +4,11 @@ import { useState } from "react";
 import Image from "next/image";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
-import { parseSkillUrl } from "@/lib/skill/url-parser";
+import { parseSkillUrl, parseRepoUrl } from "@/lib/skill/url-parser";
 import { fetchSkillTree, type TreeNode } from "@/lib/skill/tree";
+import { discoverSkills, type DiscoveredSkill } from "@/lib/skill/discovery";
 import { SkillTree } from "@/components/skill-tree";
+import { SkillPicker } from "@/components/skill-picker";
 import { GlowMesh } from "@/components/glow-mesh";
 import { SiteHeader } from "@/components/site-header";
 import { GitHubRateLimitError } from "@/lib/github-fetch";
@@ -82,7 +84,7 @@ function Footer() {
 export default function Home() {
   const { isSignedIn, isLoaded: authLoaded } = useAuth();
   const [url, setUrl] = useState("");
-  const [phase, setPhase] = useState<"input" | "tree">("input");
+  const [phase, setPhase] = useState<"input" | "tree" | "repo">("input");
   const [urlError, setUrlError] = useState<string | null>(null);
   const [parsedPath, setParsedPath] = useState<string | null>(null);
   const [treeData, setTreeData] = useState<TreeNode[] | null>(null);
@@ -90,6 +92,11 @@ export default function Home() {
   const [treeLoading, setTreeLoading] = useState(false);
   const [treeError, setTreeError] = useState<string | null>(null);
   const [isRateLimited, setIsRateLimited] = useState(false);
+  const [repoOwner, setRepoOwner] = useState("");
+  const [repoName, setRepoName] = useState("");
+  const [repoSkills, setRepoSkills] = useState<DiscoveredSkill[] | null>(null);
+  const [repoLoading, setRepoLoading] = useState(false);
+  const [repoError, setRepoError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,42 +104,116 @@ export default function Home() {
     setUrlError(null);
 
     const parsed = parseSkillUrl(url);
-    if (!parsed) {
-      setUrlError(
-        "Invalid URL. Supported formats: skills.sh/owner/repo/skill, GitHub tree URL, or owner/repo/skill",
-      );
+    if (parsed) {
+      setParsedPath(parsed);
+
+      const segments = parsed.split("/").filter(Boolean);
+      const owner = segments[0];
+      const repo = segments[1];
+      const skillName = segments.slice(2).join("/");
+
+      setPhase("tree");
+      setTreeLoading(true);
+      setTreeError(null);
+      setTreeData(null);
+
+      try {
+        const result = await fetchSkillTree(owner, repo, skillName);
+        if (result) {
+          setTreeData(result.tree);
+          setTreeResolvedPath(result.resolvedPath);
+        } else {
+          setTreeError("Could not find skill directory in repository. The skill may still work — proceed to configure.");
+        }
+      } catch (err) {
+        if (err instanceof GitHubRateLimitError) {
+          setIsRateLimited(true);
+          setTreeError(err.message);
+        } else {
+          setTreeError("Failed to fetch skill structure. The skill may still work — proceed to configure.");
+        }
+      } finally {
+        setTreeLoading(false);
+      }
       return;
     }
-    setParsedPath(parsed);
 
-    const segments = parsed.split("/").filter(Boolean);
+    const repoInfo = parseRepoUrl(url);
+    if (repoInfo) {
+      setRepoOwner(repoInfo.owner);
+      setRepoName(repoInfo.repo);
+      setPhase("repo");
+      setRepoLoading(true);
+      setRepoError(null);
+      setRepoSkills(null);
+
+      try {
+        const skills = await discoverSkills(repoInfo.owner, repoInfo.repo);
+        if (skills.length === 1) {
+          window.location.href = skills[0].skillPath;
+          return;
+        }
+        setRepoSkills(skills);
+      } catch (err) {
+        if (err instanceof GitHubRateLimitError) {
+          setIsRateLimited(true);
+          setRepoError(err.message);
+        } else {
+          setRepoError("Failed to scan repository for skills.");
+        }
+      } finally {
+        setRepoLoading(false);
+      }
+      return;
+    }
+
+    setUrlError(
+      "Invalid URL. Supported formats: github.com/owner/repo, skills.sh/owner/repo/skill, or owner/repo/skill",
+    );
+  };
+
+  const handleSkillSelect = (skill: DiscoveredSkill) => {
+    setParsedPath(skill.skillPath);
+
+    const segments = skill.skillPath.split("/").filter(Boolean);
     const owner = segments[0];
     const repo = segments[1];
-    const skillName = segments.slice(2).join("/");
+    const selectedSkillName = segments.slice(2).join("/");
 
     setPhase("tree");
     setTreeLoading(true);
     setTreeError(null);
     setTreeData(null);
 
-    try {
-      const result = await fetchSkillTree(owner, repo, skillName);
-      if (result) {
-        setTreeData(result.tree);
-        setTreeResolvedPath(result.resolvedPath);
-      } else {
-        setTreeError("Could not find skill directory in repository. The skill may still work — proceed to configure.");
-      }
-    } catch (err) {
-      if (err instanceof GitHubRateLimitError) {
-        setIsRateLimited(true);
-        setTreeError(err.message);
-      } else {
-        setTreeError("Failed to fetch skill structure. The skill may still work — proceed to configure.");
-      }
-    } finally {
-      setTreeLoading(false);
-    }
+    fetchSkillTree(owner, repo, selectedSkillName)
+      .then((result) => {
+        if (result) {
+          setTreeData(result.tree);
+          setTreeResolvedPath(result.resolvedPath);
+        } else {
+          setTreeError("Could not find skill directory in repository. The skill may still work — proceed to configure.");
+        }
+      })
+      .catch((err) => {
+        if (err instanceof GitHubRateLimitError) {
+          setIsRateLimited(true);
+          setTreeError(err.message);
+        } else {
+          setTreeError("Failed to fetch skill structure. The skill may still work — proceed to configure.");
+        }
+      })
+      .finally(() => {
+        setTreeLoading(false);
+      });
+  };
+
+  const resetToInput = () => {
+    setPhase("input");
+    setTreeData(null);
+    setTreeError(null);
+    setRepoSkills(null);
+    setRepoError(null);
+    setIsRateLimited(false);
   };
 
   const skillName = parsedPath?.split("/").filter(Boolean).slice(2).join("/") || "";
@@ -184,7 +265,7 @@ export default function Home() {
                 type="text"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://skills.sh/owner/repo/skill-name"
+                placeholder="https://github.com/owner/repo or owner/repo/skill"
                 className="flex-1 px-5 py-3.5 text-[#111] text-sm font-mono bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 placeholder:text-gray-400"
               />
               <button
@@ -200,11 +281,49 @@ export default function Home() {
               </div>
             )}
           </form>
+        ) : phase === "repo" ? (
+          <div className="w-full max-w-[800px] animate-fade-in-up space-y-4">
+            <div className="flex items-center justify-between">
+              <button
+                onClick={resetToInput}
+                className="flex items-center gap-2 text-sm text-white/40 hover:text-white/70 transition-colors"
+                aria-label="Go back and change URL"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                </svg>
+                Change URL
+              </button>
+              <span className="font-mono text-xs text-white/30 truncate ml-4">
+                {url}
+              </span>
+            </div>
+
+            <SkillPicker
+              owner={repoOwner}
+              repo={repoName}
+              skills={repoSkills}
+              loading={repoLoading}
+              error={repoError}
+              onSelect={handleSkillSelect}
+            />
+
+            {isRateLimited && !isSignedIn && (
+              <div className="flex items-center gap-3">
+                <SignInButton mode="modal">
+                  <button className="px-3 py-1.5 bg-white text-black text-xs font-medium hover:bg-white/90 transition-colors">
+                    Sign in with GitHub
+                  </button>
+                </SignInButton>
+                <span className="text-xs text-white/30">to increase API limits</span>
+              </div>
+            )}
+          </div>
         ) : phase === "tree" ? (
           <div className="w-full max-w-[640px] animate-fade-in-up space-y-4">
             <div className="flex items-center justify-between">
               <button
-                onClick={() => { setPhase("input"); setTreeData(null); setTreeError(null); setIsRateLimited(false); }}
+                onClick={resetToInput}
                 className="flex items-center gap-2 text-sm text-white/40 hover:text-white/70 transition-colors"
                 aria-label="Go back and change URL"
               >
