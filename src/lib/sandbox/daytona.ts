@@ -171,7 +171,6 @@ async function cloneSkillOnSandbox(
     `.claude/skills/${skill}`,
     `plugin/skills/${skill}`,
     `plugins/${owner}/skills/${skill}`,
-    `src/skills/${skill}`,
   ]
   const candidateChecks = candidates.map((c) => `[ -f "$TMP/${c}/SKILL.md" -o -f "$TMP/${c}/skill.md" ] && echo "${c}"`).join("\n")
 
@@ -351,16 +350,12 @@ export async function createHermesSandbox(
   const cloned = await cloneSkillOnSandbox(sandbox, skillSource, destDir, log)
   if (!cloned) {
     log("clone failed, falling back to browser fetch + upload")
-    try {
-      const skillFiles = await fetchSkillDirectory(resolved)
-      for (const file of skillFiles) {
-        const destPath = `${HERMES_HOME}/skills/${destDir}/${file.path}`
-        const dir = destPath.substring(0, destPath.lastIndexOf("/"))
-        await sandbox.process.executeCommand(`mkdir -p "${dir}"`).catch(() => {})
-        await sandbox.fs.uploadFile(Buffer.from(file.content), destPath)
-      }
-    } catch (err) {
-      log(`fallback fetch/upload failed: ${err instanceof Error ? err.message : err}`)
+    const skillFiles = await fetchSkillDirectory(resolved)
+    for (const file of skillFiles) {
+      const destPath = `${HERMES_HOME}/skills/${destDir}/${file.path}`
+      const dir = destPath.substring(0, destPath.lastIndexOf("/"))
+      await sandbox.process.executeCommand(`mkdir -p "${dir}"`).catch(() => {})
+      await sandbox.fs.uploadFile(Buffer.from(file.content), destPath)
     }
   }
 
@@ -470,24 +465,20 @@ export async function installSkill(
   const cloned = await cloneSkillOnSandbox(sandbox, skillSource, destDir, log)
   if (!cloned) {
     log("clone failed, falling back to browser fetch + upload")
-    try {
-      const skillFiles = await fetchSkillDirectory(resolved)
-      const allDirs = [...new Set(skillFiles.map((f) => {
-        const destPath = `${HERMES_HOME}/skills/${destDir}/${f.path}`
-        return destPath.substring(0, destPath.lastIndexOf("/"))
-      }))]
-      if (allDirs.length > 0) {
-        await sandbox.process.executeCommand(`mkdir -p ${allDirs.map((d) => `"${d}"`).join(" ")}`).catch(() => {})
-      }
-      await Promise.all(
-        skillFiles.map((file) => {
-          const destPath = `${HERMES_HOME}/skills/${destDir}/${file.path}`
-          return sandbox.fs.uploadFile(Buffer.from(file.content), destPath)
-        }),
-      )
-    } catch (err) {
-      log(`fallback fetch/upload failed: ${err instanceof Error ? err.message : err}`)
+    const skillFiles = await fetchSkillDirectory(resolved)
+    const allDirs = [...new Set(skillFiles.map((f) => {
+      const destPath = `${HERMES_HOME}/skills/${destDir}/${f.path}`
+      return destPath.substring(0, destPath.lastIndexOf("/"))
+    }))]
+    if (allDirs.length > 0) {
+      await sandbox.process.executeCommand(`mkdir -p ${allDirs.map((d) => `"${d}"`).join(" ")}`).catch(() => {})
     }
+    await Promise.all(
+      skillFiles.map((file) => {
+        const destPath = `${HERMES_HOME}/skills/${destDir}/${file.path}`
+        return sandbox.fs.uploadFile(Buffer.from(file.content), destPath)
+      }),
+    )
   }
   log("skill installed");
 
