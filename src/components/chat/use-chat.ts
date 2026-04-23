@@ -6,6 +6,8 @@ import {
   ProviderError,
   type ChatMessage,
   type ToolProgress,
+  type ToolStartEvent,
+  type ToolCompleteEvent,
   type StreamDoneMeta,
 } from "@/lib/sandbox/hermes-api"
 import { checkProviderCredit } from "@/lib/providers/check-credit"
@@ -31,6 +33,10 @@ export interface ToolCall {
   name: string
   emoji?: string
   status: "running" | "done"
+  preview?: string
+  args?: Record<string, string>
+  duration?: number
+  isError?: boolean
 }
 
 const PROVIDER_BILLING_URLS: Record<string, string> = {
@@ -182,6 +188,8 @@ export function useChat(
   const [sessionFailed, setSessionFailed] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(initialSessionId ?? null)
   const [workspacePath, setWorkspacePath] = useState<string | null>(initialWorkspacePath ?? null)
+  const [thinkingText, setThinkingText] = useState("")
+  const [isThinking, setIsThinking] = useState(false)
 
   const cancelRef = useRef<(() => void) | null>(null)
   const initRef = useRef(false)
@@ -197,9 +205,18 @@ export function useChat(
   const createSession = useMutation(api.chatSessions.create)
   const appendMessages = useMutation(api.chatSessions.appendMessages)
 
+  const thinkingRef = useRef("")
+
   const handleError = useCallback(
     (err: Error) => {
       setIsStreaming(false)
+      setIsThinking(false)
+      setToolCalls((prev) => {
+        for (const t of prev.filter((tc) => tc.status === "running")) {
+          onToolCompleteRef.current?.(t.name)
+        }
+        return prev.map((t) => ({ ...t, status: "done" as const }))
+      })
       setError(classifyError(err, providerId))
     },
     [providerId],
@@ -245,6 +262,9 @@ export function useChat(
       if (!gatewayBaseUrl) return
 
       currentContentRef.current = ""
+      thinkingRef.current = ""
+      setThinkingText("")
+      setIsThinking(false)
       turnIdRef.current++
       setIsStreaming(true)
       setError(null)
@@ -278,6 +298,11 @@ export function useChat(
               return [...prev, { role: "assistant", content: currentContentRef.current }]
             })
           },
+          onReasoning: (text) => {
+            thinkingRef.current += text
+            setThinkingText(thinkingRef.current)
+            setIsThinking(true)
+          },
           onToolProgress: (tool: ToolProgress) => {
             setToolCalls((prev) => {
               const running = prev.filter((t) => t.status === "running")
@@ -291,8 +316,60 @@ export function useChat(
                 { name: tool.tool, emoji: tool.emoji, status: "running" },
               ]
             })
+            setIsThinking(false)
+          },
+          onToolStart: (tool: ToolStartEvent) => {
+            setToolCalls((prev) => {
+              const running = prev.filter((t) => t.status === "running")
+              for (const t of running) {
+                onToolCompleteRef.current?.(t.name)
+              }
+              return [
+                ...prev.map((t) => t.status === "running" ? { ...t, status: "done" as const } : t),
+                {
+                  name: tool.name,
+                  status: "running" as const,
+                  preview: tool.preview,
+                  args: tool.args,
+                },
+              ]
+            })
+            setIsThinking(false)
+          },
+          onToolComplete: (tool: ToolCompleteEvent) => {
+            setToolCalls((prev) => {
+              const idx = [...prev].reverse().findIndex(
+                (t) => t.status === "running" && (!tool.name || t.name === tool.name)
+              )
+              if (idx === -1) {
+                return [
+                  ...prev,
+                  {
+                    name: tool.name,
+                    status: "done" as const,
+                    preview: tool.preview,
+                    args: tool.args,
+                    duration: tool.duration,
+                    isError: tool.is_error,
+                  },
+                ]
+              }
+              const realIdx = prev.length - 1 - idx
+              const updated = [...prev]
+              updated[realIdx] = {
+                ...updated[realIdx],
+                status: "done" as const,
+                preview: tool.preview || updated[realIdx].preview,
+                args: tool.args || updated[realIdx].args,
+                duration: tool.duration,
+                isError: tool.is_error,
+              }
+              onToolCompleteRef.current?.(updated[realIdx].name)
+              return updated
+            })
           },
           onDone: async (meta) => {
+            setIsThinking(false)
             setToolCalls((prev) => {
               for (const t of prev.filter((tc) => tc.status === "running")) {
                 onToolCompleteRef.current?.(t.name)
@@ -335,6 +412,13 @@ export function useChat(
       retryTimerRef.current = null
     }
     setIsStreaming(false)
+    setIsThinking(false)
+    setToolCalls((prev) => {
+      for (const t of prev.filter((tc) => tc.status === "running")) {
+        onToolCompleteRef.current?.(t.name)
+      }
+      return prev.map((t) => ({ ...t, status: "done" as const }))
+    })
     setMessages((prev) =>
       prev.length > 0 && prev[prev.length - 1]?.role === "assistant"
         ? prev.slice(0, -1)
@@ -440,5 +524,5 @@ export function useChat(
 
   const isProviderError = error?.type === "credit_error" || error?.type === "auth_error" || error?.type === "rate_limit"
 
-  return { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, workspacePath, send, cancel }
+  return { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, workspacePath, thinkingText, isThinking, send, cancel }
 }

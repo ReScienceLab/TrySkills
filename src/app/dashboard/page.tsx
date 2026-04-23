@@ -205,6 +205,15 @@ export default function DashboardPage() {
                     >
                       {copied ? "✓" : "⎘"}
                     </button>
+                    <a
+                      href={`https://app.daytona.io/dashboard/sandboxes/${sandbox.sandboxId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-white/20 hover:text-white/50 transition-colors shrink-0"
+                      aria-label="Open in Daytona dashboard"
+                    >
+                      ↗
+                    </a>
                   </div>
                   {sandbox.region && (
                     <div>

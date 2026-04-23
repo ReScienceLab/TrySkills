@@ -7,7 +7,7 @@ export type LaunchMode = "hotswap" | "snapshot" | "cold";
 const STEPS: { key: SandboxState; label: string; description: string }[] = [
   { key: "creating", label: "Creating sandbox", description: "Spinning up from snapshot (~5s)" },
   { key: "configuring", label: "Configuring environment", description: "Linking agent runtime and writing config" },
-  { key: "uploading", label: "Uploading skill", description: "Uploading skill files to sandbox" },
+  { key: "uploading", label: "Installing skill", description: "Fetching skill from GitHub" },
   { key: "starting", label: "Starting agent", description: "Launching Hermes Gateway" },
   { key: "running", label: "Ready", description: "Your agent session is live" },
 ];
@@ -16,19 +16,19 @@ const FALLBACK_STEPS: { key: SandboxState; label: string; description: string }[
   { key: "creating", label: "Creating sandbox", description: "Provisioning a secure environment (~10s)" },
   { key: "installing", label: "Installing Hermes Agent", description: "Downloading and configuring agent runtime (~2 min)" },
   { key: "configuring", label: "Configuring environment", description: "Writing config files" },
-  { key: "uploading", label: "Uploading skill", description: "Uploading skill files to sandbox" },
+  { key: "uploading", label: "Installing skill", description: "Fetching skill from GitHub" },
   { key: "starting", label: "Starting agent", description: "Launching Hermes Agent (~30s)" },
   { key: "running", label: "Ready", description: "Your agent session is live" },
 ];
 
 const HOTSWAP_STEPS: { key: SandboxState; label: string; description: string }[] = [
-  { key: "uploading", label: "Installing skill", description: "Uploading skill files (~1s)" },
+  { key: "uploading", label: "Installing skill", description: "Fetching skill from GitHub (~4s)" },
   { key: "running", label: "Ready", description: "Your agent session is live" },
 ];
 
 const HOTSWAP_WAKE_STEPS: { key: SandboxState; label: string; description: string }[] = [
   { key: "starting", label: "Waking sandbox", description: "Resuming stopped sandbox (~5-10s)" },
-  { key: "uploading", label: "Installing skill", description: "Uploading skill files (~1s)" },
+  { key: "uploading", label: "Installing skill", description: "Fetching skill from GitHub (~4s)" },
   { key: "running", label: "Ready", description: "Your agent session is live" },
 ];
 

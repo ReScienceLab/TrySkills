@@ -193,16 +193,22 @@ export async function fetchSkillDirectory(
           return files;
         }
 
+        // Parallel: fetch all files and recurse into all dirs concurrently
+        const tasks: Promise<void>[] = [];
         for (const item of data) {
           if (item.type === "file") {
-            const fileRes = await fetch(item.download_url);
-            if (fileRes.ok) {
-              files.push({ path: item.name, content: await fileRes.text() });
-            }
+            tasks.push(
+              fetch(item.download_url).then(async (fileRes) => {
+                if (fileRes.ok) {
+                  files.push({ path: item.name, content: await fileRes.text() });
+                }
+              }).catch(() => {}),
+            );
           } else if (item.type === "dir") {
-            await fetchDirectoryRecursive(item.url, item.name, files);
+            tasks.push(fetchDirectoryRecursive(item.url, item.name, files));
           }
         }
+        await Promise.all(tasks);
 
         if (files.length > 0) return files;
       } catch (err) {
@@ -233,18 +239,21 @@ export async function fetchSkillDirectory(
           (item) => item.type === "blob" && item.path.startsWith(`${skillDir.path}/`),
         );
         const files: SkillFile[] = [];
-        for (const f of dirFiles) {
-          const relativePath = f.path.slice(skillDir.path.length + 1);
-          const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${f.path}`;
-          try {
-            const res = await fetch(rawUrl);
-            if (res.ok) {
-              files.push({ path: relativePath, content: await res.text() });
+        // Parallel: fetch all file contents concurrently
+        await Promise.all(
+          dirFiles.map(async (f) => {
+            const relativePath = f.path.slice(skillDir.path.length + 1);
+            const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${f.path}`;
+            try {
+              const res = await fetch(rawUrl);
+              if (res.ok) {
+                files.push({ path: relativePath, content: await res.text() });
+              }
+            } catch {
+              // skip
             }
-          } catch {
-            continue;
-          }
-        }
+          }),
+        );
         if (files.length > 0) return files;
       }
     } catch (err) {
@@ -273,15 +282,21 @@ async function fetchDirectoryRecursive(
   const data = await res.json();
   if (!Array.isArray(data)) return;
 
+  // Parallel: fetch all files and recurse into all dirs concurrently
+  const tasks: Promise<void>[] = [];
   for (const item of data) {
     const itemPath = `${relativePath}/${item.name}`;
     if (item.type === "file") {
-      const fileRes = await fetch(item.download_url);
-      if (fileRes.ok) {
-        files.push({ path: itemPath, content: await fileRes.text() });
-      }
+      tasks.push(
+        fetch(item.download_url).then(async (fileRes) => {
+          if (fileRes.ok) {
+            files.push({ path: itemPath, content: await fileRes.text() });
+          }
+        }).catch(() => {}),
+      );
     } else if (item.type === "dir") {
-      await fetchDirectoryRecursive(item.url, itemPath, files);
+      tasks.push(fetchDirectoryRecursive(item.url, itemPath, files));
     }
   }
+  await Promise.all(tasks);
 }

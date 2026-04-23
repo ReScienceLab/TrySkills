@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseSkillUrl } from "@/lib/skill/url-parser";
+import { parseSkillUrl, parseRepoUrl } from "@/lib/skill/url-parser";
 
 describe("parseSkillUrl", () => {
   describe("skills.sh URLs", () => {
@@ -125,6 +125,64 @@ describe("parseSkillUrl", () => {
         .toBe("/owner/repo/skill.v2");
       expect(parseSkillUrl("owner/repo/my_skill"))
         .toBe("/owner/repo/my_skill");
+    });
+  });
+});
+
+describe("parseRepoUrl", () => {
+  describe("GitHub URLs", () => {
+    it("parses https://github.com/owner/repo", () => {
+      expect(parseRepoUrl("https://github.com/JimLiu/baoyu-skills"))
+        .toEqual({ owner: "JimLiu", repo: "baoyu-skills" });
+    });
+
+    it("parses with trailing slash", () => {
+      expect(parseRepoUrl("https://github.com/anthropics/skills/"))
+        .toEqual({ owner: "anthropics", repo: "skills" });
+    });
+
+    it("returns null for repo URL with tree path", () => {
+      expect(parseRepoUrl("https://github.com/owner/repo/tree/main/skills/foo"))
+        .toBeNull();
+    });
+
+    it("returns null for repo URL with blob path", () => {
+      expect(parseRepoUrl("https://github.com/owner/repo/blob/main/README.md"))
+        .toBeNull();
+    });
+  });
+
+  describe("plain paths", () => {
+    it("parses owner/repo (exactly 2 segments)", () => {
+      expect(parseRepoUrl("JimLiu/baoyu-skills"))
+        .toEqual({ owner: "JimLiu", repo: "baoyu-skills" });
+    });
+
+    it("returns null for owner/repo/skill (3+ segments)", () => {
+      expect(parseRepoUrl("owner/repo/skill")).toBeNull();
+    });
+  });
+
+  describe("edge cases", () => {
+    it("returns null for empty input", () => {
+      expect(parseRepoUrl("")).toBeNull();
+    });
+
+    it("returns null for non-GitHub URLs", () => {
+      expect(parseRepoUrl("https://gitlab.com/owner/repo")).toBeNull();
+    });
+
+    it("rejects path traversal", () => {
+      expect(parseRepoUrl("https://github.com/../etc")).toBeNull();
+    });
+
+    it("rejects XSS", () => {
+      expect(parseRepoUrl("<script>alert(1)</script>")).toBeNull();
+    });
+
+    it("trims whitespace", () => {
+      expect(parseRepoUrl("  JimLiu/baoyu-skills  "))
+        .toEqual({ owner: "JimLiu", repo: "baoyu-skills" });
     });
   });
 });

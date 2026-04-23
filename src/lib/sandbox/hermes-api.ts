@@ -9,6 +9,20 @@ export interface ToolProgress {
   label: string
 }
 
+export interface ToolStartEvent {
+  name: string
+  preview?: string
+  args?: Record<string, string>
+}
+
+export interface ToolCompleteEvent {
+  name: string
+  preview?: string
+  args?: Record<string, string>
+  duration?: number
+  is_error?: boolean
+}
+
 export class ProviderError extends Error {
   code: string | number | undefined
   constructor(message: string, code?: string | number) {
@@ -24,7 +38,10 @@ export interface StreamDoneMeta {
 
 export interface StreamCallbacks {
   onDelta: (text: string) => void
+  onReasoning?: (text: string) => void
   onToolProgress: (tool: ToolProgress) => void
+  onToolStart?: (tool: ToolStartEvent) => void
+  onToolComplete?: (tool: ToolCompleteEvent) => void
   onDone: (meta: StreamDoneMeta) => void
   onError: (err: Error) => void
 }
@@ -40,6 +57,10 @@ export function chatStream(
 
   void (async () => {
     let hadContent = false
+    let rawContent = ""
+    let inThinkBlock = false
+    let thinkBuffer = ""
+    let thinkDecided = false
 
     try {
       const res = await fetch("/api/hermes", {
@@ -108,6 +129,35 @@ export function chatStream(
               currentEventType = ""
               continue
             }
+
+            if (currentEventType === "reasoning") {
+              callbacks.onReasoning?.(parsed.text ?? "")
+              currentEventType = ""
+              continue
+            }
+
+            if (currentEventType === "tool") {
+              callbacks.onToolStart?.({
+                name: parsed.name,
+                preview: parsed.preview,
+                args: parsed.args,
+              })
+              currentEventType = ""
+              continue
+            }
+
+            if (currentEventType === "tool_complete") {
+              callbacks.onToolComplete?.({
+                name: parsed.name,
+                preview: parsed.preview,
+                args: parsed.args,
+                duration: parsed.duration,
+                is_error: parsed.is_error,
+              })
+              currentEventType = ""
+              continue
+            }
+
             currentEventType = ""
 
             const finishReason = parsed.choices?.[0]?.finish_reason
@@ -119,6 +169,64 @@ export function chatStream(
 
             const delta = parsed.choices?.[0]?.delta
             if (delta?.content) {
+              rawContent += delta.content
+
+              // <think> tag fallback: only attempt detection once at stream start
+              if (!thinkDecided && !inThinkBlock) {
+                const trimmed = rawContent.trimStart()
+                const TAG = "<think>"
+                if (trimmed.length < TAG.length && TAG.startsWith(trimmed)) {
+                  // Still ambiguous -- could become <think>, keep buffering
+                  continue
+                }
+                if (trimmed.startsWith(TAG)) {
+                  thinkDecided = true
+                  inThinkBlock = true
+                  thinkBuffer = trimmed.slice(TAG.length)
+                  const closeIdx = thinkBuffer.indexOf("</think>")
+                  if (closeIdx !== -1) {
+                    callbacks.onReasoning?.(thinkBuffer.slice(0, closeIdx))
+                    inThinkBlock = false
+                    const remaining = thinkBuffer.slice(closeIdx + 8).replace(/^\s+/, "")
+                    thinkBuffer = ""
+                    if (remaining) {
+                      hadContent = true
+                      callbacks.onDelta(remaining)
+                    }
+                  } else {
+                    callbacks.onReasoning?.(thinkBuffer)
+                  }
+                  continue
+                }
+                // Not a think tag -- flush all buffered rawContent as visible
+                thinkDecided = true
+                hadContent = true
+                callbacks.onDelta(rawContent)
+                continue
+              }
+
+              if (inThinkBlock) {
+                const prevLen = thinkBuffer.length
+                thinkBuffer += delta.content
+                const closeIdx = thinkBuffer.indexOf("</think>")
+                if (closeIdx !== -1) {
+                  // Only emit the new reasoning text from this delta (before </think>)
+                  const newReasoningEnd = Math.max(prevLen, closeIdx)
+                  const unsent = thinkBuffer.slice(prevLen, newReasoningEnd)
+                  if (unsent) callbacks.onReasoning?.(unsent)
+                  inThinkBlock = false
+                  const remaining = thinkBuffer.slice(closeIdx + 8).replace(/^\s+/, "")
+                  thinkBuffer = ""
+                  if (remaining) {
+                    hadContent = true
+                    callbacks.onDelta(remaining)
+                  }
+                } else {
+                  callbacks.onReasoning?.(delta.content)
+                }
+                continue
+              }
+
               hadContent = true
               callbacks.onDelta(delta.content)
             }
