@@ -9,6 +9,20 @@ export interface ToolProgress {
   label: string
 }
 
+export interface ToolStartEvent {
+  name: string
+  preview?: string
+  args?: Record<string, string>
+}
+
+export interface ToolCompleteEvent {
+  name: string
+  preview?: string
+  args?: Record<string, string>
+  duration?: number
+  is_error?: boolean
+}
+
 export class ProviderError extends Error {
   code: string | number | undefined
   constructor(message: string, code?: string | number) {
@@ -24,7 +38,10 @@ export interface StreamDoneMeta {
 
 export interface StreamCallbacks {
   onDelta: (text: string) => void
+  onReasoning?: (text: string) => void
   onToolProgress: (tool: ToolProgress) => void
+  onToolStart?: (tool: ToolStartEvent) => void
+  onToolComplete?: (tool: ToolCompleteEvent) => void
   onDone: (meta: StreamDoneMeta) => void
   onError: (err: Error) => void
 }
@@ -40,6 +57,9 @@ export function chatStream(
 
   void (async () => {
     let hadContent = false
+    let rawContent = ""
+    let inThinkBlock = false
+    let thinkBuffer = ""
 
     try {
       const res = await fetch("/api/hermes", {
@@ -89,6 +109,9 @@ export function chatStream(
           const data = line.slice(6)
 
           if (data === "[DONE]") {
+            if (inThinkBlock && thinkBuffer) {
+              callbacks.onReasoning?.(thinkBuffer)
+            }
             callbacks.onDone({ hadContent })
             return
           }
@@ -108,6 +131,35 @@ export function chatStream(
               currentEventType = ""
               continue
             }
+
+            if (currentEventType === "reasoning") {
+              callbacks.onReasoning?.(parsed.text ?? "")
+              currentEventType = ""
+              continue
+            }
+
+            if (currentEventType === "tool") {
+              callbacks.onToolStart?.({
+                name: parsed.name,
+                preview: parsed.preview,
+                args: parsed.args,
+              })
+              currentEventType = ""
+              continue
+            }
+
+            if (currentEventType === "tool_complete") {
+              callbacks.onToolComplete?.({
+                name: parsed.name,
+                preview: parsed.preview,
+                args: parsed.args,
+                duration: parsed.duration,
+                is_error: parsed.is_error,
+              })
+              currentEventType = ""
+              continue
+            }
+
             currentEventType = ""
 
             const finishReason = parsed.choices?.[0]?.finish_reason
@@ -120,6 +172,40 @@ export function chatStream(
             const delta = parsed.choices?.[0]?.delta
             if (delta?.content) {
               hadContent = true
+              rawContent += delta.content
+
+              // <think> tag fallback for models that embed reasoning in content
+              if (!inThinkBlock && rawContent.trimStart().startsWith("<think>")) {
+                inThinkBlock = true
+                thinkBuffer = rawContent.trimStart().slice(7) // strip <think>
+                const closeIdx = thinkBuffer.indexOf("</think>")
+                if (closeIdx !== -1) {
+                  callbacks.onReasoning?.(thinkBuffer.slice(0, closeIdx))
+                  inThinkBlock = false
+                  const remaining = thinkBuffer.slice(closeIdx + 8).replace(/^\s+/, "")
+                  thinkBuffer = ""
+                  if (remaining) callbacks.onDelta(remaining)
+                } else {
+                  callbacks.onReasoning?.(thinkBuffer)
+                }
+                continue
+              }
+
+              if (inThinkBlock) {
+                thinkBuffer += delta.content
+                const closeIdx = thinkBuffer.indexOf("</think>")
+                if (closeIdx !== -1) {
+                  callbacks.onReasoning?.(thinkBuffer.slice(0, closeIdx))
+                  inThinkBlock = false
+                  const remaining = thinkBuffer.slice(closeIdx + 8).replace(/^\s+/, "")
+                  thinkBuffer = ""
+                  if (remaining) callbacks.onDelta(remaining)
+                } else {
+                  callbacks.onReasoning?.(delta.content)
+                }
+                continue
+              }
+
               callbacks.onDelta(delta.content)
             }
 

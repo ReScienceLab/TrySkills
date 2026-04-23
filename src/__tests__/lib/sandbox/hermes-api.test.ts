@@ -196,4 +196,120 @@ describe("hermes-api chatStream", () => {
     })
     expect(onDelta).toHaveBeenCalledWith("Result")
   })
+
+  it("handles reasoning SSE events", async () => {
+    const sseBody = [
+      'event: reasoning',
+      'data: {"text":"Let me think about this..."}',
+      '',
+      'event: reasoning',
+      'data: {"text":" The answer is 42."}',
+      '',
+      'data: {"choices":[{"delta":{"content":"The answer is 42."},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
+      "",
+    ].join("\n")
+
+    global.fetch = mockFetch(sseBody)
+
+    const onDelta = vi.fn()
+    const onDone = vi.fn()
+    const onError = vi.fn()
+    const onToolProgress = vi.fn()
+    const onReasoning = vi.fn()
+
+    chatStream("https://example.com", [{ role: "user", content: "hi" }], {
+      onDelta,
+      onDone,
+      onError,
+      onToolProgress,
+      onReasoning,
+    })
+
+    await vi.waitFor(() => expect(onDone).toHaveBeenCalled())
+
+    expect(onReasoning).toHaveBeenCalledWith("Let me think about this...")
+    expect(onReasoning).toHaveBeenCalledWith(" The answer is 42.")
+    expect(onDelta).toHaveBeenCalledWith("The answer is 42.")
+  })
+
+  it("handles tool start and tool complete SSE events", async () => {
+    const sseBody = [
+      'event: tool',
+      'data: {"name":"web_search","preview":"Searching...","args":{"query":"test"}}',
+      '',
+      'event: tool_complete',
+      'data: {"name":"web_search","preview":"Found 5 results","duration":1.23,"is_error":false}',
+      '',
+      'data: {"choices":[{"delta":{"content":"Done."},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
+      "",
+    ].join("\n")
+
+    global.fetch = mockFetch(sseBody)
+
+    const onDelta = vi.fn()
+    const onDone = vi.fn()
+    const onError = vi.fn()
+    const onToolProgress = vi.fn()
+    const onToolStart = vi.fn()
+    const onToolComplete = vi.fn()
+
+    chatStream("https://example.com", [{ role: "user", content: "hi" }], {
+      onDelta,
+      onDone,
+      onError,
+      onToolProgress,
+      onToolStart,
+      onToolComplete,
+    })
+
+    await vi.waitFor(() => expect(onDone).toHaveBeenCalled())
+
+    expect(onToolStart).toHaveBeenCalledWith({
+      name: "web_search",
+      preview: "Searching...",
+      args: { query: "test" },
+    })
+    expect(onToolComplete).toHaveBeenCalledWith({
+      name: "web_search",
+      preview: "Found 5 results",
+      args: undefined,
+      duration: 1.23,
+      is_error: false,
+    })
+    expect(onDelta).toHaveBeenCalledWith("Done.")
+  })
+
+  it("parses <think> tags from content as reasoning fallback", async () => {
+    const sseBody = [
+      'data: {"choices":[{"delta":{"content":"<think>"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{"content":"reasoning here"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{"content":"</think>"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{"content":"visible answer"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
+      "",
+    ].join("\n")
+
+    global.fetch = mockFetch(sseBody)
+
+    const onDelta = vi.fn()
+    const onDone = vi.fn()
+    const onError = vi.fn()
+    const onToolProgress = vi.fn()
+    const onReasoning = vi.fn()
+
+    chatStream("https://example.com", [{ role: "user", content: "hi" }], {
+      onDelta,
+      onDone,
+      onError,
+      onToolProgress,
+      onReasoning,
+    })
+
+    await vi.waitFor(() => expect(onDone).toHaveBeenCalled())
+
+    expect(onReasoning).toHaveBeenCalled()
+    expect(onDelta).toHaveBeenCalledWith("visible answer")
+  })
 })

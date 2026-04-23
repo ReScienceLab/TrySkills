@@ -6,20 +6,107 @@ import rehypeHighlight from "rehype-highlight"
 import { useChat, type ToolCall, type ChatError } from "./use-chat"
 import type { ChatMessage } from "@/lib/sandbox/hermes-api"
 
-function ToolCard({ tool }: { tool: ToolCall }) {
+const ChevronIcon = ({ open, className }: { open: boolean; className?: string }) => (
+  <svg
+    width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+    className={`transition-transform duration-150 ${open ? "rotate-90" : ""} ${className ?? ""}`}
+  >
+    <polyline points="9 18 15 12 9 6" />
+  </svg>
+)
+
+function ThinkingCard({ text, isLive }: { text: string; isLive: boolean }) {
+  const [open, setOpen] = useState(false)
+  const bodyRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (open && isLive && bodyRef.current) {
+      bodyRef.current.scrollTop = bodyRef.current.scrollHeight
+    }
+  }, [text, open, isLive])
+
+  if (!text && !isLive) return null
+
   return (
-    <div className="my-1 bg-white/5 border border-white/10 rounded px-3 py-1.5 text-xs">
-      <div className="flex items-center gap-2">
+    <div className="my-1.5 border border-amber-500/20 bg-amber-500/5 rounded-lg overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-amber-400/80 hover:text-amber-400 transition-colors"
+      >
+        {isLive && (
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+        )}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-70">
+          <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+        </svg>
+        <span className="font-semibold tracking-wide">Thinking</span>
+        <ChevronIcon open={open} className="ml-auto text-amber-500/50" />
+      </button>
+      {open && (
+        <div
+          ref={bodyRef}
+          className="px-3 pb-2 max-h-[200px] overflow-y-auto border-t border-amber-500/10"
+        >
+          <pre className="text-[11px] leading-relaxed text-white/50 font-mono whitespace-pre-wrap break-words m-0">
+            {text || "Thinking\u2026"}
+          </pre>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ToolCard({ tool }: { tool: ToolCall }) {
+  const [open, setOpen] = useState(false)
+  const hasDetail = tool.args && Object.keys(tool.args).length > 0
+
+  return (
+    <div className={`my-1 border rounded-lg overflow-hidden transition-colors ${
+      tool.status === "running"
+        ? "border-blue-500/30 bg-blue-500/5"
+        : tool.isError
+          ? "border-red-500/20 bg-red-500/5"
+          : "border-white/[0.07] bg-white/[0.03] hover:border-white/[0.12]"
+    }`}>
+      <button
+        onClick={() => hasDetail && setOpen(!open)}
+        className={`flex items-center gap-2 w-full px-3 py-1.5 text-xs ${hasDetail ? "cursor-pointer" : "cursor-default"}`}
+      >
         {tool.status === "running" ? (
-          <div className="w-3 h-3 rounded-full border border-blue-400 border-t-transparent animate-spin" />
+          <span className="w-[7px] h-[7px] rounded-full bg-blue-400 animate-pulse shrink-0" />
+        ) : tool.isError ? (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-red-400 shrink-0">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
         ) : (
-          <div className="w-3 h-3 rounded-full bg-green-500/60" />
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-green-500/60 shrink-0">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
         )}
-        <span className="text-white/60 font-mono">{tool.emoji || "\u{1F527}"} {tool.name}</span>
-        {tool.status === "running" && (
-          <span className="text-blue-400/60 ml-auto">running...</span>
+        <span className="text-white/60 font-mono font-semibold text-[11px] shrink-0">
+          {tool.emoji ? `${tool.emoji} ` : ""}{tool.name}
+        </span>
+        {tool.preview && (
+          <span className="text-white/30 truncate flex-1 text-left text-[11px]">{tool.preview}</span>
         )}
-      </div>
+        {tool.duration != null && (
+          <span className="text-white/20 text-[10px] shrink-0">{tool.duration.toFixed(1)}s</span>
+        )}
+        {hasDetail && <ChevronIcon open={open} className="text-white/30 shrink-0" />}
+      </button>
+      {open && hasDetail && (
+        <div className="px-3 pb-2 border-t border-white/[0.06]">
+          <div className="mt-1.5">
+            {Object.entries(tool.args!).map(([k, v]) => (
+              <div key={k} className="text-[11px] leading-relaxed font-mono">
+                <span className="text-blue-400">{k}</span>{" "}
+                <span className="text-white/40 break-all">{v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -172,7 +259,7 @@ export function ChatPanel({
   onWorkspacePathChange?: (path: string) => void
   onStreamingChange?: (streaming: boolean) => void
 }) {
-  const { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, workspacePath, send, cancel } = useChat(
+  const { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, workspacePath, thinkingText, isThinking, send, cancel } = useChat(
     gatewayBaseUrl,
     model,
     skillName,
@@ -283,6 +370,9 @@ export function ChatPanel({
         {messages.map((msg, i) => (
           <MessageBubble key={i} msg={msg} />
         ))}
+        {(thinkingText || isThinking) && (
+          <ThinkingCard text={thinkingText} isLive={isThinking} />
+        )}
         {toolCalls.length > 0 && (
           <div className="mb-2">
             {toolCalls.map((tc, i) => (
@@ -290,7 +380,7 @@ export function ChatPanel({
             ))}
           </div>
         )}
-        {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
+        {isStreaming && !thinkingText && !isThinking && toolCalls.length === 0 && messages[messages.length - 1]?.role !== "assistant" && (
           <ThinkingDots />
         )}
         {error && (
