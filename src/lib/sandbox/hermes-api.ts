@@ -209,10 +209,14 @@ export function chatStream(
               }
 
               if (inThinkBlock) {
+                const prevLen = thinkBuffer.length
                 thinkBuffer += delta.content
                 const closeIdx = thinkBuffer.indexOf("</think>")
                 if (closeIdx !== -1) {
-                  callbacks.onReasoning?.(thinkBuffer.slice(0, closeIdx))
+                  // Only emit the new reasoning text from this delta (before </think>)
+                  const newReasoningEnd = Math.max(prevLen, closeIdx)
+                  const unsent = thinkBuffer.slice(prevLen, newReasoningEnd)
+                  if (unsent) callbacks.onReasoning?.(unsent)
                   inThinkBlock = false
                   const remaining = thinkBuffer.slice(closeIdx + 8).replace(/^\s+/, "")
                   thinkBuffer = ""

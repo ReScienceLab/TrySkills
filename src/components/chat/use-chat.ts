@@ -210,6 +210,8 @@ export function useChat(
   const handleError = useCallback(
     (err: Error) => {
       setIsStreaming(false)
+      setIsThinking(false)
+      setToolCalls((prev) => prev.map((t) => ({ ...t, status: "done" as const })))
       setError(classifyError(err, providerId))
     },
     [providerId],
@@ -405,6 +407,8 @@ export function useChat(
       retryTimerRef.current = null
     }
     setIsStreaming(false)
+    setIsThinking(false)
+    setToolCalls((prev) => prev.map((t) => ({ ...t, status: "done" as const })))
     setMessages((prev) =>
       prev.length > 0 && prev[prev.length - 1]?.role === "assistant"
         ? prev.slice(0, -1)

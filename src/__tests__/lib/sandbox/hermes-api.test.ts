@@ -417,6 +417,10 @@ describe("hermes-api chatStream", () => {
     expect(allDelta).toContain("answer2")
     expect(allDelta).not.toContain("reasoning here")
     expect(allDelta).not.toContain("<think>")
+
+    // Verify reasoning is not duplicated: concatenated reasoning should equal "reasoning here" exactly
+    const allReasoning = onReasoning.mock.calls.map((c) => c[0]).join("")
+    expect(allReasoning).toBe("reasoning here")
   })
 
   it("flushes buffered prefix when content is not a think tag", async () => {
