@@ -282,8 +282,8 @@ export function ChatPanel({
   useEffect(() => {
     if (autoIntroSent.current || initialMessages?.length || !sessionId) return
     autoIntroSent.current = true
-    send(`Briefly introduce yourself and the skill you are currently loaded with - what it does, when to use it, and a quick example.`)
-  }, [sessionId, initialMessages, send])
+    send(`Use skill_view to look up the /${skillPath} skill, then briefly introduce it - what it does, when to use it, and a quick example.`)
+  }, [sessionId, initialMessages, skillPath, send])
 
   // Propagate workspace path to parent for workspace panel
   useEffect(() => {

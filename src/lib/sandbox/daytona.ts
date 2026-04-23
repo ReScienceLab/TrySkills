@@ -15,12 +15,17 @@ const COLD_RESOURCES = { cpu: 2, memory: 4, disk: 10 };
 const HERMES_HOME = "/root/.hermes";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getCommandOutput(result: any): string {
+  return (result.result?.output ?? result.output ?? result.result ?? "").toString().trim()
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function discoverSkillsOnDisk(sandbox: any): Promise<string[]> {
   try {
-    const cmd = `for d in ${HERMES_HOME}/skills/*/; do [ -f "$d/SKILL.md" ] && basename "$d"; done 2>/dev/null || true`
-    const result = await sandbox.process.executeCommand(cmd)
-    const output = (result.result?.output ?? result.output ?? result.result ?? "").toString().trim()
-    console.log("[daytona] discoverSkillsOnDisk raw:", JSON.stringify({ cmd, output, exitCode: result.exitCode, keys: Object.keys(result) }))
+    const result = await sandbox.process.executeCommand(
+      `for d in ${HERMES_HOME}/skills/*/; do [ -f "$d/SKILL.md" ] && basename "$d"; done 2>/dev/null || true`,
+    )
+    const output = getCommandOutput(result)
     if (!output) return []
     return output
       .split("\n")
@@ -165,30 +170,17 @@ async function npxSkillsInstall(
 
   const cmd = `npx -y skills add ${owner}/${repo} --skill "${leafName}" --agent universal -g -y --copy 2>&1`
   const result = await sandbox.process.executeCommand(cmd)
-  const npxOutput = (result.result?.output ?? result.output ?? result.result ?? "").toString().trim()
-  console.log("[daytona] npx skills add output:", npxOutput.slice(0, 500))
   if (result.exitCode !== 0) {
-    throw new Error(`npx skills add failed (exit ${result.exitCode}): ${npxOutput.slice(0, 200)}`)
+    const output = getCommandOutput(result)
+    throw new Error(`npx skills add failed (exit ${result.exitCode}): ${output.slice(0, 200)}`)
   }
   log("npx skills add succeeded")
-
-  // Debug: log what npx skills add actually created
-  const lsResult = await sandbox.process.executeCommand(
-    `find /root/.agents/skills/ -type f 2>/dev/null | head -20; echo "==="; find /root/.hermes/skills/ -type f -o -type l 2>/dev/null | head -20`
-  )
-  console.log("[daytona] skill paths on disk:", (lsResult.result?.output ?? lsResult.output ?? lsResult.result ?? "").toString().trim())
 
   // Remove existing dir/symlink then create fresh symlink
   await sandbox.process.executeCommand(
     `rm -rf ${HERMES_HOME}/skills/${safeDest} && ln -sfn /root/.agents/skills/${leafName} ${HERMES_HOME}/skills/${safeDest}`
   )
   log("symlinked to hermes skills dir")
-
-  // Debug: verify symlink and SKILL.md presence
-  const verifyResult = await sandbox.process.executeCommand(
-    `readlink -f ${HERMES_HOME}/skills/${safeDest} 2>&1; ls -la ${HERMES_HOME}/skills/ 2>&1 | head -10`
-  )
-  console.log("[daytona] symlink verify:", (verifyResult.result?.output ?? verifyResult.output ?? verifyResult.result ?? "").toString().trim())
 }
 
 export async function createHermesSandbox(
