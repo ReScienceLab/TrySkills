@@ -165,17 +165,18 @@ async function npxSkillsInstall(
 
   const cmd = `npx -y skills add ${owner}/${repo} --skill "${leafName}" --agent universal -g -y --copy 2>&1`
   const result = await sandbox.process.executeCommand(cmd)
+  const npxOutput = (result.result?.output ?? result.output ?? result.result ?? "").toString().trim()
+  console.log("[daytona] npx skills add output:", npxOutput.slice(0, 500))
   if (result.exitCode !== 0) {
-    const output = result.result || ""
-    throw new Error(`npx skills add failed (exit ${result.exitCode}): ${output.slice(0, 200)}`)
+    throw new Error(`npx skills add failed (exit ${result.exitCode}): ${npxOutput.slice(0, 200)}`)
   }
   log("npx skills add succeeded")
 
   // Debug: log what npx skills add actually created
   const lsResult = await sandbox.process.executeCommand(
-    `ls -la /root/.agents/skills/ 2>&1 && echo "---" && ls -la /root/.agents/skills/${leafName}/ 2>&1 || true`
+    `find /root/.agents/skills/ -type f 2>/dev/null | head -20; echo "==="; find /root/.hermes/skills/ -type f -o -type l 2>/dev/null | head -20`
   )
-  console.log("[daytona] skill install paths:", (lsResult.result?.output ?? lsResult.output ?? "").trim())
+  console.log("[daytona] skill paths on disk:", (lsResult.result?.output ?? lsResult.output ?? lsResult.result ?? "").toString().trim())
 
   // Remove existing dir/symlink then create fresh symlink
   await sandbox.process.executeCommand(
@@ -185,9 +186,9 @@ async function npxSkillsInstall(
 
   // Debug: verify symlink and SKILL.md presence
   const verifyResult = await sandbox.process.executeCommand(
-    `ls -la ${HERMES_HOME}/skills/${safeDest} 2>&1 && echo "---" && ls -la ${HERMES_HOME}/skills/${safeDest}/SKILL.md 2>&1 || true`
+    `readlink -f ${HERMES_HOME}/skills/${safeDest} 2>&1; ls -la ${HERMES_HOME}/skills/ 2>&1 | head -10`
   )
-  console.log("[daytona] symlink verify:", (verifyResult.result?.output ?? verifyResult.output ?? "").trim())
+  console.log("[daytona] symlink verify:", (verifyResult.result?.output ?? verifyResult.output ?? verifyResult.result ?? "").toString().trim())
 }
 
 export async function createHermesSandbox(
