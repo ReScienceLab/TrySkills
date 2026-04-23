@@ -230,7 +230,6 @@ export function ChatPanel({
   initialMessages,
   sandboxId,
   sandboxKey,
-  defaultInput,
   initialWorkspacePath,
   onStop,
   onTryAnother,
@@ -250,7 +249,6 @@ export function ChatPanel({
   initialMessages?: { role: "user" | "assistant" | "system"; content: string }[]
   sandboxId?: string | null
   sandboxKey?: string | null
-  defaultInput?: string
   initialWorkspacePath?: string | null
   onStop: () => void
   onTryAnother?: () => void
@@ -274,10 +272,18 @@ export function ChatPanel({
     initialWorkspacePath,
   )
 
-  const [input, setInput] = useState(defaultInput ?? "")
+  const [input, setInput] = useState("")
   const [elapsed, setElapsed] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const autoIntroSent = useRef(false)
+
+  useEffect(() => {
+    if (autoIntroSent.current || initialMessages?.length || !sessionId) return
+    autoIntroSent.current = true
+    send(`Please briefly introduce the ${skillName} skill - what it does, when to use it, and a quick example.`)
+  }, [sessionId, initialMessages, skillName, send])
 
   // Propagate workspace path to parent for workspace panel
   useEffect(() => {

@@ -554,7 +554,6 @@ export default function SkillPage({
                 initialMessages={resumeSession?.messages}
                 sandboxId={session.sandboxId}
                 sandboxKey={savedConfig?.sandboxKey}
-                defaultInput={resumeSession ? undefined : `I want to try the /${skillKey} skill`}
                 initialWorkspacePath={resumeSession?.workspacePath}
                 onStop={handleStop}
                 onTryAnother={handleTryAnother}
