@@ -53,19 +53,23 @@ function findSkillDir(
 ): string | null {
   // Collect all SKILL.md paths and their parent directories
   const skillDirs = items
-    .filter((i) => i.path.endsWith("/SKILL.md") || i.path === "SKILL.md")
+    .filter((i) =>
+      i.path.endsWith("/SKILL.md") || i.path === "SKILL.md" ||
+      i.path.endsWith("/skill.md") || i.path === "skill.md",
+    )
     .map((i) => {
-      const dir = i.path.replace(/\/SKILL\.md$/, "");
+      const dir = i.path.replace(/\/SKILL\.md$/i, "");
       const dirName = dir.split("/").pop() || dir;
       return { dir, dirName };
     });
 
   // 0. Full path match: skillName contains slashes (e.g. "category/sub-skill")
   if (skillName.includes("/")) {
-    const fullPathMatch = skillDirs.find(
-      (d) => d.dir === skillName || d.dir.endsWith(`/${skillName}`),
-    );
-    if (fullPathMatch) return fullPathMatch.dir;
+    // Prefer exact match over suffix match
+    const exactPath = skillDirs.find((d) => d.dir === skillName);
+    if (exactPath) return exactPath.dir;
+    const suffixMatch = skillDirs.find((d) => d.dir.endsWith(`/${skillName}`));
+    if (suffixMatch) return suffixMatch.dir;
   }
 
   // 1. Exact match: directory name equals skillName
