@@ -78,7 +78,7 @@ function buildConfigYaml(model: string, provider: string, baseUrl?: string): str
     "",
     "skills:",
     "  external_dirs:",
-    "    - /root/.agents/skills",
+    "    - /root/.config/agents/skills",
     "",
     "approvals:",
     "  mode: off",
@@ -173,7 +173,7 @@ async function npxSkillsInstall(
 
   // Remove existing dir/symlink then create fresh symlink
   await sandbox.process.executeCommand(
-    `rm -rf ${HERMES_HOME}/skills/${safeDest} && ln -sfn /root/.agents/skills/${leafName} ${HERMES_HOME}/skills/${safeDest}`
+    `rm -rf ${HERMES_HOME}/skills/${safeDest} && ln -sfn /root/.config/agents/skills/${leafName} ${HERMES_HOME}/skills/${safeDest}`
   )
   log("symlinked to hermes skills dir")
 }
