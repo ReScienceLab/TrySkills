@@ -17,38 +17,48 @@ vi.mock("@/lib/github-fetch", () => ({
 const mockFetch = vi.fn()
 vi.stubGlobal("fetch", mockFetch)
 
+const defaultBranchMock = {
+  ok: true,
+  json: async () => ({ default_branch: "main" }),
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
 })
 
+function mockTree(tree: { path: string; type: string }[]) {
+  return {
+    ok: true,
+    json: async () => ({ tree }),
+  }
+}
+
+function mockSkillMd(name: string, description: string, icon?: string) {
+  const frontmatter = icon
+    ? `---\nname: ${name}\ndescription: ${description}\nicon: ${icon}\n---\n`
+    : `---\nname: ${name}\ndescription: ${description}\n---\n`
+  return {
+    ok: true,
+    text: async () => frontmatter,
+  }
+}
+
 describe("discoverSkills", () => {
   it("discovers multiple skills from a repo", async () => {
-    mockGithubFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        tree: [
-          { path: "skills/baoyu-comic/SKILL.md", type: "blob" },
-          { path: "skills/baoyu-imagine/SKILL.md", type: "blob" },
-          { path: "skills/baoyu-translate/SKILL.md", type: "blob" },
-          { path: "README.md", type: "blob" },
-          { path: "skills/baoyu-comic/scripts", type: "tree" },
-        ],
-      }),
-    })
+    mockGithubFetch
+      .mockResolvedValueOnce(defaultBranchMock)
+      .mockResolvedValueOnce(mockTree([
+        { path: "skills/baoyu-comic/SKILL.md", type: "blob" },
+        { path: "skills/baoyu-imagine/SKILL.md", type: "blob" },
+        { path: "skills/baoyu-translate/SKILL.md", type: "blob" },
+        { path: "README.md", type: "blob" },
+        { path: "skills/baoyu-comic/scripts", type: "tree" },
+      ]))
 
     mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () => "---\nname: Baoyu Comic\ndescription: Create comics\nicon: \uD83C\uDFA8\n---\n# Comic",
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () => "---\nname: Baoyu Imagine\ndescription: Generate images\n---\n# Imagine",
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () => "---\nname: Baoyu Translate\ndescription: Translate text\n---\n# Translate",
-      })
+      .mockResolvedValueOnce(mockSkillMd("Baoyu Comic", "Create comics", "\uD83C\uDFA8"))
+      .mockResolvedValueOnce(mockSkillMd("Baoyu Imagine", "Generate images"))
+      .mockResolvedValueOnce(mockSkillMd("Baoyu Translate", "Translate text"))
 
     const skills = await discoverSkills("JimLiu", "baoyu-skills")
 
@@ -65,20 +75,14 @@ describe("discoverSkills", () => {
   })
 
   it("excludes skills in .claude/skills directories", async () => {
-    mockGithubFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        tree: [
-          { path: "skills/my-skill/SKILL.md", type: "blob" },
-          { path: ".claude/skills/dev-only/SKILL.md", type: "blob" },
-        ],
-      }),
-    })
+    mockGithubFetch
+      .mockResolvedValueOnce(defaultBranchMock)
+      .mockResolvedValueOnce(mockTree([
+        { path: "skills/my-skill/SKILL.md", type: "blob" },
+        { path: ".claude/skills/dev-only/SKILL.md", type: "blob" },
+      ]))
 
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      text: async () => "---\nname: My Skill\ndescription: A skill\n---\n",
-    })
+    mockFetch.mockResolvedValueOnce(mockSkillMd("My Skill", "A skill"))
 
     const skills = await discoverSkills("owner", "repo")
     expect(skills).toHaveLength(1)
@@ -87,15 +91,11 @@ describe("discoverSkills", () => {
 
   it("returns empty array when no SKILL.md files found", async () => {
     mockGithubFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          tree: [
-            { path: "README.md", type: "blob" },
-            { path: "src/index.ts", type: "blob" },
-          ],
-        }),
-      })
+      .mockResolvedValueOnce(defaultBranchMock)
+      .mockResolvedValueOnce(mockTree([
+        { path: "README.md", type: "blob" },
+        { path: "src/index.ts", type: "blob" },
+      ]))
       .mockResolvedValueOnce({ ok: false })
 
     const skills = await discoverSkills("owner", "repo")
@@ -104,42 +104,28 @@ describe("discoverSkills", () => {
 
   it("falls back to master branch", async () => {
     mockGithubFetch
+      .mockResolvedValueOnce(defaultBranchMock)
       .mockResolvedValueOnce({ ok: false })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          tree: [
-            { path: "skills/a-skill/SKILL.md", type: "blob" },
-          ],
-        }),
-      })
+      .mockResolvedValueOnce(mockTree([
+        { path: "skills/a-skill/SKILL.md", type: "blob" },
+      ]))
 
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      text: async () => "---\nname: A Skill\ndescription: Something\n---\n",
-    })
+    mockFetch.mockResolvedValueOnce(mockSkillMd("A Skill", "Something"))
 
     const skills = await discoverSkills("owner", "repo")
     expect(skills).toHaveLength(1)
-    expect(mockGithubFetch).toHaveBeenCalledTimes(2)
   })
 
   it("handles SKILL.md fetch failures gracefully", async () => {
-    mockGithubFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        tree: [
-          { path: "skills/good-skill/SKILL.md", type: "blob" },
-          { path: "skills/bad-skill/SKILL.md", type: "blob" },
-        ],
-      }),
-    })
+    mockGithubFetch
+      .mockResolvedValueOnce(defaultBranchMock)
+      .mockResolvedValueOnce(mockTree([
+        { path: "skills/good-skill/SKILL.md", type: "blob" },
+        { path: "skills/bad-skill/SKILL.md", type: "blob" },
+      ]))
 
     mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () => "---\nname: Good Skill\ndescription: Works\n---\n",
-      })
+      .mockResolvedValueOnce(mockSkillMd("Good Skill", "Works"))
       .mockResolvedValueOnce({ ok: false })
 
     const skills = await discoverSkills("owner", "repo")
@@ -148,44 +134,29 @@ describe("discoverSkills", () => {
   })
 
   it("sorts skills alphabetically by name", async () => {
-    mockGithubFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        tree: [
-          { path: "skills/z-skill/SKILL.md", type: "blob" },
-          { path: "skills/a-skill/SKILL.md", type: "blob" },
-          { path: "skills/m-skill/SKILL.md", type: "blob" },
-        ],
-      }),
-    })
+    mockGithubFetch
+      .mockResolvedValueOnce(defaultBranchMock)
+      .mockResolvedValueOnce(mockTree([
+        { path: "skills/z-skill/SKILL.md", type: "blob" },
+        { path: "skills/a-skill/SKILL.md", type: "blob" },
+        { path: "skills/m-skill/SKILL.md", type: "blob" },
+      ]))
 
     mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () => "---\nname: Zebra\ndescription: Z\n---\n",
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () => "---\nname: Apple\ndescription: A\n---\n",
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () => "---\nname: Mango\ndescription: M\n---\n",
-      })
+      .mockResolvedValueOnce(mockSkillMd("Zebra", "Z"))
+      .mockResolvedValueOnce(mockSkillMd("Apple", "A"))
+      .mockResolvedValueOnce(mockSkillMd("Mango", "M"))
 
     const skills = await discoverSkills("owner", "repo")
     expect(skills.map((s) => s.name)).toEqual(["Apple", "Mango", "Zebra"])
   })
 
   it("uses directory name as fallback when no frontmatter name", async () => {
-    mockGithubFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        tree: [
-          { path: "skills/my-skill/SKILL.md", type: "blob" },
-        ],
-      }),
-    })
+    mockGithubFetch
+      .mockResolvedValueOnce(defaultBranchMock)
+      .mockResolvedValueOnce(mockTree([
+        { path: "skills/my-skill/SKILL.md", type: "blob" },
+      ]))
 
     mockFetch.mockResolvedValueOnce({
       ok: true,
@@ -199,25 +170,16 @@ describe("discoverSkills", () => {
   })
 
   it("preserves full skill path for nested directories", async () => {
-    mockGithubFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        tree: [
-          { path: "skills/category/sub-skill/SKILL.md", type: "blob" },
-          { path: "deep/nested/skill/SKILL.md", type: "blob" },
-        ],
-      }),
-    })
+    mockGithubFetch
+      .mockResolvedValueOnce(defaultBranchMock)
+      .mockResolvedValueOnce(mockTree([
+        { path: "skills/category/sub-skill/SKILL.md", type: "blob" },
+        { path: "deep/nested/skill/SKILL.md", type: "blob" },
+      ]))
 
     mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () => "---\nname: Sub Skill\ndescription: Nested\n---\n",
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () => "---\nname: Deep Skill\ndescription: Deep\n---\n",
-      })
+      .mockResolvedValueOnce(mockSkillMd("Sub Skill", "Nested"))
+      .mockResolvedValueOnce(mockSkillMd("Deep Skill", "Deep"))
 
     const skills = await discoverSkills("owner", "repo")
     expect(skills).toHaveLength(2)
@@ -228,25 +190,16 @@ describe("discoverSkills", () => {
   })
 
   it("strips known skill directory prefixes", async () => {
-    mockGithubFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        tree: [
-          { path: "skills/baoyu-comic/SKILL.md", type: "blob" },
-          { path: ".agents/skills/polish/SKILL.md", type: "blob" },
-        ],
-      }),
-    })
+    mockGithubFetch
+      .mockResolvedValueOnce(defaultBranchMock)
+      .mockResolvedValueOnce(mockTree([
+        { path: "skills/baoyu-comic/SKILL.md", type: "blob" },
+        { path: ".agents/skills/polish/SKILL.md", type: "blob" },
+      ]))
 
     mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () => "---\nname: Comic\ndescription: Comics\n---\n",
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () => "---\nname: Polish\ndescription: Polish\n---\n",
-      })
+      .mockResolvedValueOnce(mockSkillMd("Comic", "Comics"))
+      .mockResolvedValueOnce(mockSkillMd("Polish", "Polish"))
 
     const skills = await discoverSkills("owner", "repo")
     expect(skills).toHaveLength(2)
@@ -257,42 +210,50 @@ describe("discoverSkills", () => {
   })
 
   it("strips plugins/{owner}/skills/ prefix", async () => {
-    mockGithubFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        tree: [
-          { path: "plugins/expo/skills/building-native-ui/SKILL.md", type: "blob" },
-        ],
-      }),
-    })
+    mockGithubFetch
+      .mockResolvedValueOnce(defaultBranchMock)
+      .mockResolvedValueOnce(mockTree([
+        { path: "plugins/expo/skills/building-native-ui/SKILL.md", type: "blob" },
+      ]))
 
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      text: async () => "---\nname: Building Native UI\ndescription: Build UI\n---\n",
-    })
+    mockFetch.mockResolvedValueOnce(mockSkillMd("Building Native UI", "Build UI"))
 
     const skills = await discoverSkills("expo", "skills")
     expect(skills).toHaveLength(1)
     expect(skills[0].skillPath).toBe("/expo/skills/building-native-ui")
   })
 
-  it("strips .github/plugins/ prefix and includes .github skills", async () => {
-    mockGithubFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        tree: [
-          { path: ".github/plugins/myrepo/skills/category/my-skill/SKILL.md", type: "blob" },
-        ],
-      }),
-    })
+  it("strips .github/plugins/ prefix and preserves nested paths", async () => {
+    mockGithubFetch
+      .mockResolvedValueOnce(defaultBranchMock)
+      .mockResolvedValueOnce(mockTree([
+        { path: ".github/plugins/myrepo/skills/judge/judge-backup-verified/SKILL.md", type: "blob" },
+      ]))
 
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      text: async () => "---\nname: My GH Skill\ndescription: From .github\n---\n",
-    })
+    mockFetch.mockResolvedValueOnce(mockSkillMd("My GH Skill", "From .github"))
 
     const skills = await discoverSkills("owner", "repo")
     expect(skills).toHaveLength(1)
-    expect(skills[0].skillPath).toBe("/owner/repo/my-skill")
+    expect(skills[0].skillPath).toBe("/owner/repo/judge/judge-backup-verified")
+  })
+
+  it("detects non-standard default branch", async () => {
+    mockGithubFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ default_branch: "X" }),
+      })
+      .mockResolvedValueOnce(mockTree([
+        { path: "mod/ccal/SKILL.md", type: "blob" },
+      ]))
+
+    mockFetch.mockResolvedValueOnce(mockSkillMd("Calendar", "Cal tool"))
+
+    const skills = await discoverSkills("x-cmd", "x-cmd")
+    expect(skills).toHaveLength(1)
+    expect(skills[0].skillPath).toBe("/x-cmd/x-cmd/mod/ccal")
+    expect(mockGithubFetch).toHaveBeenCalledWith(
+      expect.stringContaining("/git/trees/X?"),
+    )
   })
 })

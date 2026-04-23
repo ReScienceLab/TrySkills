@@ -20,11 +20,31 @@ const EXCLUDED_DIR_PREFIXES = [
   ".claude/skills/",
 ]
 
+async function getDefaultBranch(owner: string, repo: string): Promise<string[]> {
+  try {
+    const res = await githubFetch(
+      `https://api.github.com/repos/${owner}/${repo}`,
+    )
+    if (res.ok) {
+      const data = await res.json()
+      const defaultBranch = data.default_branch
+      if (defaultBranch && defaultBranch !== "main" && defaultBranch !== "master") {
+        return [defaultBranch, "main", "master"]
+      }
+    }
+  } catch {
+    // Fall through to defaults
+  }
+  return ["main", "master"]
+}
+
 export async function discoverSkills(
   owner: string,
   repo: string,
 ): Promise<DiscoveredSkill[]> {
-  for (const branch of ["main", "master"]) {
+  const branches = await getDefaultBranch(owner, repo)
+
+  for (const branch of branches) {
     const treeRes = await githubFetch(
       `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`,
     ).catch((err) => {
@@ -71,8 +91,8 @@ export async function discoverSkills(
         if (pluginsMatch) {
           skillName = pluginsMatch[1]
         } else {
-          // Handle .github/plugins/{repo}/skills/{category}/{skill} pattern
-          const ghPluginsMatch = skillName.match(/^\.github\/plugins\/[^/]+\/skills\/(?:[^/]+\/)?(.+)/)
+          // Handle .github/plugins/{repo}/skills/{...rest} pattern
+          const ghPluginsMatch = skillName.match(/^\.github\/plugins\/[^/]+\/skills\/(.+)/)
           if (ghPluginsMatch) {
             skillName = ghPluginsMatch[1]
           } else {
