@@ -20,6 +20,11 @@ const EXCLUDED_DIR_PREFIXES = [
   ".claude/skills/",
 ]
 
+export interface DiscoveryResult {
+  skills: DiscoveredSkill[]
+  branch: string
+}
+
 async function getDefaultBranch(owner: string, repo: string): Promise<string[]> {
   try {
     const res = await githubFetch(
@@ -41,7 +46,7 @@ async function getDefaultBranch(owner: string, repo: string): Promise<string[]> 
 export async function discoverSkills(
   owner: string,
   repo: string,
-): Promise<DiscoveredSkill[]> {
+): Promise<DiscoveryResult> {
   const branches = await getDefaultBranch(owner, repo)
 
   for (const branch of branches) {
@@ -127,8 +132,8 @@ export async function discoverSkills(
     }
 
     skills.sort((a, b) => a.name.localeCompare(b.name))
-    return skills
+    return { skills, branch }
   }
 
-  return []
+  return { skills: [], branch: "main" }
 }

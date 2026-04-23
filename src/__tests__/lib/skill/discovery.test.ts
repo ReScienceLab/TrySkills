@@ -60,18 +60,19 @@ describe("discoverSkills", () => {
       .mockResolvedValueOnce(mockSkillMd("Baoyu Imagine", "Generate images"))
       .mockResolvedValueOnce(mockSkillMd("Baoyu Translate", "Translate text"))
 
-    const skills = await discoverSkills("JimLiu", "baoyu-skills")
+    const result = await discoverSkills("JimLiu", "baoyu-skills")
 
-    expect(skills).toHaveLength(3)
-    expect(skills[0]).toEqual({
+    expect(result.skills).toHaveLength(3)
+    expect(result.branch).toBe("main")
+    expect(result.skills[0]).toEqual({
       skillName: "baoyu-comic",
       skillPath: "/JimLiu/baoyu-skills/baoyu-comic",
       name: "Baoyu Comic",
       description: "Create comics",
       icon: "\uD83C\uDFA8",
     })
-    expect(skills[1].name).toBe("Baoyu Imagine")
-    expect(skills[2].name).toBe("Baoyu Translate")
+    expect(result.skills[1].name).toBe("Baoyu Imagine")
+    expect(result.skills[2].name).toBe("Baoyu Translate")
   })
 
   it("excludes skills in .claude/skills directories", async () => {
@@ -84,7 +85,7 @@ describe("discoverSkills", () => {
 
     mockFetch.mockResolvedValueOnce(mockSkillMd("My Skill", "A skill"))
 
-    const skills = await discoverSkills("owner", "repo")
+    const { skills } = await discoverSkills("owner", "repo")
     expect(skills).toHaveLength(1)
     expect(skills[0].skillName).toBe("my-skill")
   })
@@ -98,7 +99,7 @@ describe("discoverSkills", () => {
       ]))
       .mockResolvedValueOnce({ ok: false })
 
-    const skills = await discoverSkills("owner", "repo")
+    const { skills } = await discoverSkills("owner", "repo")
     expect(skills).toHaveLength(0)
   })
 
@@ -112,7 +113,7 @@ describe("discoverSkills", () => {
 
     mockFetch.mockResolvedValueOnce(mockSkillMd("A Skill", "Something"))
 
-    const skills = await discoverSkills("owner", "repo")
+    const { skills } = await discoverSkills("owner", "repo")
     expect(skills).toHaveLength(1)
   })
 
@@ -128,7 +129,7 @@ describe("discoverSkills", () => {
       .mockResolvedValueOnce(mockSkillMd("Good Skill", "Works"))
       .mockResolvedValueOnce({ ok: false })
 
-    const skills = await discoverSkills("owner", "repo")
+    const { skills } = await discoverSkills("owner", "repo")
     expect(skills).toHaveLength(1)
     expect(skills[0].name).toBe("Good Skill")
   })
@@ -147,7 +148,7 @@ describe("discoverSkills", () => {
       .mockResolvedValueOnce(mockSkillMd("Apple", "A"))
       .mockResolvedValueOnce(mockSkillMd("Mango", "M"))
 
-    const skills = await discoverSkills("owner", "repo")
+    const { skills } = await discoverSkills("owner", "repo")
     expect(skills.map((s) => s.name)).toEqual(["Apple", "Mango", "Zebra"])
   })
 
@@ -163,7 +164,7 @@ describe("discoverSkills", () => {
       text: async () => "# My Skill\n\nJust a description without frontmatter.",
     })
 
-    const skills = await discoverSkills("owner", "repo")
+    const { skills } = await discoverSkills("owner", "repo")
     expect(skills).toHaveLength(1)
     expect(skills[0].skillName).toBe("my-skill")
     expect(skills[0].name).toBe("my-skill")
@@ -181,7 +182,7 @@ describe("discoverSkills", () => {
       .mockResolvedValueOnce(mockSkillMd("Sub Skill", "Nested"))
       .mockResolvedValueOnce(mockSkillMd("Deep Skill", "Deep"))
 
-    const skills = await discoverSkills("owner", "repo")
+    const { skills } = await discoverSkills("owner", "repo")
     expect(skills).toHaveLength(2)
     const sub = skills.find((s) => s.name === "Sub Skill")
     const deep = skills.find((s) => s.name === "Deep Skill")
@@ -201,7 +202,7 @@ describe("discoverSkills", () => {
       .mockResolvedValueOnce(mockSkillMd("Comic", "Comics"))
       .mockResolvedValueOnce(mockSkillMd("Polish", "Polish"))
 
-    const skills = await discoverSkills("owner", "repo")
+    const { skills } = await discoverSkills("owner", "repo")
     expect(skills).toHaveLength(2)
     const comic = skills.find((s) => s.name === "Comic")
     const polish = skills.find((s) => s.name === "Polish")
@@ -218,7 +219,7 @@ describe("discoverSkills", () => {
 
     mockFetch.mockResolvedValueOnce(mockSkillMd("Building Native UI", "Build UI"))
 
-    const skills = await discoverSkills("expo", "skills")
+    const { skills } = await discoverSkills("expo", "skills")
     expect(skills).toHaveLength(1)
     expect(skills[0].skillPath).toBe("/expo/skills/building-native-ui")
   })
@@ -232,7 +233,7 @@ describe("discoverSkills", () => {
 
     mockFetch.mockResolvedValueOnce(mockSkillMd("My GH Skill", "From .github"))
 
-    const skills = await discoverSkills("owner", "repo")
+    const { skills } = await discoverSkills("owner", "repo")
     expect(skills).toHaveLength(1)
     expect(skills[0].skillPath).toBe("/owner/repo/judge/judge-backup-verified")
   })
@@ -249,9 +250,10 @@ describe("discoverSkills", () => {
 
     mockFetch.mockResolvedValueOnce(mockSkillMd("Calendar", "Cal tool"))
 
-    const skills = await discoverSkills("x-cmd", "x-cmd")
-    expect(skills).toHaveLength(1)
-    expect(skills[0].skillPath).toBe("/x-cmd/x-cmd/mod/ccal")
+    const result = await discoverSkills("x-cmd", "x-cmd")
+    expect(result.skills).toHaveLength(1)
+    expect(result.skills[0].skillPath).toBe("/x-cmd/x-cmd/mod/ccal")
+    expect(result.branch).toBe("X")
     expect(mockGithubFetch).toHaveBeenCalledWith(
       expect.stringContaining("/git/trees/X?"),
     )

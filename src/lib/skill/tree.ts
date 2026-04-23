@@ -10,8 +10,13 @@ export async function fetchSkillTree(
   owner: string,
   repo: string,
   skillName: string,
+  preferredBranch?: string,
 ): Promise<{ tree: TreeNode[]; resolvedPath: string } | null> {
-  for (const branch of ["main", "master"]) {
+  const branches = preferredBranch
+    ? [preferredBranch, "main", "master"].filter((v, i, a) => a.indexOf(v) === i)
+    : ["main", "master"];
+
+  for (const branch of branches) {
     const treeRes = await githubFetch(
       `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`,
     ).catch((err) => {

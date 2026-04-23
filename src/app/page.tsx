@@ -97,6 +97,7 @@ export default function Home() {
   const [repoSkills, setRepoSkills] = useState<DiscoveredSkill[] | null>(null);
   const [repoLoading, setRepoLoading] = useState(false);
   const [repoError, setRepoError] = useState<string | null>(null);
+  const [repoBranch, setRepoBranch] = useState<string | undefined>(undefined);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,12 +149,13 @@ export default function Home() {
       setRepoSkills(null);
 
       try {
-        const skills = await discoverSkills(repoInfo.owner, repoInfo.repo);
-        if (skills.length === 1) {
-          window.location.href = skills[0].skillPath;
+        const result = await discoverSkills(repoInfo.owner, repoInfo.repo);
+        if (result.skills.length === 1) {
+          window.location.href = result.skills[0].skillPath;
           return;
         }
-        setRepoSkills(skills);
+        setRepoSkills(result.skills);
+        setRepoBranch(result.branch);
       } catch (err) {
         if (err instanceof GitHubRateLimitError) {
           setIsRateLimited(true);
@@ -185,7 +187,7 @@ export default function Home() {
     setTreeError(null);
     setTreeData(null);
 
-    fetchSkillTree(owner, repo, selectedSkillName)
+    fetchSkillTree(owner, repo, selectedSkillName, repoBranch)
       .then((result) => {
         if (result) {
           setTreeData(result.tree);
@@ -214,6 +216,7 @@ export default function Home() {
     setRepoSkills(null);
     setRepoError(null);
     setIsRateLimited(false);
+    setRepoBranch(undefined);
   };
 
   const skillName = parsedPath?.split("/").filter(Boolean).slice(2).join("/") || "";

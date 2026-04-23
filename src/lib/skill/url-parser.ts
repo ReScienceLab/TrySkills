@@ -82,8 +82,8 @@ export function parseSkillUrl(input: string): string | null {
     if (pluginsMatch) {
       skillName = pluginsMatch[1];
     } else {
-      // Handle .github/plugins/{repo}/skills/{category}/{skill} pattern
-      const ghPluginsMatch = skillName.match(/^\.github\/plugins\/[^/]+\/skills\/(?:[^/]+\/)?(.+)/);
+      // Handle .github/plugins/{repo}/skills/{...rest} pattern
+      const ghPluginsMatch = skillName.match(/^\.github\/plugins\/[^/]+\/skills\/(.+)/);
       if (ghPluginsMatch) {
         skillName = ghPluginsMatch[1];
       } else {
