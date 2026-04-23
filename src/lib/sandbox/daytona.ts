@@ -17,10 +17,10 @@ const HERMES_HOME = "/root/.hermes";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function discoverSkillsOnDisk(sandbox: any): Promise<string[]> {
   try {
-    const result = await sandbox.process.executeCommand(
-      `for d in ${HERMES_HOME}/skills/*/; do [ -f "$d/SKILL.md" ] && basename "$d"; done 2>/dev/null || true`,
-    )
-    const output = (result.result?.output ?? result.output ?? "").trim()
+    const cmd = `for d in ${HERMES_HOME}/skills/*/; do [ -f "$d/SKILL.md" ] && basename "$d"; done 2>/dev/null || true`
+    const result = await sandbox.process.executeCommand(cmd)
+    const output = (result.result?.output ?? result.output ?? result.result ?? "").toString().trim()
+    console.log("[daytona] discoverSkillsOnDisk raw:", JSON.stringify({ cmd, output, exitCode: result.exitCode, keys: Object.keys(result) }))
     if (!output) return []
     return output
       .split("\n")
