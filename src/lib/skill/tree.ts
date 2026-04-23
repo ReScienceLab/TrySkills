@@ -10,8 +10,13 @@ export async function fetchSkillTree(
   owner: string,
   repo: string,
   skillName: string,
+  preferredBranch?: string,
 ): Promise<{ tree: TreeNode[]; resolvedPath: string } | null> {
-  for (const branch of ["main", "master"]) {
+  const branches = preferredBranch
+    ? [preferredBranch, "main", "master"].filter((v, i, a) => a.indexOf(v) === i)
+    : ["main", "master"];
+
+  for (const branch of branches) {
     const treeRes = await githubFetch(
       `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`,
     ).catch((err) => {
@@ -48,12 +53,24 @@ function findSkillDir(
 ): string | null {
   // Collect all SKILL.md paths and their parent directories
   const skillDirs = items
-    .filter((i) => i.path.endsWith("/SKILL.md") || i.path === "SKILL.md")
+    .filter((i) =>
+      i.path.endsWith("/SKILL.md") || i.path === "SKILL.md" ||
+      i.path.endsWith("/skill.md") || i.path === "skill.md",
+    )
     .map((i) => {
-      const dir = i.path.replace(/\/SKILL\.md$/, "");
+      const dir = i.path.replace(/\/SKILL\.md$/i, "");
       const dirName = dir.split("/").pop() || dir;
       return { dir, dirName };
     });
+
+  // 0. Full path match: skillName contains slashes (e.g. "category/sub-skill")
+  if (skillName.includes("/")) {
+    // Prefer exact match over suffix match
+    const exactPath = skillDirs.find((d) => d.dir === skillName);
+    if (exactPath) return exactPath.dir;
+    const suffixMatch = skillDirs.find((d) => d.dir.endsWith(`/${skillName}`));
+    if (suffixMatch) return suffixMatch.dir;
+  }
 
   // 1. Exact match: directory name equals skillName
   const exact = skillDirs.find((d) => d.dirName === skillName);

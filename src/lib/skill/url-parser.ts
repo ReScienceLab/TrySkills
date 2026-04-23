@@ -8,6 +8,35 @@ const KNOWN_SKILL_DIRS = [
   "src/skills/",
 ];
 
+export interface ParsedRepo {
+  owner: string
+  repo: string
+}
+
+export function parseRepoUrl(input: string): ParsedRepo | null {
+  const url = input.trim()
+  if (!url) return null
+
+  if (url.includes("..") || url.includes("<") || url.includes(">") || url.includes("javascript:")) {
+    return null
+  }
+
+  // GitHub URL: https://github.com/owner/repo (no tree path)
+  if (url.includes("github.com/")) {
+    const match = url.match(/github\.com\/([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)\/?$/)
+    if (!match) return null
+    return { owner: match[1], repo: match[2] }
+  }
+
+  // Plain path: owner/repo (exactly 2 segments)
+  if (url.match(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/)) {
+    const [owner, repo] = url.split("/")
+    return { owner, repo }
+  }
+
+  return null
+}
+
 export function parseSkillUrl(input: string): string | null {
   const url = input.trim();
   if (!url) return null;
@@ -53,8 +82,8 @@ export function parseSkillUrl(input: string): string | null {
     if (pluginsMatch) {
       skillName = pluginsMatch[1];
     } else {
-      // Handle .github/plugins/{repo}/skills/{category}/{skill} pattern
-      const ghPluginsMatch = skillName.match(/^\.github\/plugins\/[^/]+\/skills\/(?:[^/]+\/)?(.+)/);
+      // Handle .github/plugins/{repo}/skills/{...rest} pattern
+      const ghPluginsMatch = skillName.match(/^\.github\/plugins\/[^/]+\/skills\/(.+)/);
       if (ghPluginsMatch) {
         skillName = ghPluginsMatch[1];
       } else {
