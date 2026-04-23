@@ -156,7 +156,10 @@ async function npxSkillsInstall(
     throw new Error("Unsafe characters in skill source")
   }
 
-  const cmd = `npx -y skills add ${owner}/${repo} --skill "${skill}" --agent universal -g -y --copy 2>&1`
+  // npx skills CLI matches by canonical skill name (leaf segment only)
+  const leafName = skill.split("/").pop() || skill
+
+  const cmd = `npx -y skills add ${owner}/${repo} --skill "${leafName}" --agent universal -g -y --copy 2>&1`
   const result = await sandbox.process.executeCommand(cmd)
   if (result.exitCode !== 0) {
     const output = result.result || ""
@@ -164,9 +167,9 @@ async function npxSkillsInstall(
   }
   log("npx skills add succeeded")
 
-  // Symlink from ~/.agents/skills/{skill} to ~/.hermes/skills/{destDir}
+  // Remove existing dir/symlink then create fresh symlink
   await sandbox.process.executeCommand(
-    `ln -sfn /root/.agents/skills/${skill} ${HERMES_HOME}/skills/${safeDest}`
+    `rm -rf ${HERMES_HOME}/skills/${safeDest} && ln -sfn /root/.agents/skills/${leafName} ${HERMES_HOME}/skills/${safeDest}`
   )
   log("symlinked to hermes skills dir")
 }
