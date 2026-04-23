@@ -213,4 +213,77 @@ describe("useChat", () => {
 
     expect(result.current.toolCalls[0].name).toBe("skill_view")
   })
+
+  it("handles reasoning events and exposes thinkingText", async () => {
+    mockChatStream.mockImplementation((_url, _msgs, callbacks) => {
+      setTimeout(() => {
+        callbacks.onReasoning?.("Let me think...")
+        callbacks.onReasoning?.(" about this.")
+        callbacks.onDelta("The answer is 42.")
+        callbacks.onDone({ hadContent: true })
+      }, 10)
+      return () => {}
+    })
+
+    const { result } = renderHook(() =>
+      useChat("https://8642-abc.daytonaproxy01.net", "claude-3", "test-skill", undefined, undefined, undefined, "org/repo/test-skill"),
+    )
+
+    await vi.waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled()
+    })
+
+    result.current.send("test")
+
+    await vi.waitFor(() => {
+      expect(result.current.thinkingText).toBe("Let me think... about this.")
+    })
+
+    await vi.waitFor(() => {
+      expect(result.current.isThinking).toBe(false)
+    })
+  })
+
+  it("handles tool start and tool complete events with args/duration", async () => {
+    mockChatStream.mockImplementation((_url, _msgs, callbacks) => {
+      setTimeout(() => {
+        callbacks.onToolStart?.({
+          name: "web_search",
+          preview: "Searching...",
+          args: { query: "test" },
+        })
+      }, 5)
+      setTimeout(() => {
+        callbacks.onToolComplete?.({
+          name: "web_search",
+          preview: "Found results",
+          duration: 1.5,
+          is_error: false,
+        })
+        callbacks.onDelta("Here are the results.")
+        callbacks.onDone({ hadContent: true })
+      }, 20)
+      return () => {}
+    })
+
+    const { result } = renderHook(() =>
+      useChat("https://8642-abc.daytonaproxy01.net", "claude-3", "test-skill", undefined, undefined, undefined, "org/repo/test-skill"),
+    )
+
+    await vi.waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled()
+    })
+
+    result.current.send("test")
+
+    await vi.waitFor(() => {
+      expect(result.current.toolCalls.length).toBe(1)
+      expect(result.current.toolCalls[0].status).toBe("done")
+    })
+
+    expect(result.current.toolCalls[0].name).toBe("web_search")
+    expect(result.current.toolCalls[0].duration).toBe(1.5)
+    expect(result.current.toolCalls[0].isError).toBe(false)
+    expect(result.current.toolCalls[0].args).toEqual({ query: "test" })
+  })
 })
