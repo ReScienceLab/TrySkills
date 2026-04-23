@@ -18,7 +18,6 @@ const KNOWN_SKILL_DIR_PREFIXES = [
 
 const EXCLUDED_DIR_PREFIXES = [
   ".claude/skills/",
-  ".github/",
 ]
 
 export async function discoverSkills(
@@ -67,10 +66,22 @@ export async function discoverSkills(
         let skillName = dirPath
 
         // Strip known directory prefixes to get the skill-relative name
-        for (const prefix of KNOWN_SKILL_DIR_PREFIXES) {
-          if (skillName.startsWith(prefix)) {
-            skillName = skillName.slice(prefix.length)
-            break
+        // Handle plugins/{owner}/skills/{skill} pattern
+        const pluginsMatch = skillName.match(/^plugins\/[^/]+\/skills\/(.+)/)
+        if (pluginsMatch) {
+          skillName = pluginsMatch[1]
+        } else {
+          // Handle .github/plugins/{repo}/skills/{category}/{skill} pattern
+          const ghPluginsMatch = skillName.match(/^\.github\/plugins\/[^/]+\/skills\/(?:[^/]+\/)?(.+)/)
+          if (ghPluginsMatch) {
+            skillName = ghPluginsMatch[1]
+          } else {
+            for (const prefix of KNOWN_SKILL_DIR_PREFIXES) {
+              if (skillName.startsWith(prefix)) {
+                skillName = skillName.slice(prefix.length)
+                break
+              }
+            }
           }
         }
 

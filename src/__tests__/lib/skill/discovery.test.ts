@@ -255,4 +255,44 @@ describe("discoverSkills", () => {
     expect(comic?.skillPath).toBe("/owner/repo/baoyu-comic")
     expect(polish?.skillPath).toBe("/owner/repo/polish")
   })
+
+  it("strips plugins/{owner}/skills/ prefix", async () => {
+    mockGithubFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        tree: [
+          { path: "plugins/expo/skills/building-native-ui/SKILL.md", type: "blob" },
+        ],
+      }),
+    })
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      text: async () => "---\nname: Building Native UI\ndescription: Build UI\n---\n",
+    })
+
+    const skills = await discoverSkills("expo", "skills")
+    expect(skills).toHaveLength(1)
+    expect(skills[0].skillPath).toBe("/expo/skills/building-native-ui")
+  })
+
+  it("strips .github/plugins/ prefix and includes .github skills", async () => {
+    mockGithubFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        tree: [
+          { path: ".github/plugins/myrepo/skills/category/my-skill/SKILL.md", type: "blob" },
+        ],
+      }),
+    })
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      text: async () => "---\nname: My GH Skill\ndescription: From .github\n---\n",
+    })
+
+    const skills = await discoverSkills("owner", "repo")
+    expect(skills).toHaveLength(1)
+    expect(skills[0].skillPath).toBe("/owner/repo/my-skill")
+  })
 })
