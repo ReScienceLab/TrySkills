@@ -78,7 +78,7 @@ function buildConfigYaml(model: string, provider: string, baseUrl?: string): str
     "",
     "skills:",
     "  external_dirs:",
-    "    - /root/.config/agents/skills",
+    "    - /root/.agents/skills",
     "",
     "approvals:",
     "  mode: off",
@@ -171,11 +171,23 @@ async function npxSkillsInstall(
   }
   log("npx skills add succeeded")
 
+  // Debug: log what npx skills add actually created
+  const lsResult = await sandbox.process.executeCommand(
+    `ls -la /root/.agents/skills/ 2>&1 && echo "---" && ls -la /root/.agents/skills/${leafName}/ 2>&1 || true`
+  )
+  console.log("[daytona] skill install paths:", (lsResult.result?.output ?? lsResult.output ?? "").trim())
+
   // Remove existing dir/symlink then create fresh symlink
   await sandbox.process.executeCommand(
-    `rm -rf ${HERMES_HOME}/skills/${safeDest} && ln -sfn /root/.config/agents/skills/${leafName} ${HERMES_HOME}/skills/${safeDest}`
+    `rm -rf ${HERMES_HOME}/skills/${safeDest} && ln -sfn /root/.agents/skills/${leafName} ${HERMES_HOME}/skills/${safeDest}`
   )
   log("symlinked to hermes skills dir")
+
+  // Debug: verify symlink and SKILL.md presence
+  const verifyResult = await sandbox.process.executeCommand(
+    `ls -la ${HERMES_HOME}/skills/${safeDest} 2>&1 && echo "---" && ls -la ${HERMES_HOME}/skills/${safeDest}/SKILL.md 2>&1 || true`
+  )
+  console.log("[daytona] symlink verify:", (verifyResult.result?.output ?? verifyResult.output ?? "").trim())
 }
 
 export async function createHermesSandbox(

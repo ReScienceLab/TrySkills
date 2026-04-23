@@ -427,6 +427,6 @@ describe("sandbox/daytona", () => {
     const cfgCmd = allCmds.find((c: string) => c.includes("config.yaml") && c.includes("CFGEOF"));
     expect(cfgCmd).toBeDefined();
     expect(cfgCmd).toContain("external_dirs");
-    expect(cfgCmd).toContain("/root/.config/agents/skills");
+    expect(cfgCmd).toContain("/root/.agents/skills");
   });
 });
