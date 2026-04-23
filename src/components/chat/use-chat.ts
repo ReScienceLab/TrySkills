@@ -211,7 +211,12 @@ export function useChat(
     (err: Error) => {
       setIsStreaming(false)
       setIsThinking(false)
-      setToolCalls((prev) => prev.map((t) => ({ ...t, status: "done" as const })))
+      setToolCalls((prev) => {
+        for (const t of prev.filter((tc) => tc.status === "running")) {
+          onToolCompleteRef.current?.(t.name)
+        }
+        return prev.map((t) => ({ ...t, status: "done" as const }))
+      })
       setError(classifyError(err, providerId))
     },
     [providerId],
@@ -408,7 +413,12 @@ export function useChat(
     }
     setIsStreaming(false)
     setIsThinking(false)
-    setToolCalls((prev) => prev.map((t) => ({ ...t, status: "done" as const })))
+    setToolCalls((prev) => {
+      for (const t of prev.filter((tc) => tc.status === "running")) {
+        onToolCompleteRef.current?.(t.name)
+      }
+      return prev.map((t) => ({ ...t, status: "done" as const }))
+    })
     setMessages((prev) =>
       prev.length > 0 && prev[prev.length - 1]?.role === "assistant"
         ? prev.slice(0, -1)

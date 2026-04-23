@@ -110,9 +110,6 @@ export function chatStream(
           const data = line.slice(6)
 
           if (data === "[DONE]") {
-            if (inThinkBlock && thinkBuffer) {
-              callbacks.onReasoning?.(thinkBuffer)
-            }
             callbacks.onDone({ hadContent })
             return
           }
