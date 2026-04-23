@@ -140,6 +140,13 @@ function sanitizeSkillDir(skillName: string): string {
   return skillName.replace(/\//g, "--");
 }
 
+const SAFE_SHELL_SEGMENT = /^[a-zA-Z0-9_.\-\/]+$/
+
+function shellSafe(value: string): string | null {
+  if (!value || !SAFE_SHELL_SEGMENT.test(value)) return null
+  return value
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function cloneSkillOnSandbox(
   sandbox: any,
@@ -147,21 +154,29 @@ async function cloneSkillOnSandbox(
   destDir: string,
   log: (label: string) => void,
 ): Promise<boolean> {
-  const { owner, repo, skillName } = source
+  const owner = shellSafe(source.owner)
+  const repo = shellSafe(source.repo)
+  const skill = shellSafe(source.skillName)
+  const safeDest = shellSafe(destDir)
+  if (!owner || !repo || !skill || !safeDest) {
+    log("cloneSkill skipped: unsafe characters in source")
+    return false
+  }
+
   const candidates = [
-    skillName,
-    `skills/${skillName}`,
-    `${repo}/${skillName}`,
-    `.agents/skills/${skillName}`,
-    `.claude/skills/${skillName}`,
-    `plugin/skills/${skillName}`,
-    `plugins/${owner}/skills/${skillName}`,
-    `src/skills/${skillName}`,
+    skill,
+    `skills/${skill}`,
+    `${repo}/${skill}`,
+    `.agents/skills/${skill}`,
+    `.claude/skills/${skill}`,
+    `plugin/skills/${skill}`,
+    `plugins/${owner}/skills/${skill}`,
+    `src/skills/${skill}`,
   ]
   const candidateChecks = candidates.map((c) => `[ -f "$TMP/${c}/SKILL.md" -o -f "$TMP/${c}/skill.md" ] && echo "${c}"`).join("\n")
 
   const script = `set -e
-DEST="${HERMES_HOME}/skills/${destDir}"
+DEST="${HERMES_HOME}/skills/${safeDest}"
 REPO="https://github.com/${owner}/${repo}.git"
 TMP=$(mktemp -d)
 git clone --depth 1 --filter=blob:none --sparse "$REPO" "$TMP" 2>/dev/null
@@ -336,12 +351,16 @@ export async function createHermesSandbox(
   const cloned = await cloneSkillOnSandbox(sandbox, skillSource, destDir, log)
   if (!cloned) {
     log("clone failed, falling back to browser fetch + upload")
-    const skillFiles = await fetchSkillDirectory(resolved)
-    for (const file of skillFiles) {
-      const destPath = `${HERMES_HOME}/skills/${destDir}/${file.path}`
-      const dir = destPath.substring(0, destPath.lastIndexOf("/"))
-      await sandbox.process.executeCommand(`mkdir -p "${dir}"`).catch(() => {})
-      await sandbox.fs.uploadFile(Buffer.from(file.content), destPath)
+    try {
+      const skillFiles = await fetchSkillDirectory(resolved)
+      for (const file of skillFiles) {
+        const destPath = `${HERMES_HOME}/skills/${destDir}/${file.path}`
+        const dir = destPath.substring(0, destPath.lastIndexOf("/"))
+        await sandbox.process.executeCommand(`mkdir -p "${dir}"`).catch(() => {})
+        await sandbox.fs.uploadFile(Buffer.from(file.content), destPath)
+      }
+    } catch (err) {
+      log(`fallback fetch/upload failed: ${err instanceof Error ? err.message : err}`)
     }
   }
 
@@ -451,20 +470,24 @@ export async function installSkill(
   const cloned = await cloneSkillOnSandbox(sandbox, skillSource, destDir, log)
   if (!cloned) {
     log("clone failed, falling back to browser fetch + upload")
-    const skillFiles = await fetchSkillDirectory(resolved)
-    const allDirs = [...new Set(skillFiles.map((f) => {
-      const destPath = `${HERMES_HOME}/skills/${destDir}/${f.path}`
-      return destPath.substring(0, destPath.lastIndexOf("/"))
-    }))]
-    if (allDirs.length > 0) {
-      await sandbox.process.executeCommand(`mkdir -p ${allDirs.map((d) => `"${d}"`).join(" ")}`).catch(() => {})
+    try {
+      const skillFiles = await fetchSkillDirectory(resolved)
+      const allDirs = [...new Set(skillFiles.map((f) => {
+        const destPath = `${HERMES_HOME}/skills/${destDir}/${f.path}`
+        return destPath.substring(0, destPath.lastIndexOf("/"))
+      }))]
+      if (allDirs.length > 0) {
+        await sandbox.process.executeCommand(`mkdir -p ${allDirs.map((d) => `"${d}"`).join(" ")}`).catch(() => {})
+      }
+      await Promise.all(
+        skillFiles.map((file) => {
+          const destPath = `${HERMES_HOME}/skills/${destDir}/${file.path}`
+          return sandbox.fs.uploadFile(Buffer.from(file.content), destPath)
+        }),
+      )
+    } catch (err) {
+      log(`fallback fetch/upload failed: ${err instanceof Error ? err.message : err}`)
     }
-    await Promise.all(
-      skillFiles.map((file) => {
-        const destPath = `${HERMES_HOME}/skills/${destDir}/${file.path}`
-        return sandbox.fs.uploadFile(Buffer.from(file.content), destPath)
-      }),
-    )
   }
   log("skill installed");
 
