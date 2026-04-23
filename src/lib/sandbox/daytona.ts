@@ -76,6 +76,10 @@ function buildConfigYaml(model: string, provider: string, baseUrl?: string): str
   }
   lines.push(
     "",
+    "skills:",
+    "  external_dirs:",
+    "    - /root/.agents/skills",
+    "",
     "approvals:",
     "  mode: off",
     "",
@@ -423,15 +427,13 @@ export async function installSkill(
 
   const hermesCmd = `$(test -f /opt/hermes-agent/venv/bin/hermes && echo /opt/hermes-agent/venv/bin/hermes || echo ${HERMES_HOME}/hermes-agent/venv/bin/hermes)`;
 
-  // Start or restart the gateway so it picks up current config
+  // Always start or restart the gateway so it discovers the newly installed skill
   if (wasStopped) {
-    // Stopped sandbox: gateway not running, just start it
     await sandbox.process.executeCommand(
       `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
     ).catch(() => {});
     log("gateway started after wake");
-  } else if (!options?.skipConfigWrite) {
-    // Running sandbox with config changes: gracefully restart gateway
+  } else {
     await sandbox.process.executeCommand(
       `pkill -f "hermes.*gateway" 2>/dev/null || true`,
     ).catch(() => {});
@@ -439,7 +441,7 @@ export async function installSkill(
     await sandbox.process.executeCommand(
       `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
     ).catch(() => {});
-    log("gateway restarted after config write");
+    log("gateway restarted for skill discovery");
   }
 
   // Always verify gateway is alive before returning

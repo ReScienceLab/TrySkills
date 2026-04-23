@@ -394,6 +394,25 @@ describe("sandbox/daytona", () => {
       expect(gwCmd).toBeDefined();
     });
 
+    it("always restarts gateway even when skipConfigWrite is true", async () => {
+      mockGet.mockResolvedValue({ ...mockSandbox, state: "started" });
+
+      await installSkill(
+        testConfig,
+        "sb-test-123",
+        "new-skill",
+        testSkillSource,
+        () => {},
+        { skipConfigWrite: true },
+      );
+
+      const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
+      const killCmd = allCmds.find((c: string) => c.includes("pkill") && c.includes("gateway"));
+      expect(killCmd).toBeDefined();
+      const gwCmd = allCmds.find((c: string) => c.includes("hermes") && c.includes("gateway run"));
+      expect(gwCmd).toBeDefined();
+    });
+
     it("throws on unexpected sandbox state", async () => {
       mockGet.mockResolvedValue({ ...mockSandbox, state: "error" });
 
@@ -401,5 +420,15 @@ describe("sandbox/daytona", () => {
         installSkill(testConfig, "sb-test-123", "test", testSkillSource, () => {}),
       ).rejects.toThrow("unexpected state");
     });
+  });
+
+  it("includes skills.external_dirs in config.yaml", async () => {
+    await createHermesSandbox(testConfig, "test", testSkillSource, () => {});
+
+    const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
+    const cfgCmd = allCmds.find((c: string) => c.includes("config.yaml") && c.includes("CFGEOF"));
+    expect(cfgCmd).toBeDefined();
+    expect(cfgCmd).toContain("external_dirs");
+    expect(cfgCmd).toContain("/root/.agents/skills");
   });
 });
