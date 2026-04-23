@@ -427,13 +427,16 @@ export async function installSkill(
 
   const hermesCmd = `$(test -f /opt/hermes-agent/venv/bin/hermes && echo /opt/hermes-agent/venv/bin/hermes || echo ${HERMES_HOME}/hermes-agent/venv/bin/hermes)`;
 
-  // Always start or restart the gateway so it discovers the newly installed skill
+  // Start or restart the gateway when needed.
+  // Skill discovery via skills_list/skill_view tools rescans disk on every
+  // call (no cache), so a gateway restart is NOT needed just for new skills.
+  // Only restart when the gateway isn't running (wasStopped) or config changed.
   if (wasStopped) {
     await sandbox.process.executeCommand(
       `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
     ).catch(() => {});
     log("gateway started after wake");
-  } else {
+  } else if (!options?.skipConfigWrite) {
     await sandbox.process.executeCommand(
       `pkill -f "hermes.*gateway" 2>/dev/null || true`,
     ).catch(() => {});
@@ -441,7 +444,7 @@ export async function installSkill(
     await sandbox.process.executeCommand(
       `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
     ).catch(() => {});
-    log("gateway restarted for skill discovery");
+    log("gateway restarted after config write");
   }
 
   // Always verify gateway is alive before returning

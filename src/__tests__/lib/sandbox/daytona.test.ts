@@ -394,7 +394,7 @@ describe("sandbox/daytona", () => {
       expect(gwCmd).toBeDefined();
     });
 
-    it("always restarts gateway even when skipConfigWrite is true", async () => {
+    it("skips gateway restart when skipConfigWrite is true (skills_list rescans disk)", async () => {
       mockGet.mockResolvedValue({ ...mockSandbox, state: "started" });
 
       await installSkill(
@@ -408,9 +408,7 @@ describe("sandbox/daytona", () => {
 
       const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
       const killCmd = allCmds.find((c: string) => c.includes("pkill") && c.includes("gateway"));
-      expect(killCmd).toBeDefined();
-      const gwCmd = allCmds.find((c: string) => c.includes("hermes") && c.includes("gateway run"));
-      expect(gwCmd).toBeDefined();
+      expect(killCmd).toBeUndefined();
     });
 
     it("throws on unexpected sandbox state", async () => {
