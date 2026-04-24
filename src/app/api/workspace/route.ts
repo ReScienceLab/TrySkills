@@ -107,7 +107,9 @@ function sanitizeFilename(raw: string): string {
 const SAFE_PATH_RE = /^[a-zA-Z0-9/_.\-]+$/
 
 function validateWorkspacePath(dirPath: string): boolean {
-  return dirPath.startsWith("/root/.hermes/workspaces/") && SAFE_PATH_RE.test(dirPath)
+  if (!dirPath.startsWith("/root/.hermes/workspaces/") || !SAFE_PATH_RE.test(dirPath)) return false
+  const normalized = path.normalize(dirPath)
+  return normalized.startsWith("/root/.hermes/workspaces/") && !normalized.includes("..")
 }
 
 export async function GET(request: NextRequest) {
@@ -300,8 +302,9 @@ export async function POST(request: NextRequest) {
     const sandbox = await daytona.get(sandboxId)
 
     if (action === "mkdir") {
-      await sandbox.process.executeCommand(`mkdir -p "${dirPath}"`)
-      return NextResponse.json({ ok: true, path: dirPath })
+      const safeDirPath = path.normalize(dirPath)
+      await sandbox.process.executeCommand(`mkdir -p "${safeDirPath}"`)
+      return NextResponse.json({ ok: true, path: safeDirPath })
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 })
