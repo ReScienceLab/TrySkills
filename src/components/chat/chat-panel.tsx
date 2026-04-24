@@ -334,9 +334,16 @@ export function ChatPanel({
     const arr = Array.from(files)
     const sanitize = (n: string) => (n.split("/").pop() || n).replace(/[^\w.\-]/g, "_").slice(0, 200)
     setPendingFiles((prev) => {
-      const existingNames = new Set(prev.map((f) => sanitize(f.name)))
-      const newFiles = arr.filter((f) => !existingNames.has(sanitize(f.name)) && f.size <= MAX_UPLOAD_SIZE)
-      return [...prev, ...newFiles]
+      const seen = new Set(prev.map((f) => sanitize(f.name)))
+      const accepted: File[] = []
+      for (const f of arr) {
+        const sName = sanitize(f.name)
+        if (!seen.has(sName) && f.size <= MAX_UPLOAD_SIZE) {
+          seen.add(sName)
+          accepted.push(f)
+        }
+      }
+      return [...prev, ...accepted]
     })
     const oversized = arr.filter((f) => f.size > MAX_UPLOAD_SIZE)
     if (oversized.length) {

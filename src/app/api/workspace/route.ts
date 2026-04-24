@@ -194,6 +194,10 @@ export async function POST(request: NextRequest) {
 
   // Upload action via FormData
   if (contentType.includes("multipart/form-data")) {
+    const contentLength = parseInt(request.headers.get("content-length") || "0", 10)
+    if (contentLength > MAX_UPLOAD_SIZE + 4096) {
+      return NextResponse.json({ error: `Request too large (max ${MAX_UPLOAD_SIZE / 1024 / 1024}MB)` }, { status: 413 })
+    }
     try {
       const formData = await request.formData()
       const action = formData.get("action") as string
