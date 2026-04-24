@@ -104,6 +104,12 @@ function sanitizeFilename(raw: string): string {
   return safe
 }
 
+const SAFE_PATH_RE = /^[a-zA-Z0-9/_.\-]+$/
+
+function validateWorkspacePath(dirPath: string): boolean {
+  return dirPath.startsWith("/root/.hermes/workspaces/") && SAFE_PATH_RE.test(dirPath)
+}
+
 export async function GET(request: NextRequest) {
   const { userId } = await auth()
   if (!userId) {
@@ -216,8 +222,8 @@ export async function POST(request: NextRequest) {
       if (!sandboxId || !daytonaKey || !dirPath) {
         return NextResponse.json({ error: "Missing sandboxId, key, or path" }, { status: 400 })
       }
-      if (!dirPath.startsWith("/root/.hermes/workspaces/")) {
-        return NextResponse.json({ error: "Path must be under /root/.hermes/workspaces/" }, { status: 403 })
+      if (!validateWorkspacePath(dirPath)) {
+        return NextResponse.json({ error: "Invalid workspace path" }, { status: 403 })
       }
       if (!file) {
         return NextResponse.json({ error: "No file provided" }, { status: 400 })
@@ -281,8 +287,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing sandboxId, key, or path" }, { status: 400 })
   }
 
-  if (!dirPath.startsWith("/root/.hermes/workspaces/")) {
-    return NextResponse.json({ error: "Path must be under /root/.hermes/workspaces/" }, { status: 403 })
+  if (!validateWorkspacePath(dirPath)) {
+    return NextResponse.json({ error: "Invalid workspace path" }, { status: 403 })
   }
 
   try {
