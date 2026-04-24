@@ -534,7 +534,7 @@ export default function SkillPage({
       )}
 
       {phase === "running" && session ? (
-        <div className="flex-1 flex relative z-10 overflow-hidden pt-14">
+        <div className={`flex-1 relative z-10 overflow-hidden pt-14 ${workspace.panelOpen ? "lg:pr-[360px]" : ""}`}>
           {/* Chat column */}
           <div className="flex-1 min-w-0 max-w-4xl mx-auto">
             {resumeSessionId && resumeSession === undefined ? (
@@ -577,7 +577,7 @@ export default function SkillPage({
 
           {/* Workspace panel */}
           {workspace.panelOpen && (
-            <div className="w-[360px] shrink-0 hidden lg:block h-[calc(100vh-56px)]">
+            <div className="fixed right-0 top-14 bottom-0 z-30 hidden w-[360px] lg:block">
               <WorkspacePanel
                 entries={workspace.entries}
                 selectedFile={workspace.selectedFile}

@@ -207,6 +207,7 @@ function WorkspaceImage({ src, alt, sandboxId, sandboxKey, workspacePath }: {
 }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const isExternalUrl = src?.startsWith("http://") || src?.startsWith("https://")
   const resolvedSrc = (() => {
@@ -216,6 +217,7 @@ function WorkspaceImage({ src, alt, sandboxId, sandboxKey, workspacePath }: {
     return null
   })()
   const isWorkspacePath = !!(resolvedSrc && workspacePath && resolvedSrc.startsWith(workspacePath + "/") && !resolvedSrc.includes(".."))
+  const fileName = (resolvedSrc || src || alt || "image").split("/").pop() || "image"
 
   useEffect(() => {
     if (!isWorkspacePath || !sandboxId || !sandboxKey || !resolvedSrc) return
@@ -243,10 +245,64 @@ function WorkspaceImage({ src, alt, sandboxId, sandboxKey, workspacePath }: {
     if (src) return <span className="text-white/30 text-xs">[image: {alt || src}]</span>
     return null
   }
-  if (error) return <span className="text-white/30 text-xs">[{error}: {alt || src?.split("/").pop()}]</span>
-  if (!dataUrl) return <span className="text-white/20 text-xs animate-pulse">Loading image...</span>
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={dataUrl} alt={alt || ""} className="max-w-full rounded border border-white/10" />
+
+  const copyMarkdown = async () => {
+    await navigator.clipboard?.writeText(`![${alt || fileName}](${src || resolvedSrc || fileName})`)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1400)
+  }
+
+  return (
+    <span className="not-prose my-3 block overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070b0d]/95 shadow-[0_18px_50px_rgba(0,0,0,0.28)]">
+      <span className="flex items-center gap-3 border-b border-white/[0.06] px-3.5 py-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-[15px]">{"\u{1F5BC}\u{FE0F}"}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] font-medium text-white/[0.82]">{alt || fileName}</span>
+          <span className="block truncate font-mono text-[10px] text-white/[0.28]">{resolvedSrc}</span>
+        </span>
+        <span className={`rounded-full px-2 py-1 text-[10px] font-medium ${
+          error ? "bg-red-500/10 text-red-300/80"
+            : dataUrl ? "bg-emerald-400/10 text-emerald-300/80"
+            : "bg-blue-400/10 text-blue-300/80"
+        }`}>
+          {error ? "Failed" : dataUrl ? "Ready" : "Loading"}
+        </span>
+      </span>
+      <span className="block bg-white/[0.025] p-3">
+        {error ? (
+          <span className="block rounded-xl border border-red-400/15 bg-red-500/[0.04] px-3 py-6 text-center text-[12px] text-red-300/70">
+            {error}
+          </span>
+        ) : dataUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={dataUrl} alt={alt || ""} className="mx-auto max-h-[520px] max-w-full rounded-xl border border-white/10 bg-white shadow-sm" />
+        ) : (
+          <span className="flex h-36 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.025] text-[12px] text-white/[0.35] animate-pulse">
+            Loading image...
+          </span>
+        )}
+      </span>
+      <span className="flex flex-wrap items-center gap-2 border-t border-white/[0.06] px-3.5 py-2.5">
+        <button
+          type="button"
+          onClick={() => void copyMarkdown()}
+          className="rounded-md border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-[11px] text-white/55 transition-colors hover:border-white/[0.16] hover:text-white/80"
+        >
+          {copied ? "Copied" : "Copy markdown"}
+        </button>
+        {dataUrl && (
+          <a
+            href={dataUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-md border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-[11px] text-white/55 no-underline transition-colors hover:border-white/[0.16] hover:text-white/80"
+          >
+            Open preview
+          </a>
+        )}
+      </span>
+    </span>
+  )
 }
 
 function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath }: {

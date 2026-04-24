@@ -3,6 +3,20 @@
 import { FileTree } from "./file-tree"
 import { FileViewer } from "./file-viewer"
 import type { FileEntry, FileContent } from "@/lib/workspace/types"
+import { formatBytes, isImageFile } from "@/lib/workspace/types"
+
+function flattenFiles(entries: FileEntry[]): FileEntry[] {
+  return entries.flatMap((entry) => {
+    if (entry.type === "folder") return flattenFiles(entry.children ?? [])
+    return [entry]
+  })
+}
+
+function getModifiedTime(entry: FileEntry): number {
+  if (!entry.modifiedAt) return 0
+  const time = Date.parse(entry.modifiedAt)
+  return Number.isNaN(time) ? 0 : time
+}
 
 export function WorkspacePanel({
   entries,
@@ -29,6 +43,10 @@ export function WorkspacePanel({
   onRefresh: () => void
   onClose: () => void
 }) {
+  const files = flattenFiles(entries)
+  const imageCount = files.filter((file) => isImageFile(file.name)).length
+  const latestFile = [...files].sort((a, b) => getModifiedTime(b) - getModifiedTime(a))[0]
+
   return (
     <div className="flex flex-col h-full bg-[#0c0c0c] border-l border-white/[0.06]">
       {/* Header */}
@@ -59,6 +77,32 @@ export function WorkspacePanel({
           </svg>
         </button>
       </div>
+
+      {files.length > 0 && !selectedFile && (
+        <div className="border-b border-white/[0.05] bg-white/[0.018] px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-white/25">Generated outputs</div>
+              <div className="mt-1 text-[12px] text-white/[0.48]">
+                {files.length} file{files.length === 1 ? "" : "s"}
+                {imageCount > 0 ? ` · ${imageCount} image${imageCount === 1 ? "" : "s"}` : ""}
+              </div>
+            </div>
+            {latestFile && (
+              <button
+                onClick={() => onSelectFile(latestFile)}
+                className="min-w-0 rounded-lg border border-white/[0.07] bg-black/20 px-3 py-2 text-left transition-colors hover:border-white/[0.14] hover:bg-white/[0.04]"
+              >
+                <span className="block text-[10px] uppercase tracking-[0.14em] text-white/[0.22]">Latest</span>
+                <span className="block max-w-[150px] truncate text-[12px] text-white/[0.64]">{latestFile.name}</span>
+                {latestFile.size != null && (
+                  <span className="block text-[10px] text-white/25">{formatBytes(latestFile.size)}</span>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Loading indicator for initial load */}
       {loadingTree && entries.length === 0 && (
