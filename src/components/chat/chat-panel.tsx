@@ -186,15 +186,18 @@ function CreditWarningBanner({ message }: { message: string }) {
   )
 }
 
-function WorkspaceImage({ src, alt, sandboxId, sandboxKey }: {
+const MAX_INLINE_IMAGE_SIZE = 2 * 1024 * 1024 // 2MB max for inline images
+
+function WorkspaceImage({ src, alt, sandboxId, sandboxKey, workspacePath }: {
   src?: string
   alt?: string
   sandboxId?: string | null
   sandboxKey?: string | null
+  workspacePath?: string | null
 }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null)
-  const [error, setError] = useState(false)
-  const isWorkspacePath = src?.startsWith("/root/.hermes/")
+  const [error, setError] = useState<string | null>(null)
+  const isWorkspacePath = !!(src && workspacePath && src.startsWith(workspacePath + "/"))
 
   useEffect(() => {
     if (!isWorkspacePath || !sandboxId || !sandboxKey || !src) return
@@ -202,26 +205,30 @@ function WorkspaceImage({ src, alt, sandboxId, sandboxKey }: {
     fetch(`/api/workspace?${params}`)
       .then((r) => r.json())
       .then((data) => {
-        if (data.type === "image") setDataUrl(data.content)
-        else setError(true)
+        if (data.type !== "image") { setError("Not an image"); return }
+        const sizeBytes = Math.ceil((data.content.length - data.content.indexOf(",") - 1) * 3 / 4)
+        if (sizeBytes > MAX_INLINE_IMAGE_SIZE) { setError("Image too large for inline display"); return }
+        setDataUrl(data.content)
       })
-      .catch(() => setError(true))
+      .catch(() => setError("Failed to load"))
   }, [src, sandboxId, sandboxKey, isWorkspacePath])
 
   if (!isWorkspacePath) {
+    if (src?.startsWith("/")) return <span className="text-white/30 text-xs">[image: {alt || src}]</span>
     // eslint-disable-next-line @next/next/no-img-element
     return <img src={src} alt={alt || ""} loading="lazy" className="max-w-full rounded" />
   }
-  if (error) return <span className="text-white/30 text-xs">[image: {alt || src}]</span>
+  if (error) return <span className="text-white/30 text-xs">[{error}: {alt || src?.split("/").pop()}]</span>
   if (!dataUrl) return <span className="text-white/20 text-xs animate-pulse">Loading image...</span>
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={dataUrl} alt={alt || ""} className="max-w-full rounded border border-white/10" />
 }
 
-function MessageBubble({ msg, sandboxId, sandboxKey }: {
+function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath }: {
   msg: ChatMessage
   sandboxId?: string | null
   sandboxKey?: string | null
+  workspacePath?: string | null
 }) {
   if (msg.role === "user") {
     return (
@@ -246,6 +253,7 @@ function MessageBubble({ msg, sandboxId, sandboxKey }: {
                   alt={typeof props.alt === "string" ? props.alt : undefined}
                   sandboxId={sandboxId}
                   sandboxKey={sandboxKey}
+                  workspacePath={workspacePath}
                 />
               ),
             }}
@@ -574,7 +582,7 @@ export function ChatPanel({
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {messages.map((msg, i) => (
-          <MessageBubble key={i} msg={msg} sandboxId={sandboxId} sandboxKey={sandboxKey} />
+          <MessageBubble key={i} msg={msg} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
         ))}
         {(thinkingText || isThinking) && (
           <ThinkingCard text={thinkingText} isLive={isThinking} />
