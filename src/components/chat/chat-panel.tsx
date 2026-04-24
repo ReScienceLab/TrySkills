@@ -6,7 +6,7 @@ import rehypeHighlight from "rehype-highlight"
 import { useChat, type ToolCall, type ChatError } from "./use-chat"
 import type { ChatMessage } from "@/lib/sandbox/hermes-api"
 
-const MAX_UPLOAD_SIZE = 10 * 1024 * 1024
+const MAX_UPLOAD_SIZE = 4 * 1024 * 1024
 
 const ChevronIcon = ({ open, className }: { open: boolean; className?: string }) => (
   <svg
@@ -347,7 +347,7 @@ export function ChatPanel({
     })
     const oversized = arr.filter((f) => f.size > MAX_UPLOAD_SIZE)
     if (oversized.length) {
-      setUploadError(`${oversized.map((f) => f.name).join(", ")} exceeds 10MB limit`)
+      setUploadError(`${oversized.map((f) => f.name).join(", ")} exceeds 4MB limit`)
       setTimeout(() => setUploadError(null), 4000)
     }
   }, [])

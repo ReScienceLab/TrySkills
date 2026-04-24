@@ -6,7 +6,7 @@ const HERMES_HOME = "/root/.hermes"
 const MAX_DEPTH = 3
 const MAX_ENTRIES = 500
 const MAX_FILE_SIZE = 512 * 1024
-const MAX_UPLOAD_SIZE = 10 * 1024 * 1024 // 10MB
+const MAX_UPLOAD_SIZE = 4 * 1024 * 1024 // 4MB (Vercel Functions body limit is 4.5MB)
 
 const IGNORED_DIRS = new Set([
   "node_modules", ".git", ".next", ".turbo", ".cache",
