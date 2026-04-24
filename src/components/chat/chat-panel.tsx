@@ -1,10 +1,12 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeHighlight from "rehype-highlight"
 import { useChat, type ToolCall, type ChatError } from "./use-chat"
 import type { ChatMessage } from "@/lib/sandbox/hermes-api"
+
+const MAX_UPLOAD_SIZE = 4 * 1024 * 1024
 
 const ChevronIcon = ({ open, className }: { open: boolean; className?: string }) => (
   <svg
@@ -279,6 +281,14 @@ export function ChatPanel({
 
   const autoIntroSent = useRef(false)
 
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [isDragOver, setIsDragOver] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const dragCounterRef = useRef(0)
+  const uploadingRef = useRef(false)
+
   useEffect(() => {
     if (autoIntroSent.current || initialMessages?.length || !sessionId) return
     autoIntroSent.current = true
@@ -321,15 +331,134 @@ export function ChatPanel({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, isStreaming])
 
+  const addFiles = useCallback((files: FileList | File[]) => {
+    if (uploadingRef.current) return
+    const arr = Array.from(files)
+    const sanitize = (n: string) => (n.split("/").pop() || n).replace(/[^\w.\-]/g, "_").slice(0, 200)
+    setPendingFiles((prev) => {
+      const seen = new Set(prev.map((f) => sanitize(f.name)))
+      const accepted: File[] = []
+      for (const f of arr) {
+        const sName = sanitize(f.name)
+        if (!seen.has(sName) && f.size <= MAX_UPLOAD_SIZE) {
+          seen.add(sName)
+          accepted.push(f)
+        }
+      }
+      return [...prev, ...accepted]
+    })
+    const oversized = arr.filter((f) => f.size > MAX_UPLOAD_SIZE)
+    if (oversized.length) {
+      setUploadError(`${oversized.map((f) => f.name).join(", ")} exceeds 4MB limit`)
+      setTimeout(() => setUploadError(null), 4000)
+    }
+  }, [])
+
+  const removeFile = useCallback((index: number) => {
+    if (uploadingRef.current) return
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index))
+  }, [])
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current++
+    if (e.dataTransfer.types.includes("Files")) {
+      setIsDragOver(true)
+    }
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current--
+    if (dragCounterRef.current === 0) {
+      setIsDragOver(false)
+    }
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current = 0
+    setIsDragOver(false)
+    if (e.dataTransfer.files?.length) {
+      addFiles(e.dataTransfer.files)
+    }
+  }, [addFiles])
+
+  const uploadFiles = useCallback(async (): Promise<string[]> => {
+    if (!pendingFiles.length) return []
+    if (uploadingRef.current) return []
+    if (!sandboxId || !sandboxKey || !workspacePath) {
+      setUploadError("Workspace not ready yet -- please wait a moment")
+      throw new Error("Workspace not ready")
+    }
+    uploadingRef.current = true
+    setIsUploading(true)
+    setUploadError(null)
+    const snapshot = [...pendingFiles]
+    const uploaded: string[] = []
+    try {
+      for (const file of snapshot) {
+        const fd = new FormData()
+        fd.append("action", "upload")
+        fd.append("sandboxId", sandboxId)
+        fd.append("key", sandboxKey)
+        fd.append("path", workspacePath)
+        fd.append("file", file, file.name)
+        const res = await fetch("/api/workspace", { method: "POST", body: fd })
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({ error: "Upload failed" }))
+          throw new Error(data.error || `Upload failed: ${res.status}`)
+        }
+        const data = await res.json()
+        uploaded.push(data.filename)
+      }
+      setPendingFiles([])
+      return uploaded
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Upload failed")
+      throw err
+    } finally {
+      uploadingRef.current = false
+      setIsUploading(false)
+    }
+  }, [pendingFiles, sandboxId, sandboxKey, workspacePath])
+
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60)
     const s = seconds % 60
     return `${m}:${s.toString().padStart(2, "0")}`
   }
 
-  const handleSend = () => {
-    if (!input.trim() || isStreaming) return
-    send(input)
+  const handleSend = async () => {
+    const text = input.trim()
+    if ((!text && !pendingFiles.length) || isStreaming || isUploading || uploadingRef.current) return
+
+    let msgText = text
+    if (pendingFiles.length) {
+      try {
+        const uploaded = await uploadFiles()
+        if (uploaded.length) {
+          if (!msgText) {
+            msgText = `I've uploaded ${uploaded.length} file(s): ${uploaded.join(", ")}`
+          } else {
+            msgText = `${msgText}\n\n[Attached files: ${uploaded.join(", ")}]`
+          }
+        }
+      } catch {
+        return
+      }
+    }
+
+    if (!msgText) return
+    send(msgText)
     setInput("")
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto"
@@ -339,12 +468,35 @@ export function ChatPanel({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      handleSend()
+      void handleSend()
     }
   }
 
+  const uploadReady = !!(sandboxId && sandboxKey && workspacePath)
+  const canSend = ((input.trim() && true) || (pendingFiles.length > 0 && uploadReady)) && !isStreaming && !isUploading
+
   return (
-    <div className="flex flex-col h-[calc(100vh-56px)] w-full">
+    <div
+      className="flex flex-col h-[calc(100vh-56px)] w-full relative"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {/* Drag overlay */}
+      {isDragOver && (
+        <div className="absolute inset-0 z-50 bg-blue-500/10 border-2 border-dashed border-blue-500/40 rounded-lg flex items-center justify-center pointer-events-none">
+          <div className="text-blue-400 text-sm font-medium flex items-center gap-2">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            Drop files here
+          </div>
+        </div>
+      )}
+
       {/* TopBar */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 shrink-0" aria-label={`Skill ${skillName} active for ${formatTime(elapsed)}`}>
         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" aria-hidden="true" />
@@ -402,7 +554,68 @@ export function ChatPanel({
 
       {/* Input */}
       <div className="shrink-0 border-t border-white/10 px-4 py-3">
+        {/* Attachment tray */}
+        {pendingFiles.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {pendingFiles.map((file, i) => (
+              <div
+                key={`${file.name}-${i}`}
+                className="flex items-center gap-1.5 px-2.5 py-1 bg-white/[0.06] border border-white/[0.08] rounded-md text-[11px] text-white/50 max-w-[200px]"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-white/30">
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+                </svg>
+                <span className="truncate">{file.name}</span>
+                <button
+                  onClick={() => removeFile(i)}
+                  className="shrink-0 text-white/20 hover:text-white/50 transition-colors"
+                  aria-label={`Remove ${file.name}`}
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Upload status */}
+        {isUploading && (
+          <div className="flex items-center gap-2 mb-2 text-[11px] text-blue-400/70">
+            <div className="w-3 h-3 rounded-full border-2 border-blue-400/30 border-t-blue-400 animate-spin" />
+            Uploading...
+          </div>
+        )}
+
+        {/* Upload error */}
+        {uploadError && (
+          <div className="mb-2 text-[11px] text-red-400/70">{uploadError}</div>
+        )}
+
         <div className="flex items-end gap-2">
+          {/* Clip button */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files?.length) addFiles(e.target.files)
+              e.target.value = ""
+            }}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isStreaming || isUploading}
+            aria-label="Attach files"
+            className="px-2 py-2.5 text-white/25 hover:text-white/50 disabled:opacity-30 transition-colors shrink-0"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+            </svg>
+          </button>
+
           <label htmlFor="chat-message-input" className="sr-only">Message</label>
           <textarea
             id="chat-message-input"
@@ -416,7 +629,7 @@ export function ChatPanel({
             onKeyDown={handleKeyDown}
             placeholder="Message Hermes..."
             rows={1}
-            disabled={isStreaming}
+            disabled={isStreaming || isUploading}
             className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white/90 placeholder:text-white/25 outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 focus:border-white/25 resize-none disabled:opacity-50 transition-colors"
           />
           {isStreaming ? (
@@ -429,8 +642,8 @@ export function ChatPanel({
             </button>
           ) : (
             <button
-              onClick={handleSend}
-              disabled={!input.trim()}
+              onClick={() => void handleSend()}
+              disabled={!canSend}
               aria-label="Send message"
               className="px-4 py-2.5 bg-white text-black text-sm font-medium rounded-lg hover:bg-white/90 disabled:bg-white/10 disabled:text-white/30 transition-all shrink-0"
             >
