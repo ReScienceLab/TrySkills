@@ -1,6 +1,5 @@
 import { auth } from "@clerk/nextjs/server"
 import { NextRequest, NextResponse } from "next/server"
-import path from "path/posix"
 
 const HERMES_HOME = "/root/.hermes"
 const MAX_DEPTH = 3
@@ -105,11 +104,22 @@ function sanitizeFilename(raw: string): string {
 }
 
 const SAFE_PATH_RE = /^[a-zA-Z0-9/_.\-]+$/
+const WORKSPACE_PREFIX = "/root/.hermes/workspaces/"
+
+function normalizePosixPath(p: string): string {
+  const parts = p.split("/")
+  const resolved: string[] = []
+  for (const part of parts) {
+    if (part === "..") resolved.pop()
+    else if (part && part !== ".") resolved.push(part)
+  }
+  return "/" + resolved.join("/")
+}
 
 function validateWorkspacePath(dirPath: string): boolean {
-  if (!dirPath.startsWith("/root/.hermes/workspaces/") || !SAFE_PATH_RE.test(dirPath)) return false
-  const normalized = path.normalize(dirPath)
-  return normalized.startsWith("/root/.hermes/workspaces/") && !normalized.includes("..")
+  if (!dirPath.startsWith(WORKSPACE_PREFIX) || !SAFE_PATH_RE.test(dirPath)) return false
+  const normalized = normalizePosixPath(dirPath)
+  return normalized.startsWith(WORKSPACE_PREFIX) && !normalized.includes("..")
 }
 
 export async function GET(request: NextRequest) {
@@ -235,8 +245,8 @@ export async function POST(request: NextRequest) {
       }
 
       const safeName = sanitizeFilename(file.name)
-      const remotePath = path.normalize(`${dirPath.replace(/\/$/, "")}/${safeName}`)
-      if (!remotePath.startsWith("/root/.hermes/workspaces/")) {
+      const remotePath = normalizePosixPath(`${dirPath.replace(/\/$/, "")}/${safeName}`)
+      if (!remotePath.startsWith(WORKSPACE_PREFIX)) {
         return NextResponse.json({ error: "Resolved path escapes workspace" }, { status: 403 })
       }
       const arrayBuffer = await file.arrayBuffer()
@@ -302,7 +312,7 @@ export async function POST(request: NextRequest) {
     const sandbox = await daytona.get(sandboxId)
 
     if (action === "mkdir") {
-      const safeDirPath = path.normalize(dirPath)
+      const safeDirPath = normalizePosixPath(dirPath)
       await sandbox.process.executeCommand(`mkdir -p "${safeDirPath}"`)
       return NextResponse.json({ ok: true, path: safeDirPath })
     }
