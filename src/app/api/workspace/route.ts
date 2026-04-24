@@ -194,7 +194,10 @@ export async function POST(request: NextRequest) {
 
   // Upload action via FormData
   if (contentType.includes("multipart/form-data")) {
-    const contentLength = parseInt(request.headers.get("content-length") || "0", 10)
+    const contentLength = parseInt(request.headers.get("content-length") || "", 10)
+    if (!Number.isFinite(contentLength) || contentLength <= 0) {
+      return NextResponse.json({ error: "Missing or invalid Content-Length" }, { status: 411 })
+    }
     if (contentLength > MAX_UPLOAD_SIZE + 4096) {
       return NextResponse.json({ error: `Request too large (max ${MAX_UPLOAD_SIZE / 1024 / 1024}MB)` }, { status: 413 })
     }
@@ -238,6 +241,17 @@ export async function POST(request: NextRequest) {
       })
       const sandbox = await daytona.get(sandboxId)
       await sandbox.fs.uploadFile(buffer, remotePath)
+
+      // Verify the upload succeeded by checking the file exists
+      try {
+        const files = await sandbox.fs.listFiles(dirPath.replace(/\/$/, ""))
+        const found = files.some((f: { name: string }) => f.name === safeName)
+        if (!found) {
+          return NextResponse.json({ error: "Upload verification failed: file not found on sandbox" }, { status: 502 })
+        }
+      } catch {
+        // listFiles failed -- the upload itself didn't throw, so return success
+      }
 
       return NextResponse.json({ filename: safeName, path: remotePath, size: file.size })
     } catch (err) {
