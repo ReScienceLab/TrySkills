@@ -240,17 +240,20 @@ export async function POST(request: NextRequest) {
         apiUrl: "https://app.daytona.io/api",
       })
       const sandbox = await daytona.get(sandboxId)
+
+      // Ensure parent directory exists (workspace mkdir is fire-and-forget in useChat)
+      await sandbox.process.executeCommand(`mkdir -p "${dirPath.replace(/\/$/, "")}"`)
+
       await sandbox.fs.uploadFile(buffer, remotePath)
 
-      // Verify the upload succeeded by checking the file exists
+      // Verify the upload succeeded by downloading and checking size
       try {
-        const files = await sandbox.fs.listFiles(dirPath.replace(/\/$/, ""))
-        const found = files.some((f: { name: string }) => f.name === safeName)
-        if (!found) {
-          return NextResponse.json({ error: "Upload verification failed: file not found on sandbox" }, { status: 502 })
+        const downloaded = await sandbox.fs.downloadFile(remotePath)
+        if (downloaded.length !== buffer.length) {
+          return NextResponse.json({ error: "Upload verification failed: size mismatch" }, { status: 502 })
         }
       } catch {
-        // listFiles failed -- the upload itself didn't throw, so return success
+        return NextResponse.json({ error: "Upload verification failed: file not readable" }, { status: 502 })
       }
 
       return NextResponse.json({ filename: safeName, path: remotePath, size: file.size })
