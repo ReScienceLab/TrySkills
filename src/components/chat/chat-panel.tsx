@@ -332,9 +332,10 @@ export function ChatPanel({
 
   const addFiles = useCallback((files: FileList | File[]) => {
     const arr = Array.from(files)
+    const sanitize = (n: string) => (n.split("/").pop() || n).replace(/[^\w.\-]/g, "_").slice(0, 200)
     setPendingFiles((prev) => {
-      const names = new Set(prev.map((f) => f.name))
-      const newFiles = arr.filter((f) => !names.has(f.name) && f.size <= MAX_UPLOAD_SIZE)
+      const existingNames = new Set(prev.map((f) => sanitize(f.name)))
+      const newFiles = arr.filter((f) => !existingNames.has(sanitize(f.name)) && f.size <= MAX_UPLOAD_SIZE)
       return [...prev, ...newFiles]
     })
     const oversized = arr.filter((f) => f.size > MAX_UPLOAD_SIZE)
@@ -382,7 +383,11 @@ export function ChatPanel({
   }, [addFiles])
 
   const uploadFiles = useCallback(async (): Promise<string[]> => {
-    if (!pendingFiles.length || !sandboxId || !sandboxKey || !workspacePath) return []
+    if (!pendingFiles.length) return []
+    if (!sandboxId || !sandboxKey || !workspacePath) {
+      setUploadError("Workspace not ready yet -- please wait a moment")
+      throw new Error("Workspace not ready")
+    }
     setIsUploading(true)
     setUploadError(null)
     const uploaded: string[] = []
@@ -453,7 +458,8 @@ export function ChatPanel({
     }
   }
 
-  const canSend = (input.trim() || pendingFiles.length > 0) && !isStreaming && !isUploading
+  const uploadReady = !!(sandboxId && sandboxKey && workspacePath)
+  const canSend = ((input.trim() && true) || (pendingFiles.length > 0 && uploadReady)) && !isStreaming && !isUploading
 
   return (
     <div

@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server"
 import { NextRequest, NextResponse } from "next/server"
+import path from "path/posix"
 
 const HERMES_HOME = "/root/.hermes"
 const MAX_DEPTH = 3
@@ -219,7 +220,10 @@ export async function POST(request: NextRequest) {
       }
 
       const safeName = sanitizeFilename(file.name)
-      const remotePath = `${dirPath.replace(/\/$/, "")}/${safeName}`
+      const remotePath = path.normalize(`${dirPath.replace(/\/$/, "")}/${safeName}`)
+      if (!remotePath.startsWith("/root/.hermes/workspaces/")) {
+        return NextResponse.json({ error: "Resolved path escapes workspace" }, { status: 403 })
+      }
       const arrayBuffer = await file.arrayBuffer()
       const buffer = Buffer.from(arrayBuffer)
 
