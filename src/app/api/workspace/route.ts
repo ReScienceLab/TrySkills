@@ -6,6 +6,7 @@ const MAX_DEPTH = 3
 const MAX_ENTRIES = 500
 const MAX_FILE_SIZE = 512 * 1024
 const MAX_UPLOAD_SIZE = 4 * 1024 * 1024 // 4MB (Vercel Functions body limit is 4.5MB)
+const MAX_IMAGE_READ_SIZE = 2 * 1024 * 1024 // 2MB max for image reads
 
 const IGNORED_DIRS = new Set([
   "node_modules", ".git", ".next", ".turbo", ".cache",
@@ -166,7 +167,20 @@ export async function GET(request: NextRequest) {
       }
 
       if (isImageFile(filePath)) {
+        const clientMaxSize = Number(request.nextUrl.searchParams.get("maxSize") || 0)
+        const effectiveMax = clientMaxSize > 0 ? Math.min(clientMaxSize, MAX_IMAGE_READ_SIZE) : MAX_IMAGE_READ_SIZE
+        try {
+          const info = await sandbox.fs.getFileDetails(filePath)
+          if (info.size && info.size > effectiveMax) {
+            return NextResponse.json({ error: "Image too large for inline display", size: info.size, limit: effectiveMax }, { status: 413 })
+          }
+        } catch {
+          // getFileDetails not available or failed -- fall through to download
+        }
         const buffer = await sandbox.fs.downloadFile(filePath)
+        if (buffer.length > effectiveMax) {
+          return NextResponse.json({ error: "Image too large for inline display", size: buffer.length, limit: effectiveMax }, { status: 413 })
+        }
         const mime = getMimeType(filePath)
         const base64 = buffer.toString("base64")
         return NextResponse.json({
