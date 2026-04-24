@@ -166,7 +166,11 @@ export async function GET(request: NextRequest) {
       }
 
       if (isImageFile(filePath)) {
+        const maxSize = Number(request.nextUrl.searchParams.get("maxSize") || 0)
         const buffer = await sandbox.fs.downloadFile(filePath)
+        if (maxSize > 0 && buffer.length > maxSize) {
+          return NextResponse.json({ error: "Image too large for inline display", size: buffer.length }, { status: 413 })
+        }
         const mime = getMimeType(filePath)
         const base64 = buffer.toString("base64")
         return NextResponse.json({

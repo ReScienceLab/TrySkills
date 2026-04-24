@@ -186,7 +186,17 @@ function CreditWarningBanner({ message }: { message: string }) {
   )
 }
 
-const MAX_INLINE_IMAGE_SIZE = 2 * 1024 * 1024 // 2MB max for inline images
+const MAX_INLINE_IMAGE_SIZE = 2 * 1024 * 1024
+
+function normalizeImagePath(p: string): string {
+  const parts = p.split("/")
+  const resolved: string[] = []
+  for (const part of parts) {
+    if (part === "..") resolved.pop()
+    else if (part && part !== ".") resolved.push(part)
+  }
+  return "/" + resolved.join("/")
+}
 
 function WorkspaceImage({ src, alt, sandboxId, sandboxKey, workspacePath }: {
   src?: string
@@ -197,21 +207,27 @@ function WorkspaceImage({ src, alt, sandboxId, sandboxKey, workspacePath }: {
 }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const isWorkspacePath = !!(src && workspacePath && src.startsWith(workspacePath + "/"))
+
+  const normalizedSrc = src ? normalizeImagePath(src) : null
+  const isWorkspacePath = !!(normalizedSrc && workspacePath && normalizedSrc.startsWith(workspacePath + "/") && !normalizedSrc.includes(".."))
 
   useEffect(() => {
-    if (!isWorkspacePath || !sandboxId || !sandboxKey || !src) return
-    const params = new URLSearchParams({ action: "read", sandboxId, key: sandboxKey, path: src })
+    if (!isWorkspacePath || !sandboxId || !sandboxKey || !normalizedSrc) return
+    const params = new URLSearchParams({
+      action: "read", sandboxId, key: sandboxKey, path: normalizedSrc, maxSize: String(MAX_INLINE_IMAGE_SIZE),
+    })
     fetch(`/api/workspace?${params}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
       .then((data) => {
+        if (data.error) { setError(data.error); return }
         if (data.type !== "image") { setError("Not an image"); return }
-        const sizeBytes = Math.ceil((data.content.length - data.content.indexOf(",") - 1) * 3 / 4)
-        if (sizeBytes > MAX_INLINE_IMAGE_SIZE) { setError("Image too large for inline display"); return }
         setDataUrl(data.content)
       })
       .catch(() => setError("Failed to load"))
-  }, [src, sandboxId, sandboxKey, isWorkspacePath])
+  }, [normalizedSrc, sandboxId, sandboxKey, isWorkspacePath])
 
   if (!isWorkspacePath) {
     if (src?.startsWith("/")) return <span className="text-white/30 text-xs">[image: {alt || src}]</span>
