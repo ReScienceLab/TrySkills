@@ -186,7 +186,43 @@ function CreditWarningBanner({ message }: { message: string }) {
   )
 }
 
-function MessageBubble({ msg }: { msg: ChatMessage }) {
+function WorkspaceImage({ src, alt, sandboxId, sandboxKey }: {
+  src?: string
+  alt?: string
+  sandboxId?: string | null
+  sandboxKey?: string | null
+}) {
+  const [dataUrl, setDataUrl] = useState<string | null>(null)
+  const [error, setError] = useState(false)
+  const isWorkspacePath = src?.startsWith("/root/.hermes/")
+
+  useEffect(() => {
+    if (!isWorkspacePath || !sandboxId || !sandboxKey || !src) return
+    const params = new URLSearchParams({ action: "read", sandboxId, key: sandboxKey, path: src })
+    fetch(`/api/workspace?${params}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.type === "image") setDataUrl(data.content)
+        else setError(true)
+      })
+      .catch(() => setError(true))
+  }, [src, sandboxId, sandboxKey, isWorkspacePath])
+
+  if (!isWorkspacePath) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt={alt || ""} loading="lazy" className="max-w-full rounded" />
+  }
+  if (error) return <span className="text-white/30 text-xs">[image: {alt || src}]</span>
+  if (!dataUrl) return <span className="text-white/20 text-xs animate-pulse">Loading image...</span>
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={dataUrl} alt={alt || ""} className="max-w-full rounded border border-white/10" />
+}
+
+function MessageBubble({ msg, sandboxId, sandboxKey }: {
+  msg: ChatMessage
+  sandboxId?: string | null
+  sandboxKey?: string | null
+}) {
   if (msg.role === "user") {
     return (
       <div className="flex justify-end mb-4">
@@ -201,7 +237,19 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
     <div className="mb-4">
       {msg.content && (
         <div className="prose prose-invert prose-sm max-w-none text-white/85 [&_pre]:bg-white/5 [&_pre]:border [&_pre]:border-white/10 [&_pre]:rounded [&_code]:text-emerald-400/80 [&_a]:text-blue-400 [&_a:hover]:underline">
-          <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
+          <ReactMarkdown
+            rehypePlugins={[rehypeHighlight]}
+            components={{
+              img: (props) => (
+                <WorkspaceImage
+                  src={typeof props.src === "string" ? props.src : undefined}
+                  alt={typeof props.alt === "string" ? props.alt : undefined}
+                  sandboxId={sandboxId}
+                  sandboxKey={sandboxKey}
+                />
+              ),
+            }}
+          >
             {msg.content}
           </ReactMarkdown>
         </div>
@@ -526,7 +574,7 @@ export function ChatPanel({
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {messages.map((msg, i) => (
-          <MessageBubble key={i} msg={msg} />
+          <MessageBubble key={i} msg={msg} sandboxId={sandboxId} sandboxKey={sandboxKey} />
         ))}
         {(thinkingText || isThinking) && (
           <ThinkingCard text={thinkingText} isLive={isThinking} />
