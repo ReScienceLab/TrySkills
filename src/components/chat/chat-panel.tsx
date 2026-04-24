@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeHighlight from "rehype-highlight"
 import { useChat, type ToolCall, type ChatError } from "./use-chat"
@@ -265,23 +265,25 @@ function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath }: {
     )
   }
 
+  const mdComponents = useMemo(() => ({
+    img: (props: React.ComponentProps<"img">) => (
+      <WorkspaceImage
+        src={typeof props.src === "string" ? props.src : undefined}
+        alt={typeof props.alt === "string" ? props.alt : undefined}
+        sandboxId={sandboxId}
+        sandboxKey={sandboxKey}
+        workspacePath={workspacePath}
+      />
+    ),
+  }), [sandboxId, sandboxKey, workspacePath])
+
   return (
     <div className="mb-4">
       {msg.content && (
         <div className="prose prose-invert prose-sm max-w-none text-white/85 [&_pre]:bg-white/5 [&_pre]:border [&_pre]:border-white/10 [&_pre]:rounded [&_code]:text-emerald-400/80 [&_a]:text-blue-400 [&_a:hover]:underline">
           <ReactMarkdown
             rehypePlugins={[rehypeHighlight]}
-            components={{
-              img: (props) => (
-                <WorkspaceImage
-                  src={typeof props.src === "string" ? props.src : undefined}
-                  alt={typeof props.alt === "string" ? props.alt : undefined}
-                  sandboxId={sandboxId}
-                  sandboxKey={sandboxKey}
-                  workspacePath={workspacePath}
-                />
-              ),
-            }}
+            components={mdComponents}
           >
             {msg.content}
           </ReactMarkdown>
