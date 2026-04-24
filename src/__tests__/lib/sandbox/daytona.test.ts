@@ -411,6 +411,35 @@ describe("sandbox/daytona", () => {
       expect(killCmd).toBeUndefined();
     });
 
+    it("recovers a stale gateway when health is down even if config is unchanged", async () => {
+      mockGet.mockResolvedValue({ ...mockSandbox, state: "started" });
+
+      let gatewayHealthy = false;
+      mockExecuteCommand.mockImplementation((cmd: string) => {
+        if (cmd.includes("curl -sf http://localhost:8642/health")) {
+          return Promise.resolve({ exitCode: gatewayHealthy ? 0 : 7, result: "" });
+        }
+        if (cmd.includes("nohup") && cmd.includes("gateway run")) {
+          gatewayHealthy = true;
+          return Promise.resolve({ exitCode: 0, result: "" });
+        }
+        return Promise.resolve({ exitCode: 0, result: "" });
+      });
+
+      await installSkill(
+        testConfig,
+        "sb-test-123",
+        "new-skill",
+        testSkillSource,
+        () => {},
+        { skipConfigWrite: true },
+      );
+
+      const allCmds = mockExecuteCommand.mock.calls.map((c: string[]) => c[0]);
+      expect(allCmds.some((c: string) => c.includes("rm -f /root/.hermes/gateway.pid /root/.hermes/gateway_state.json"))).toBe(true);
+      expect(allCmds.some((c: string) => c.includes("nohup") && c.includes("gateway run"))).toBe(true);
+    });
+
     it("throws on unexpected sandbox state", async () => {
       mockGet.mockResolvedValue({ ...mockSandbox, state: "error" });
 

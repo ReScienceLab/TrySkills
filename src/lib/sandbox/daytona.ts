@@ -150,6 +150,35 @@ function shellSafe(value: string): string | null {
   return value
 }
 
+async function isGatewayHealthy(sandbox: any): Promise<boolean> {
+  try {
+    const result = await sandbox.process.executeCommand(
+      `curl -sf http://localhost:${GATEWAY_PORT}/health 2>/dev/null`,
+    )
+    return result.exitCode === 0
+  } catch {
+    return false
+  }
+}
+
+async function startGateway(
+  sandbox: any,
+  hermesCmd: string,
+  log: (label: string) => void,
+  reason: string,
+): Promise<void> {
+  await sandbox.process.executeCommand(
+    `pkill -f "hermes.*gateway" 2>/dev/null || true`,
+  ).catch(() => {})
+  await sandbox.process.executeCommand(
+    `rm -f ${HERMES_HOME}/gateway.pid ${HERMES_HOME}/gateway_state.json`,
+  ).catch(() => {})
+  await sandbox.process.executeCommand(
+    `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
+  ).catch(() => {})
+  log(`gateway start requested (${reason})`)
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function npxSkillsInstall(
   sandbox: any,
@@ -330,9 +359,7 @@ export async function createHermesSandbox(
 
   const hermesCmd = `${agentDir}/venv/bin/hermes`;
 
-  await sandbox.process.executeCommand(
-    `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
-  ).catch(() => {});
+  await startGateway(sandbox, hermesCmd, log, "initial start");
 
   await waitForHealth(sandbox);
   log("health check passed");
@@ -431,25 +458,23 @@ export async function installSkill(
   log("skill installed");
 
   const hermesCmd = `$(test -f /opt/hermes-agent/venv/bin/hermes && echo /opt/hermes-agent/venv/bin/hermes || echo ${HERMES_HOME}/hermes-agent/venv/bin/hermes)`;
+  const gatewayHealthy = await isGatewayHealthy(sandbox);
+  log(`gateway healthy before start decision=${gatewayHealthy}`);
 
   // Start or restart the gateway when needed.
   // Skill discovery via skills_list/skill_view tools rescans disk on every
   // call (no cache), so a gateway restart is NOT needed just for new skills.
   // Only restart when the gateway isn't running (wasStopped) or config changed.
-  if (wasStopped) {
-    await sandbox.process.executeCommand(
-      `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
-    ).catch(() => {});
-    log("gateway started after wake");
-  } else if (!options?.skipConfigWrite) {
-    await sandbox.process.executeCommand(
-      `pkill -f "hermes.*gateway" 2>/dev/null || true`,
-    ).catch(() => {});
-    await new Promise((r) => setTimeout(r, 2000));
-    await sandbox.process.executeCommand(
-      `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
-    ).catch(() => {});
-    log("gateway restarted after config write");
+  if (wasStopped || !options?.skipConfigWrite || !gatewayHealthy) {
+    if (!wasStopped && (gatewayHealthy || !options?.skipConfigWrite)) {
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    const reason = wasStopped
+      ? "sandbox wake"
+      : !options?.skipConfigWrite
+        ? "config write"
+        : "gateway unhealthy";
+    await startGateway(sandbox, hermesCmd, log, reason);
   }
 
   // Always verify gateway is alive before returning
@@ -526,7 +551,19 @@ async function waitForHealth(sandbox: any): Promise<void> {
     }
     await new Promise((r) => setTimeout(r, HEALTH_POLL_INTERVAL_MS));
   }
-  throw new Error("Sandbox health check timed out");
+
+  let detail = "";
+  try {
+    const logResult = await sandbox.process.executeCommand(
+      "tail -n 20 /tmp/hermes-gateway.log 2>/dev/null || true",
+    );
+    const tail = getCommandOutput(logResult);
+    if (tail) detail = `: ${tail.split("\n")[0]}`
+  } catch {
+    // best-effort only
+  }
+
+  throw new Error(`Sandbox health check timed out${detail}`);
 }
 
 export async function destroySandbox(
