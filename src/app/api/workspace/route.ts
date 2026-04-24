@@ -169,6 +169,14 @@ export async function GET(request: NextRequest) {
       if (isImageFile(filePath)) {
         const clientMaxSize = Number(request.nextUrl.searchParams.get("maxSize") || 0)
         const effectiveMax = clientMaxSize > 0 ? Math.min(clientMaxSize, MAX_IMAGE_READ_SIZE) : MAX_IMAGE_READ_SIZE
+        try {
+          const info = await sandbox.fs.getFileDetails(filePath)
+          if (info.size && info.size > effectiveMax) {
+            return NextResponse.json({ error: "Image too large for inline display", size: info.size, limit: effectiveMax }, { status: 413 })
+          }
+        } catch {
+          // getFileDetails not available or failed -- fall through to download
+        }
         const buffer = await sandbox.fs.downloadFile(filePath)
         if (buffer.length > effectiveMax) {
           return NextResponse.json({ error: "Image too large for inline display", size: buffer.length, limit: effectiveMax }, { status: 413 })
