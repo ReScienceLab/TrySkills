@@ -5,6 +5,7 @@ const HERMES_HOME = "/root/.hermes"
 const MAX_DEPTH = 3
 const MAX_ENTRIES = 500
 const MAX_FILE_SIZE = 512 * 1024
+const MAX_UPLOAD_SIZE = 10 * 1024 * 1024 // 10MB
 
 const IGNORED_DIRS = new Set([
   "node_modules", ".git", ".next", ".turbo", ".cache",
@@ -95,6 +96,13 @@ async function listFilesRecursive(
   })
 }
 
+function sanitizeFilename(raw: string): string {
+  const name = raw.split("/").pop() || raw
+  const safe = name.replace(/[^\w.\-]/g, "_").slice(0, 200)
+  if (!safe || safe.replace(/\./g, "") === "") throw new Error("Invalid filename")
+  return safe
+}
+
 export async function GET(request: NextRequest) {
   const { userId } = await auth()
   if (!userId) {
@@ -181,6 +189,61 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
   }
 
+  const contentType = request.headers.get("content-type") || ""
+
+  // Upload action via FormData
+  if (contentType.includes("multipart/form-data")) {
+    try {
+      const formData = await request.formData()
+      const action = formData.get("action") as string
+      if (action !== "upload") {
+        return NextResponse.json({ error: "Invalid action" }, { status: 400 })
+      }
+
+      const sandboxId = formData.get("sandboxId") as string
+      const daytonaKey = formData.get("key") as string
+      const dirPath = formData.get("path") as string
+      const file = formData.get("file") as File | null
+
+      if (!sandboxId || !daytonaKey || !dirPath) {
+        return NextResponse.json({ error: "Missing sandboxId, key, or path" }, { status: 400 })
+      }
+      if (!dirPath.startsWith("/root/.hermes/workspaces/")) {
+        return NextResponse.json({ error: "Path must be under /root/.hermes/workspaces/" }, { status: 403 })
+      }
+      if (!file) {
+        return NextResponse.json({ error: "No file provided" }, { status: 400 })
+      }
+      if (file.size > MAX_UPLOAD_SIZE) {
+        return NextResponse.json({ error: `File too large (max ${MAX_UPLOAD_SIZE / 1024 / 1024}MB)` }, { status: 413 })
+      }
+
+      const safeName = sanitizeFilename(file.name)
+      const remotePath = `${dirPath.replace(/\/$/, "")}/${safeName}`
+      const arrayBuffer = await file.arrayBuffer()
+      const buffer = Buffer.from(arrayBuffer)
+
+      const { Daytona } = await getDaytonaSDK()
+      const daytona = new Daytona({
+        apiKey: daytonaKey,
+        apiUrl: "https://app.daytona.io/api",
+      })
+      const sandbox = await daytona.get(sandboxId)
+      await sandbox.fs.uploadFile(buffer, remotePath)
+
+      return NextResponse.json({ filename: safeName, path: remotePath, size: file.size })
+    } catch (err) {
+      if (err instanceof Error && err.message === "Invalid filename") {
+        return NextResponse.json({ error: "Invalid filename" }, { status: 400 })
+      }
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : "Upload failed" },
+        { status: 500 },
+      )
+    }
+  }
+
+  // JSON actions (mkdir, etc.)
   let body: { action?: string; sandboxId?: string; key?: string; path?: string }
   try {
     body = await request.json()
