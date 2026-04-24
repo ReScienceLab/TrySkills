@@ -208,13 +208,19 @@ function WorkspaceImage({ src, alt, sandboxId, sandboxKey, workspacePath }: {
   const [dataUrl, setDataUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const normalizedSrc = src ? normalizeImagePath(src) : null
-  const isWorkspacePath = !!(normalizedSrc && workspacePath && normalizedSrc.startsWith(workspacePath + "/") && !normalizedSrc.includes(".."))
+  const isExternalUrl = src?.startsWith("http://") || src?.startsWith("https://")
+  const resolvedSrc = (() => {
+    if (!src || isExternalUrl) return null
+    if (src.startsWith("/")) return normalizeImagePath(src)
+    if (workspacePath) return normalizeImagePath(`${workspacePath}/${src}`)
+    return null
+  })()
+  const isWorkspacePath = !!(resolvedSrc && workspacePath && resolvedSrc.startsWith(workspacePath + "/") && !resolvedSrc.includes(".."))
 
   useEffect(() => {
-    if (!isWorkspacePath || !sandboxId || !sandboxKey || !normalizedSrc) return
+    if (!isWorkspacePath || !sandboxId || !sandboxKey || !resolvedSrc) return
     const params = new URLSearchParams({
-      action: "read", sandboxId, key: sandboxKey, path: normalizedSrc, maxSize: String(MAX_INLINE_IMAGE_SIZE),
+      action: "read", sandboxId, key: sandboxKey, path: resolvedSrc, maxSize: String(MAX_INLINE_IMAGE_SIZE),
     })
     fetch(`/api/workspace?${params}`)
       .then((r) => {
@@ -227,12 +233,15 @@ function WorkspaceImage({ src, alt, sandboxId, sandboxKey, workspacePath }: {
         setDataUrl(data.content)
       })
       .catch(() => setError("Failed to load"))
-  }, [normalizedSrc, sandboxId, sandboxKey, isWorkspacePath])
+  }, [resolvedSrc, sandboxId, sandboxKey, isWorkspacePath])
 
-  if (!isWorkspacePath) {
-    if (src?.startsWith("/")) return <span className="text-white/30 text-xs">[image: {alt || src}]</span>
+  if (isExternalUrl) {
     // eslint-disable-next-line @next/next/no-img-element
     return <img src={src} alt={alt || ""} loading="lazy" className="max-w-full rounded" />
+  }
+  if (!isWorkspacePath) {
+    if (src) return <span className="text-white/30 text-xs">[image: {alt || src}]</span>
+    return null
   }
   if (error) return <span className="text-white/30 text-xs">[{error}: {alt || src?.split("/").pop()}]</span>
   if (!dataUrl) return <span className="text-white/20 text-xs animate-pulse">Loading image...</span>
