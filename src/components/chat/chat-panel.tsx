@@ -287,6 +287,7 @@ export function ChatPanel({
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragCounterRef = useRef(0)
+  const uploadingRef = useRef(false)
 
   useEffect(() => {
     if (autoIntroSent.current || initialMessages?.length || !sessionId) return
@@ -331,6 +332,7 @@ export function ChatPanel({
   }, [messages, isStreaming])
 
   const addFiles = useCallback((files: FileList | File[]) => {
+    if (uploadingRef.current) return
     const arr = Array.from(files)
     const sanitize = (n: string) => (n.split("/").pop() || n).replace(/[^\w.\-]/g, "_").slice(0, 200)
     setPendingFiles((prev) => {
@@ -353,6 +355,7 @@ export function ChatPanel({
   }, [])
 
   const removeFile = useCallback((index: number) => {
+    if (uploadingRef.current) return
     setPendingFiles((prev) => prev.filter((_, i) => i !== index))
   }, [])
 
@@ -391,15 +394,18 @@ export function ChatPanel({
 
   const uploadFiles = useCallback(async (): Promise<string[]> => {
     if (!pendingFiles.length) return []
+    if (uploadingRef.current) return []
     if (!sandboxId || !sandboxKey || !workspacePath) {
       setUploadError("Workspace not ready yet -- please wait a moment")
       throw new Error("Workspace not ready")
     }
+    uploadingRef.current = true
     setIsUploading(true)
     setUploadError(null)
+    const snapshot = [...pendingFiles]
     const uploaded: string[] = []
     try {
-      for (const file of pendingFiles) {
+      for (const file of snapshot) {
         const fd = new FormData()
         fd.append("action", "upload")
         fd.append("sandboxId", sandboxId)
@@ -420,6 +426,7 @@ export function ChatPanel({
       setUploadError(err instanceof Error ? err.message : "Upload failed")
       throw err
     } finally {
+      uploadingRef.current = false
       setIsUploading(false)
     }
   }, [pendingFiles, sandboxId, sandboxKey, workspacePath])
@@ -432,7 +439,7 @@ export function ChatPanel({
 
   const handleSend = async () => {
     const text = input.trim()
-    if ((!text && !pendingFiles.length) || isStreaming || isUploading) return
+    if ((!text && !pendingFiles.length) || isStreaming || isUploading || uploadingRef.current) return
 
     let msgText = text
     if (pendingFiles.length) {
