@@ -2,7 +2,9 @@ import type { SandboxConfig, SandboxSession, SandboxState } from "./types";
 import { getProviderData } from "@/lib/providers/provider-data";
 
 const SNAPSHOT_NAME = process.env.NEXT_PUBLIC_HERMES_SNAPSHOT || "hermes-ready";
-const HERMES_IMAGE = process.env.NEXT_PUBLIC_HERMES_IMAGE || "ghcr.io/resciencelab/hermes-ready:latest";
+const HERMES_IMAGE =
+  process.env.NEXT_PUBLIC_HERMES_IMAGE ||
+  "ghcr.io/resciencelab/hermes-ready:latest";
 const AUTO_STOP_MINUTES = 30;
 const AUTO_ARCHIVE_MINUTES = 60 * 24 * 2;
 const AUTO_DELETE_MINUTES = 60 * 24 * 7;
@@ -16,7 +18,9 @@ const HERMES_HOME = "/root/.hermes";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getCommandOutput(result: any): string {
-  return (result.result?.output ?? result.output ?? result.result ?? "").toString().trim()
+  return (result.result?.output ?? result.output ?? result.result ?? "")
+    .toString()
+    .trim();
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -24,37 +28,38 @@ async function discoverSkillsOnDisk(sandbox: any): Promise<string[]> {
   try {
     const result = await sandbox.process.executeCommand(
       `for d in ${HERMES_HOME}/skills/*/; do [ -f "$d/SKILL.md" ] && basename "$d"; done 2>/dev/null || true`,
-    )
-    const output = getCommandOutput(result)
-    if (!output) return []
+    );
+    const output = getCommandOutput(result);
+    if (!output) return [];
     return output
       .split("\n")
       .filter((s: string) => s.trim())
       .map((s: string) => {
-        const name = s.trim()
-        if (!name.includes("--")) return name
+        const name = s.trim();
+        if (!name.includes("--")) return name;
         // Reverse sanitizeSkillDir: owner--repo--skill -> owner/repo/skill
         // Only apply if result looks like a valid TrySkills path (3+ segments)
-        const decoded = name.replace(/--/g, "/")
-        const segments = decoded.split("/")
-        return segments.length >= 3 ? decoded : name
-      })
+        const decoded = name.replace(/--/g, "/");
+        const segments = decoded.split("/");
+        return segments.length >= 3 ? decoded : name;
+      });
   } catch {
-    return []
+    return [];
   }
 }
 
 export interface SkillSource {
-  owner: string
-  repo: string
-  skillName: string
+  owner: string;
+  repo: string;
+  skillName: string;
 }
 
 function resolveProviderMapping(llmProvider: string) {
   const provider = getProviderData(llmProvider);
-  const envVar = provider?.hermesProvider === "custom"
-    ? "OPENAI_API_KEY"
-    : provider?.envVar ?? "OPENROUTER_API_KEY";
+  const envVar =
+    provider?.hermesProvider === "custom"
+      ? "OPENAI_API_KEY"
+      : (provider?.envVar ?? "OPENROUTER_API_KEY");
   const hermesProvider = provider?.hermesProvider ?? "openrouter";
   const baseUrl = provider?.baseUrl;
   return { envVar, hermesProvider, baseUrl };
@@ -70,7 +75,11 @@ async function getDaytonaSDK() {
   return { Daytona };
 }
 
-function buildConfigYaml(model: string, provider: string, baseUrl?: string): string {
+function buildConfigYaml(
+  model: string,
+  provider: string,
+  baseUrl?: string,
+): string {
   const lines = [
     "model:",
     `  default: "${model}"`,
@@ -102,35 +111,39 @@ const RESERVED_ENV_KEYS = new Set([
   "API_SERVER_ENABLED",
   "API_SERVER_CORS_ORIGINS",
   "GATEWAY_ALLOW_ALL_USERS",
-])
+]);
 
 function sanitizeExtraEnvVars(
   extraEnvVars: Record<string, string> | undefined,
   providerEnvVar: string,
 ): Record<string, string> {
-  if (!extraEnvVars) return {}
-  const result: Record<string, string> = {}
+  if (!extraEnvVars) return {};
+  const result: Record<string, string> = {};
   for (const [key, value] of Object.entries(extraEnvVars)) {
     if (key !== providerEnvVar && !RESERVED_ENV_KEYS.has(key)) {
-      result[key] = value
+      result[key] = value;
     }
   }
-  return result
+  return result;
 }
 
-function buildEnvFile(providerEnvVar: string, apiKey: string, extraEnvVars?: Record<string, string>): string {
+function buildEnvFile(
+  providerEnvVar: string,
+  apiKey: string,
+  extraEnvVars?: Record<string, string>,
+): string {
   const lines = [
     `${providerEnvVar}=${apiKey}`,
     "API_SERVER_ENABLED=true",
     "API_SERVER_CORS_ORIGINS=*",
     "GATEWAY_ALLOW_ALL_USERS=true",
-  ]
-  const safe = sanitizeExtraEnvVars(extraEnvVars, providerEnvVar)
+  ];
+  const safe = sanitizeExtraEnvVars(extraEnvVars, providerEnvVar);
   for (const [key, value] of Object.entries(safe)) {
-    lines.push(`${key}=${value}`)
+    lines.push(`${key}=${value}`);
   }
-  lines.push("")
-  return lines.join("\n")
+  lines.push("");
+  return lines.join("\n");
 }
 
 /**
@@ -143,11 +156,44 @@ function sanitizeSkillDir(skillName: string): string {
   return skillName.replace(/\//g, "--");
 }
 
-const SAFE_SHELL_SEGMENT = /^[a-zA-Z0-9_.\-\/]+$/
+const SAFE_SHELL_SEGMENT = /^[a-zA-Z0-9_.\-\/]+$/;
 
 function shellSafe(value: string): string | null {
-  if (!value || !SAFE_SHELL_SEGMENT.test(value)) return null
-  return value
+  if (!value || !SAFE_SHELL_SEGMENT.test(value)) return null;
+  return value;
+}
+
+async function isGatewayHealthy(sandbox: any): Promise<boolean> {
+  try {
+    const result = await sandbox.process.executeCommand(
+      `curl -sf http://localhost:${GATEWAY_PORT}/health 2>/dev/null`,
+    );
+    return result.exitCode === 0;
+  } catch {
+    return false;
+  }
+}
+
+async function startGateway(
+  sandbox: any,
+  hermesCmd: string,
+  log: (label: string) => void,
+  reason: string,
+): Promise<void> {
+  await sandbox.process
+    .executeCommand(`pkill -f "hermes.*gateway" 2>/dev/null || true`)
+    .catch(() => {});
+  await sandbox.process
+    .executeCommand(
+      `rm -f ${HERMES_HOME}/gateway.pid ${HERMES_HOME}/gateway_state.json`,
+    )
+    .catch(() => {});
+  await sandbox.process
+    .executeCommand(
+      `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
+    )
+    .catch(() => {});
+  log(`gateway start requested (${reason})`);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -157,30 +203,32 @@ async function npxSkillsInstall(
   destDir: string,
   log: (label: string) => void,
 ): Promise<void> {
-  const owner = shellSafe(source.owner)
-  const repo = shellSafe(source.repo)
-  const skill = shellSafe(source.skillName)
-  const safeDest = shellSafe(destDir)
+  const owner = shellSafe(source.owner);
+  const repo = shellSafe(source.repo);
+  const skill = shellSafe(source.skillName);
+  const safeDest = shellSafe(destDir);
   if (!owner || !repo || !skill || !safeDest) {
-    throw new Error("Unsafe characters in skill source")
+    throw new Error("Unsafe characters in skill source");
   }
 
   // npx skills CLI matches by canonical skill name (leaf segment only)
-  const leafName = skill.split("/").pop() || skill
+  const leafName = skill.split("/").pop() || skill;
 
-  const cmd = `npx -y skills add ${owner}/${repo} --skill "${leafName}" --agent universal -g -y --copy 2>&1`
-  const result = await sandbox.process.executeCommand(cmd)
+  const cmd = `npx -y skills add ${owner}/${repo} --skill "${leafName}" --agent universal -g -y --copy 2>&1`;
+  const result = await sandbox.process.executeCommand(cmd);
   if (result.exitCode !== 0) {
-    const output = getCommandOutput(result)
-    throw new Error(`npx skills add failed (exit ${result.exitCode}): ${output.slice(0, 200)}`)
+    const output = getCommandOutput(result);
+    throw new Error(
+      `npx skills add failed (exit ${result.exitCode}): ${output.slice(0, 200)}`,
+    );
   }
-  log("npx skills add succeeded")
+  log("npx skills add succeeded");
 
   // Remove existing dir/symlink then create fresh symlink
   await sandbox.process.executeCommand(
-    `rm -rf ${HERMES_HOME}/skills/${safeDest} && ln -sfn /root/.agents/skills/${leafName} ${HERMES_HOME}/skills/${safeDest}`
-  )
-  log("symlinked to hermes skills dir")
+    `rm -rf ${HERMES_HOME}/skills/${safeDest} && ln -sfn /root/.agents/skills/${leafName} ${HERMES_HOME}/skills/${safeDest}`,
+  );
+  log("symlinked to hermes skills dir");
 }
 
 export async function createHermesSandbox(
@@ -191,7 +239,8 @@ export async function createHermesSandbox(
   userId?: string,
 ): Promise<SandboxSession & { usedSnapshot: boolean }> {
   const t0 = Date.now();
-  const log = (label: string) => console.log(`[daytona] createHermesSandbox ${label}: ${Date.now() - t0}ms`);
+  const log = (label: string) =>
+    console.log(`[daytona] createHermesSandbox ${label}: ${Date.now() - t0}ms`);
 
   const { Daytona } = await getDaytonaSDK();
   log("SDK loaded");
@@ -203,7 +252,10 @@ export async function createHermesSandbox(
   activeDaytona = daytona;
 
   const providerMapping = resolveProviderMapping(config.llmProvider);
-  const safeExtra = sanitizeExtraEnvVars(config.envVars, providerMapping.envVar);
+  const safeExtra = sanitizeExtraEnvVars(
+    config.envVars,
+    providerMapping.envVar,
+  );
 
   onProgress("creating");
 
@@ -220,6 +272,7 @@ export async function createHermesSandbox(
         autoArchiveInterval: AUTO_ARCHIVE_MINUTES,
         autoDeleteInterval: AUTO_DELETE_MINUTES,
         public: true,
+        networkBlockAll: false,
         labels,
         envVars: {
           [providerMapping.envVar]: config.llmApiKey,
@@ -235,7 +288,12 @@ export async function createHermesSandbox(
   } catch (err) {
     log("snapshot create failed, trying image fallback");
     const msg = err instanceof Error ? err.message.toLowerCase() : "";
-    const isSnapshotMissing = msg.includes("not found") || msg.includes("404") || msg.includes("unprocessable") || msg.includes("does not exist") || msg.includes("cannot specify");
+    const isSnapshotMissing =
+      msg.includes("not found") ||
+      msg.includes("404") ||
+      msg.includes("unprocessable") ||
+      msg.includes("does not exist") ||
+      msg.includes("cannot specify");
     if (!isSnapshotMissing) throw err;
 
     try {
@@ -246,6 +304,7 @@ export async function createHermesSandbox(
           autoArchiveInterval: AUTO_ARCHIVE_MINUTES,
           autoDeleteInterval: AUTO_DELETE_MINUTES,
           public: true,
+          networkBlockAll: false,
           labels,
           resources: COLD_RESOURCES,
           envVars: {
@@ -258,7 +317,8 @@ export async function createHermesSandbox(
         },
         {
           timeout: 90,
-          onSnapshotCreateLogs: (chunk) => console.log("[daytona] image build:", chunk),
+          onSnapshotCreateLogs: (chunk) =>
+            console.log("[daytona] image build:", chunk),
         },
       );
       usedSnapshot = true;
@@ -271,6 +331,7 @@ export async function createHermesSandbox(
           autoArchiveInterval: AUTO_ARCHIVE_MINUTES,
           autoDeleteInterval: AUTO_DELETE_MINUTES,
           public: true,
+          networkBlockAll: false,
           labels,
           envVars: {
             [providerMapping.envVar]: config.llmApiKey,
@@ -290,56 +351,74 @@ export async function createHermesSandbox(
 
   if (usedSnapshot) {
     onProgress("configuring", { usedSnapshot: true });
-    await sandbox.process.executeCommand([
-      `mkdir -p ${HERMES_HOME}/skills ${HERMES_HOME}/logs`,
-      `ln -sfn /opt/hermes-agent ${HERMES_HOME}/hermes-agent`,
-      "mkdir -p /home/daytona/.local/bin",
-      "ln -sf /opt/hermes-agent/venv/bin/hermes /home/daytona/.local/bin/hermes",
-    ].join(" && ")).catch(() => {});
+    await sandbox.process
+      .executeCommand(
+        [
+          `mkdir -p ${HERMES_HOME}/skills ${HERMES_HOME}/logs`,
+          `ln -sfn /opt/hermes-agent ${HERMES_HOME}/hermes-agent`,
+          "mkdir -p /home/daytona/.local/bin",
+          "ln -sf /opt/hermes-agent/venv/bin/hermes /home/daytona/.local/bin/hermes",
+        ].join(" && "),
+      )
+      .catch(() => {});
   } else {
     onProgress("installing", { usedSnapshot: false });
     log("starting curl install (final fallback)");
-    await sandbox.process.executeCommand(
-      "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup 2>&1 || true",
-    ).catch(() => {});
+    await sandbox.process
+      .executeCommand(
+        "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup 2>&1 || true",
+      )
+      .catch(() => {});
     onProgress("configuring", { usedSnapshot: false });
   }
 
-  await sandbox.process.executeCommand(
-    `mkdir -p ${HERMES_HOME} && cat > ${HERMES_HOME}/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey, config.envVars)}\nENVEOF`,
-  ).catch(() => {});
-  await sandbox.process.executeCommand(
-    `cat > ${HERMES_HOME}/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.hermesProvider, providerMapping.baseUrl)}\nCFGEOF`,
-  ).catch(() => {});
+  await sandbox.process
+    .executeCommand(
+      `mkdir -p ${HERMES_HOME} && cat > ${HERMES_HOME}/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey, config.envVars)}\nENVEOF`,
+    )
+    .catch(() => {});
+  await sandbox.process
+    .executeCommand(
+      `cat > ${HERMES_HOME}/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.hermesProvider, providerMapping.baseUrl)}\nCFGEOF`,
+    )
+    .catch(() => {});
 
-  const agentDir = usedSnapshot ? "/opt/hermes-agent" : `${HERMES_HOME}/hermes-agent`;
+  const agentDir = usedSnapshot
+    ? "/opt/hermes-agent"
+    : `${HERMES_HOME}/hermes-agent`;
 
   if (!usedSnapshot) {
-    await sandbox.process.executeCommand(
-      "rm -rf /tmp/camoufox* /tmp/pip-* /root/.cache /home/daytona/.cache && pip cache purge 2>/dev/null || true",
-    ).catch(() => {});
+    await sandbox.process
+      .executeCommand(
+        "rm -rf /tmp/camoufox* /tmp/pip-* /root/.cache /home/daytona/.cache && pip cache purge 2>/dev/null || true",
+      )
+      .catch(() => {});
     log("disk cleanup done");
   }
 
   onProgress("uploading");
-  const destDir = sanitizeSkillDir(skillName)
-  await npxSkillsInstall(sandbox, skillSource, destDir, log)
+  const destDir = sanitizeSkillDir(skillName);
+  await npxSkillsInstall(sandbox, skillSource, destDir, log);
 
   onProgress("starting");
   log("skill files uploaded, starting gateway");
 
   const hermesCmd = `${agentDir}/venv/bin/hermes`;
 
-  await sandbox.process.executeCommand(
-    `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
-  ).catch(() => {});
+  await startGateway(sandbox, hermesCmd, log, "initial start");
 
   await waitForHealth(sandbox);
   log("health check passed");
 
-  const signedPreview = await sandbox.getSignedPreviewUrl(GATEWAY_PORT, SIGNED_URL_TTL_SECONDS);
+  const signedPreview = await sandbox.getSignedPreviewUrl(
+    GATEWAY_PORT,
+    SIGNED_URL_TTL_SECONDS,
+  );
   log("signed URL obtained");
-  console.log("[daytona] createHermesSandbox signedPreview URL:", signedPreview.url);
+  console.log(
+    "[daytona] createHermesSandbox signedPreview URL:",
+    signedPreview.url,
+  );
   const gatewayUrl = signedPreview.url;
 
   const discoveredSkills = await discoverSkillsOnDisk(sandbox);
@@ -379,7 +458,8 @@ export async function installSkill(
   },
 ): Promise<SandboxSession> {
   const t0 = Date.now();
-  const log = (label: string) => console.log(`[daytona] installSkill ${label}: ${Date.now() - t0}ms`);
+  const log = (label: string) =>
+    console.log(`[daytona] installSkill ${label}: ${Date.now() - t0}ms`);
 
   const { Daytona } = await getDaytonaSDK();
   log("SDK loaded");
@@ -410,46 +490,48 @@ export async function installSkill(
   const providerMapping = resolveProviderMapping(config.llmProvider);
 
   onProgress("uploading");
-  log(`installing (skipConfig=${!!options?.skipConfigWrite})`)
+  log(`installing (skipConfig=${!!options?.skipConfigWrite})`);
 
   const setupTasks: Promise<unknown>[] = [];
   if (!options?.skipConfigWrite) {
     setupTasks.push(
-      sandbox.process.executeCommand(
-        `mkdir -p ${HERMES_HOME} && cat > ${HERMES_HOME}/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey, config.envVars)}\nENVEOF`,
-      ).catch(() => {}),
-      sandbox.process.executeCommand(
-        `cat > ${HERMES_HOME}/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.hermesProvider, providerMapping.baseUrl)}\nCFGEOF`,
-      ).catch(() => {}),
+      sandbox.process
+        .executeCommand(
+          `mkdir -p ${HERMES_HOME} && cat > ${HERMES_HOME}/.env << 'ENVEOF'\n${buildEnvFile(providerMapping.envVar, config.llmApiKey, config.envVars)}\nENVEOF`,
+        )
+        .catch(() => {}),
+      sandbox.process
+        .executeCommand(
+          `cat > ${HERMES_HOME}/config.yaml << 'CFGEOF'\n${buildConfigYaml(config.llmModel, providerMapping.hermesProvider, providerMapping.baseUrl)}\nCFGEOF`,
+        )
+        .catch(() => {}),
     );
   }
   await Promise.all(setupTasks);
   log("config done");
 
-  const destDir = sanitizeSkillDir(skillName)
-  await npxSkillsInstall(sandbox, skillSource, destDir, log)
+  const destDir = sanitizeSkillDir(skillName);
+  await npxSkillsInstall(sandbox, skillSource, destDir, log);
   log("skill installed");
 
   const hermesCmd = `$(test -f /opt/hermes-agent/venv/bin/hermes && echo /opt/hermes-agent/venv/bin/hermes || echo ${HERMES_HOME}/hermes-agent/venv/bin/hermes)`;
+  const gatewayHealthy = await isGatewayHealthy(sandbox);
+  log(`gateway healthy before start decision=${gatewayHealthy}`);
 
   // Start or restart the gateway when needed.
   // Skill discovery via skills_list/skill_view tools rescans disk on every
   // call (no cache), so a gateway restart is NOT needed just for new skills.
   // Only restart when the gateway isn't running (wasStopped) or config changed.
-  if (wasStopped) {
-    await sandbox.process.executeCommand(
-      `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
-    ).catch(() => {});
-    log("gateway started after wake");
-  } else if (!options?.skipConfigWrite) {
-    await sandbox.process.executeCommand(
-      `pkill -f "hermes.*gateway" 2>/dev/null || true`,
-    ).catch(() => {});
-    await new Promise((r) => setTimeout(r, 2000));
-    await sandbox.process.executeCommand(
-      `nohup ${hermesCmd} gateway run > /tmp/hermes-gateway.log 2>&1 &\ndisown`,
-    ).catch(() => {});
-    log("gateway restarted after config write");
+  if (wasStopped || !options?.skipConfigWrite || !gatewayHealthy) {
+    if (!wasStopped && (gatewayHealthy || !options?.skipConfigWrite)) {
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    const reason = wasStopped
+      ? "sandbox wake"
+      : !options?.skipConfigWrite
+        ? "config write"
+        : "gateway unhealthy";
+    await startGateway(sandbox, hermesCmd, log, reason);
   }
 
   // Always verify gateway is alive before returning
@@ -457,14 +539,19 @@ export async function installSkill(
   log("health check passed");
 
   // Reuse existing signed URL if still fresh
-  const urlAge = options?.gatewayUrlCreatedAt ? Date.now() - options.gatewayUrlCreatedAt : Infinity;
+  const urlAge = options?.gatewayUrlCreatedAt
+    ? Date.now() - options.gatewayUrlCreatedAt
+    : Infinity;
   let gatewayUrl: string;
   let urlRefreshed = false;
   if (options?.existingGatewayUrl && urlAge < SIGNED_URL_FRESH_MS) {
     gatewayUrl = options.existingGatewayUrl;
     log("reused existing signed URL");
   } else {
-    const signedPreview = await sandbox.getSignedPreviewUrl(GATEWAY_PORT, SIGNED_URL_TTL_SECONDS);
+    const signedPreview = await sandbox.getSignedPreviewUrl(
+      GATEWAY_PORT,
+      SIGNED_URL_TTL_SECONDS,
+    );
     gatewayUrl = signedPreview.url;
     urlRefreshed = true;
     log("new signed URL obtained");
@@ -526,7 +613,19 @@ async function waitForHealth(sandbox: any): Promise<void> {
     }
     await new Promise((r) => setTimeout(r, HEALTH_POLL_INTERVAL_MS));
   }
-  throw new Error("Sandbox health check timed out");
+
+  let detail = "";
+  try {
+    const logResult = await sandbox.process.executeCommand(
+      "tail -n 20 /tmp/hermes-gateway.log 2>/dev/null || true",
+    );
+    const tail = getCommandOutput(logResult);
+    if (tail) detail = `: ${tail.split("\n")[0]}`;
+  } catch {
+    // best-effort only
+  }
+
+  throw new Error(`Sandbox health check timed out${detail}`);
 }
 
 export async function destroySandbox(

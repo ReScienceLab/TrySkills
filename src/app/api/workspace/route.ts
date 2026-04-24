@@ -5,6 +5,8 @@ const HERMES_HOME = "/root/.hermes"
 const MAX_DEPTH = 3
 const MAX_ENTRIES = 500
 const MAX_FILE_SIZE = 512 * 1024
+const MAX_UPLOAD_SIZE = 4 * 1024 * 1024 // 4MB (Vercel Functions body limit is 4.5MB)
+const MAX_IMAGE_READ_SIZE = 2 * 1024 * 1024 // 2MB max for image reads
 
 const IGNORED_DIRS = new Set([
   "node_modules", ".git", ".next", ".turbo", ".cache",
@@ -95,6 +97,32 @@ async function listFilesRecursive(
   })
 }
 
+function sanitizeFilename(raw: string): string {
+  const name = raw.split("/").pop() || raw
+  const safe = name.replace(/[^\w.\-]/g, "_").slice(0, 200)
+  if (!safe || safe.replace(/\./g, "") === "") throw new Error("Invalid filename")
+  return safe
+}
+
+const SAFE_PATH_RE = /^[a-zA-Z0-9/_.\-]+$/
+const WORKSPACE_PREFIX = "/root/.hermes/workspaces/"
+
+function normalizePosixPath(p: string): string {
+  const parts = p.split("/")
+  const resolved: string[] = []
+  for (const part of parts) {
+    if (part === "..") resolved.pop()
+    else if (part && part !== ".") resolved.push(part)
+  }
+  return "/" + resolved.join("/")
+}
+
+function validateWorkspacePath(dirPath: string): boolean {
+  if (!dirPath.startsWith(WORKSPACE_PREFIX) || !SAFE_PATH_RE.test(dirPath)) return false
+  const normalized = normalizePosixPath(dirPath)
+  return normalized.startsWith(WORKSPACE_PREFIX) && !normalized.includes("..")
+}
+
 export async function GET(request: NextRequest) {
   const { userId } = await auth()
   if (!userId) {
@@ -139,7 +167,20 @@ export async function GET(request: NextRequest) {
       }
 
       if (isImageFile(filePath)) {
+        const clientMaxSize = Number(request.nextUrl.searchParams.get("maxSize") || 0)
+        const effectiveMax = clientMaxSize > 0 ? Math.min(clientMaxSize, MAX_IMAGE_READ_SIZE) : MAX_IMAGE_READ_SIZE
+        try {
+          const info = await sandbox.fs.getFileDetails(filePath)
+          if (info.size && info.size > effectiveMax) {
+            return NextResponse.json({ error: "Image too large for inline display", size: info.size, limit: effectiveMax }, { status: 413 })
+          }
+        } catch {
+          // getFileDetails not available or failed -- fall through to download
+        }
         const buffer = await sandbox.fs.downloadFile(filePath)
+        if (buffer.length > effectiveMax) {
+          return NextResponse.json({ error: "Image too large for inline display", size: buffer.length, limit: effectiveMax }, { status: 413 })
+        }
         const mime = getMimeType(filePath)
         const base64 = buffer.toString("base64")
         return NextResponse.json({
@@ -181,6 +222,85 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
   }
 
+  const contentType = request.headers.get("content-type") || ""
+
+  // Upload action via FormData
+  if (contentType.includes("multipart/form-data")) {
+    const contentLength = parseInt(request.headers.get("content-length") || "", 10)
+    if (!Number.isFinite(contentLength) || contentLength <= 0) {
+      return NextResponse.json({ error: "Missing or invalid Content-Length" }, { status: 411 })
+    }
+    if (contentLength > MAX_UPLOAD_SIZE + 4096) {
+      return NextResponse.json({ error: `Request too large (max ${MAX_UPLOAD_SIZE / 1024 / 1024}MB)` }, { status: 413 })
+    }
+    try {
+      const formData = await request.formData()
+      const action = formData.get("action") as string
+      if (action !== "upload") {
+        return NextResponse.json({ error: "Invalid action" }, { status: 400 })
+      }
+
+      const sandboxId = formData.get("sandboxId") as string
+      const daytonaKey = formData.get("key") as string
+      const dirPath = formData.get("path") as string
+      const file = formData.get("file") as File | null
+
+      if (!sandboxId || !daytonaKey || !dirPath) {
+        return NextResponse.json({ error: "Missing sandboxId, key, or path" }, { status: 400 })
+      }
+      if (!validateWorkspacePath(dirPath)) {
+        return NextResponse.json({ error: "Invalid workspace path" }, { status: 403 })
+      }
+      if (!file) {
+        return NextResponse.json({ error: "No file provided" }, { status: 400 })
+      }
+      if (file.size > MAX_UPLOAD_SIZE) {
+        return NextResponse.json({ error: `File too large (max ${MAX_UPLOAD_SIZE / 1024 / 1024}MB)` }, { status: 413 })
+      }
+
+      const safeName = sanitizeFilename(file.name)
+      const remotePath = normalizePosixPath(`${dirPath.replace(/\/$/, "")}/${safeName}`)
+      if (!remotePath.startsWith(WORKSPACE_PREFIX)) {
+        return NextResponse.json({ error: "Resolved path escapes workspace" }, { status: 403 })
+      }
+      const arrayBuffer = await file.arrayBuffer()
+      const buffer = Buffer.from(arrayBuffer)
+
+      const { Daytona } = await getDaytonaSDK()
+      const daytona = new Daytona({
+        apiKey: daytonaKey,
+        apiUrl: "https://app.daytona.io/api",
+      })
+      const sandbox = await daytona.get(sandboxId)
+
+      // Ensure parent directory exists (workspace mkdir is fire-and-forget in useChat)
+      await sandbox.process.executeCommand(`mkdir -p "${dirPath.replace(/\/$/, "")}"`)
+
+      await sandbox.fs.uploadFile(buffer, remotePath)
+
+      // Verify the upload succeeded by downloading and checking size
+      try {
+        const downloaded = await sandbox.fs.downloadFile(remotePath)
+        if (downloaded.length !== buffer.length) {
+          return NextResponse.json({ error: "Upload verification failed: size mismatch" }, { status: 502 })
+        }
+      } catch {
+        return NextResponse.json({ error: "Upload verification failed: file not readable" }, { status: 502 })
+      }
+
+      return NextResponse.json({ filename: safeName, path: remotePath, size: file.size })
+    } catch (err) {
+      if (err instanceof Error && err.message === "Invalid filename") {
+        return NextResponse.json({ error: "Invalid filename" }, { status: 400 })
+      }
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : "Upload failed" },
+        { status: 500 },
+      )
+    }
+  }
+
+  // JSON actions (mkdir, etc.)
   let body: { action?: string; sandboxId?: string; key?: string; path?: string }
   try {
     body = await request.json()
@@ -193,8 +313,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing sandboxId, key, or path" }, { status: 400 })
   }
 
-  if (!dirPath.startsWith("/root/.hermes/workspaces/")) {
-    return NextResponse.json({ error: "Path must be under /root/.hermes/workspaces/" }, { status: 403 })
+  if (!validateWorkspacePath(dirPath)) {
+    return NextResponse.json({ error: "Invalid workspace path" }, { status: 403 })
   }
 
   try {
@@ -206,8 +326,9 @@ export async function POST(request: NextRequest) {
     const sandbox = await daytona.get(sandboxId)
 
     if (action === "mkdir") {
-      await sandbox.process.executeCommand(`mkdir -p "${dirPath}"`)
-      return NextResponse.json({ ok: true, path: dirPath })
+      const safeDirPath = normalizePosixPath(dirPath)
+      await sandbox.process.executeCommand(`mkdir -p "${safeDirPath}"`)
+      return NextResponse.json({ ok: true, path: safeDirPath })
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 })

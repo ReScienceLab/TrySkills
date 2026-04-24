@@ -1,19 +1,23 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeHighlight from "rehype-highlight"
 import { useChat, type ToolCall, type ChatError } from "./use-chat"
 import type { ChatMessage } from "@/lib/sandbox/hermes-api"
+import {
+  CreditCard, KeyRound, Clock, MailX, AlertTriangle, Globe,
+  ChevronRight, Lightbulb, X, Check, ImageIcon, Paperclip, Upload,
+  BookOpen, FilePen, FileSearch, Terminal, FolderOpen, Wrench,
+} from "lucide-react"
+import type { LucideIcon } from "lucide-react"
+
+const MAX_UPLOAD_SIZE = 4 * 1024 * 1024
 
 const ChevronIcon = ({ open, className }: { open: boolean; className?: string }) => (
-  <svg
-    width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-    className={`transition-transform duration-150 ${open ? "rotate-90" : ""} ${className ?? ""}`}
-  >
-    <polyline points="9 18 15 12 9 6" />
-  </svg>
+  <ChevronRight
+    className={`w-3 h-3 transition-transform duration-150 ${open ? "rotate-90" : ""} ${className ?? ""}`}
+  />
 )
 
 function ThinkingCard({ text, isLive }: { text: string; isLive: boolean }) {
@@ -37,9 +41,7 @@ function ThinkingCard({ text, isLive }: { text: string; isLive: boolean }) {
         {isLive && (
           <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
         )}
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-70">
-          <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-        </svg>
+        <Lightbulb className="w-3.5 h-3.5 shrink-0 opacity-70" />
         <span className="font-semibold tracking-wide">Thinking</span>
         <ChevronIcon open={open} className="ml-auto text-amber-500/50" />
       </button>
@@ -76,16 +78,12 @@ function ToolCard({ tool }: { tool: ToolCall }) {
         {tool.status === "running" ? (
           <span className="w-[7px] h-[7px] rounded-full bg-blue-400 animate-pulse shrink-0" />
         ) : tool.isError ? (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-red-400 shrink-0">
-            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
+          <X className="w-3 h-3 text-red-400 shrink-0" strokeWidth={2.5} />
         ) : (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-green-500/60 shrink-0">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
+          <Check className="w-3 h-3 text-green-500/60 shrink-0" strokeWidth={2.5} />
         )}
         <span className="text-white/60 font-mono font-semibold text-[11px] shrink-0">
-          {tool.emoji ? `${tool.emoji} ` : ""}{tool.name}
+          {tool.name}
         </span>
         {tool.preview && (
           <span className="text-white/30 truncate flex-1 text-left text-[11px]">{tool.preview}</span>
@@ -111,13 +109,13 @@ function ToolCard({ tool }: { tool: ToolCall }) {
   )
 }
 
-const ERROR_ICONS: Record<string, string> = {
-  credit_error: "\u{1F4B3}",
-  auth_error: "\u{1F511}",
-  rate_limit: "\u{23F3}",
-  empty_response: "\u{1F4ED}",
-  provider_error: "\u{26A0}\u{FE0F}",
-  network: "\u{1F310}",
+const ERROR_ICONS: Record<string, LucideIcon> = {
+  credit_error: CreditCard,
+  auth_error: KeyRound,
+  rate_limit: Clock,
+  empty_response: MailX,
+  provider_error: AlertTriangle,
+  network: Globe,
 }
 
 const ERROR_COLORS: Record<string, { bg: string; border: string; text: string }> = {
@@ -141,12 +139,12 @@ function ErrorCard({
   onSessionError?: () => void
 }) {
   const colors = ERROR_COLORS[error.type] || ERROR_COLORS.provider_error
-  const icon = ERROR_ICONS[error.type] || "\u{26A0}\u{FE0F}"
+  const Icon = ERROR_ICONS[error.type] || AlertTriangle
 
   return (
     <div className={`p-3 ${colors.bg} border ${colors.border} rounded mb-4`}>
       <div className="flex items-start gap-2">
-        <span className="text-base shrink-0">{icon}</span>
+        <Icon className={`w-4 h-4 shrink-0 mt-0.5 ${colors.text}`} />
         <div className="flex-1 min-w-0">
           <p className={`text-sm ${colors.text}`}>{error.message}</p>
           <div className="flex flex-wrap gap-2 mt-2">
@@ -178,13 +176,149 @@ function ErrorCard({
 function CreditWarningBanner({ message }: { message: string }) {
   return (
     <div className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-xs text-amber-400 flex items-center gap-2">
-      <span>{"\u{26A0}\u{FE0F}"}</span>
+      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
       <span>{message}</span>
     </div>
   )
 }
 
-function MessageBubble({ msg }: { msg: ChatMessage }) {
+const MAX_INLINE_IMAGE_SIZE = 2 * 1024 * 1024
+
+function normalizeImagePath(p: string): string {
+  const parts = p.split("/")
+  const resolved: string[] = []
+  for (const part of parts) {
+    if (part === "..") resolved.pop()
+    else if (part && part !== ".") resolved.push(part)
+  }
+  return "/" + resolved.join("/")
+}
+
+function WorkspaceImage({ src, alt, sandboxId, sandboxKey, workspacePath }: {
+  src?: string
+  alt?: string
+  sandboxId?: string | null
+  sandboxKey?: string | null
+  workspacePath?: string | null
+}) {
+  const [dataUrl, setDataUrl] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  const isExternalUrl = src?.startsWith("http://") || src?.startsWith("https://")
+  const resolvedSrc = (() => {
+    if (!src || isExternalUrl) return null
+    if (src.startsWith("/")) return normalizeImagePath(src)
+    if (workspacePath) return normalizeImagePath(`${workspacePath}/${src}`)
+    return null
+  })()
+  const isWorkspacePath = !!(resolvedSrc && workspacePath && resolvedSrc.startsWith(workspacePath + "/") && !resolvedSrc.includes(".."))
+  const fileName = (resolvedSrc || src || alt || "image").split("/").pop() || "image"
+
+  useEffect(() => {
+    if (!isWorkspacePath || !sandboxId || !sandboxKey || !resolvedSrc) return
+    const params = new URLSearchParams({
+      action: "read", sandboxId, key: sandboxKey, path: resolvedSrc, maxSize: String(MAX_INLINE_IMAGE_SIZE),
+    })
+    fetch(`/api/workspace?${params}`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
+      .then((data) => {
+        if (data.error) { setError(data.error); return }
+        if (data.type !== "image") { setError("Not an image"); return }
+        setDataUrl(data.content)
+      })
+      .catch(() => setError("Failed to load"))
+  }, [resolvedSrc, sandboxId, sandboxKey, isWorkspacePath])
+
+  if (isExternalUrl) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt={alt || ""} loading="lazy" className="max-w-full rounded" />
+  }
+  if (!isWorkspacePath) {
+    if (src) return <span className="text-white/30 text-xs">[image: {alt || src}]</span>
+    return null
+  }
+
+  const copyMarkdown = async () => {
+    await navigator.clipboard?.writeText(`![${alt || fileName}](${src || resolvedSrc || fileName})`)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1400)
+  }
+
+  return (
+    <span className="not-prose my-3 block overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070b0d]/95 shadow-[0_18px_50px_rgba(0,0,0,0.28)]">
+      <span className="flex items-center gap-3 border-b border-white/[0.06] px-3.5 py-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06]"><ImageIcon className="w-4 h-4 text-white/50" /></span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] font-medium text-white/[0.82]">{alt || fileName}</span>
+          <span className="block truncate font-mono text-[10px] text-white/[0.28]">{resolvedSrc}</span>
+        </span>
+        <span className={`rounded-full px-2 py-1 text-[10px] font-medium ${
+          error ? "bg-red-500/10 text-red-300/80"
+            : dataUrl ? "bg-emerald-400/10 text-emerald-300/80"
+            : "bg-blue-400/10 text-blue-300/80"
+        }`}>
+          {error ? "Failed" : dataUrl ? "Ready" : "Loading"}
+        </span>
+      </span>
+      <span className="block bg-white/[0.025] p-3">
+        {error ? (
+          <span className="block rounded-xl border border-red-400/15 bg-red-500/[0.04] px-3 py-6 text-center text-[12px] text-red-300/70">
+            {error}
+          </span>
+        ) : dataUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={dataUrl} alt={alt || ""} className="mx-auto max-h-[520px] max-w-full rounded-xl border border-white/10 bg-white shadow-sm" />
+        ) : (
+          <span className="flex h-36 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.025] text-[12px] text-white/[0.35] animate-pulse">
+            Loading image...
+          </span>
+        )}
+      </span>
+      <span className="flex flex-wrap items-center gap-2 border-t border-white/[0.06] px-3.5 py-2.5">
+        <button
+          type="button"
+          onClick={() => void copyMarkdown()}
+          className="rounded-md border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-[11px] text-white/55 transition-colors hover:border-white/[0.16] hover:text-white/80"
+        >
+          {copied ? "Copied" : "Copy markdown"}
+        </button>
+        {dataUrl && (
+          <a
+            href={dataUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-md border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-[11px] text-white/55 no-underline transition-colors hover:border-white/[0.16] hover:text-white/80"
+          >
+            Open preview
+          </a>
+        )}
+      </span>
+    </span>
+  )
+}
+
+function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath }: {
+  msg: ChatMessage
+  sandboxId?: string | null
+  sandboxKey?: string | null
+  workspacePath?: string | null
+}) {
+  const mdComponents = useMemo(() => ({
+    img: (props: React.ComponentProps<"img">) => (
+      <WorkspaceImage
+        src={typeof props.src === "string" ? props.src : undefined}
+        alt={typeof props.alt === "string" ? props.alt : undefined}
+        sandboxId={sandboxId}
+        sandboxKey={sandboxKey}
+        workspacePath={workspacePath}
+      />
+    ),
+  }), [sandboxId, sandboxKey, workspacePath])
+
   if (msg.role === "user") {
     return (
       <div className="flex justify-end mb-4">
@@ -199,7 +333,10 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
     <div className="mb-4">
       {msg.content && (
         <div className="prose prose-invert prose-sm max-w-none text-white/85 [&_pre]:bg-white/5 [&_pre]:border [&_pre]:border-white/10 [&_pre]:rounded [&_code]:text-emerald-400/80 [&_a]:text-blue-400 [&_a:hover]:underline">
-          <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
+          <ReactMarkdown
+            rehypePlugins={[rehypeHighlight]}
+            components={mdComponents}
+          >
             {msg.content}
           </ReactMarkdown>
         </div>
@@ -279,6 +416,14 @@ export function ChatPanel({
 
   const autoIntroSent = useRef(false)
 
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [isDragOver, setIsDragOver] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const dragCounterRef = useRef(0)
+  const uploadingRef = useRef(false)
+
   useEffect(() => {
     if (autoIntroSent.current || initialMessages?.length || !sessionId) return
     autoIntroSent.current = true
@@ -321,15 +466,134 @@ export function ChatPanel({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, isStreaming])
 
+  const addFiles = useCallback((files: FileList | File[]) => {
+    if (uploadingRef.current) return
+    const arr = Array.from(files)
+    const sanitize = (n: string) => (n.split("/").pop() || n).replace(/[^\w.\-]/g, "_").slice(0, 200)
+    setPendingFiles((prev) => {
+      const seen = new Set(prev.map((f) => sanitize(f.name)))
+      const accepted: File[] = []
+      for (const f of arr) {
+        const sName = sanitize(f.name)
+        if (!seen.has(sName) && f.size <= MAX_UPLOAD_SIZE) {
+          seen.add(sName)
+          accepted.push(f)
+        }
+      }
+      return [...prev, ...accepted]
+    })
+    const oversized = arr.filter((f) => f.size > MAX_UPLOAD_SIZE)
+    if (oversized.length) {
+      setUploadError(`${oversized.map((f) => f.name).join(", ")} exceeds 4MB limit`)
+      setTimeout(() => setUploadError(null), 4000)
+    }
+  }, [])
+
+  const removeFile = useCallback((index: number) => {
+    if (uploadingRef.current) return
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index))
+  }, [])
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current++
+    if (e.dataTransfer.types.includes("Files")) {
+      setIsDragOver(true)
+    }
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current--
+    if (dragCounterRef.current === 0) {
+      setIsDragOver(false)
+    }
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current = 0
+    setIsDragOver(false)
+    if (e.dataTransfer.files?.length) {
+      addFiles(e.dataTransfer.files)
+    }
+  }, [addFiles])
+
+  const uploadFiles = useCallback(async (): Promise<string[]> => {
+    if (!pendingFiles.length) return []
+    if (uploadingRef.current) return []
+    if (!sandboxId || !sandboxKey || !workspacePath) {
+      setUploadError("Workspace not ready yet -- please wait a moment")
+      throw new Error("Workspace not ready")
+    }
+    uploadingRef.current = true
+    setIsUploading(true)
+    setUploadError(null)
+    const snapshot = [...pendingFiles]
+    const uploaded: string[] = []
+    try {
+      for (const file of snapshot) {
+        const fd = new FormData()
+        fd.append("action", "upload")
+        fd.append("sandboxId", sandboxId)
+        fd.append("key", sandboxKey)
+        fd.append("path", workspacePath)
+        fd.append("file", file, file.name)
+        const res = await fetch("/api/workspace", { method: "POST", body: fd })
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({ error: "Upload failed" }))
+          throw new Error(data.error || `Upload failed: ${res.status}`)
+        }
+        const data = await res.json()
+        uploaded.push(data.filename)
+      }
+      setPendingFiles([])
+      return uploaded
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Upload failed")
+      throw err
+    } finally {
+      uploadingRef.current = false
+      setIsUploading(false)
+    }
+  }, [pendingFiles, sandboxId, sandboxKey, workspacePath])
+
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60)
     const s = seconds % 60
     return `${m}:${s.toString().padStart(2, "0")}`
   }
 
-  const handleSend = () => {
-    if (!input.trim() || isStreaming) return
-    send(input)
+  const handleSend = async () => {
+    const text = input.trim()
+    if ((!text && !pendingFiles.length) || isStreaming || isUploading || uploadingRef.current) return
+
+    let msgText = text
+    if (pendingFiles.length) {
+      try {
+        const uploaded = await uploadFiles()
+        if (uploaded.length) {
+          if (!msgText) {
+            msgText = `I've uploaded ${uploaded.length} file(s): ${uploaded.join(", ")}`
+          } else {
+            msgText = `${msgText}\n\n[Attached files: ${uploaded.join(", ")}]`
+          }
+        }
+      } catch {
+        return
+      }
+    }
+
+    if (!msgText) return
+    send(msgText)
     setInput("")
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto"
@@ -339,12 +603,31 @@ export function ChatPanel({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      handleSend()
+      void handleSend()
     }
   }
 
+  const uploadReady = !!(sandboxId && sandboxKey && workspacePath)
+  const canSend = ((input.trim() && true) || (pendingFiles.length > 0 && uploadReady)) && !isStreaming && !isUploading
+
   return (
-    <div className="flex flex-col h-[calc(100vh-56px)] w-full">
+    <div
+      className="flex flex-col h-[calc(100vh-56px)] w-full relative"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {/* Drag overlay */}
+      {isDragOver && (
+        <div className="absolute inset-0 z-50 bg-blue-500/10 border-2 border-dashed border-blue-500/40 rounded-lg flex items-center justify-center pointer-events-none">
+          <div className="text-blue-400 text-sm font-medium flex items-center gap-2">
+            <Upload className="w-5 h-5" />
+            Drop files here
+          </div>
+        </div>
+      )}
+
       {/* TopBar */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 shrink-0" aria-label={`Skill ${skillName} active for ${formatTime(elapsed)}`}>
         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" aria-hidden="true" />
@@ -374,7 +657,7 @@ export function ChatPanel({
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {messages.map((msg, i) => (
-          <MessageBubble key={i} msg={msg} />
+          <MessageBubble key={i} msg={msg} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
         ))}
         {(thinkingText || isThinking) && (
           <ThinkingCard text={thinkingText} isLive={isThinking} />
@@ -402,7 +685,62 @@ export function ChatPanel({
 
       {/* Input */}
       <div className="shrink-0 border-t border-white/10 px-4 py-3">
+        {/* Attachment tray */}
+        {pendingFiles.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {pendingFiles.map((file, i) => (
+              <div
+                key={`${file.name}-${i}`}
+                className="flex items-center gap-1.5 px-2.5 py-1 bg-white/[0.06] border border-white/[0.08] rounded-md text-[11px] text-white/50 max-w-[200px]"
+              >
+                <Paperclip className="w-3 h-3 shrink-0 text-white/30" />
+                <span className="truncate">{file.name}</span>
+                <button
+                  onClick={() => removeFile(i)}
+                  className="shrink-0 text-white/20 hover:text-white/50 transition-colors"
+                  aria-label={`Remove ${file.name}`}
+                >
+                  <X className="w-2.5 h-2.5" strokeWidth={3} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Upload status */}
+        {isUploading && (
+          <div className="flex items-center gap-2 mb-2 text-[11px] text-blue-400/70">
+            <div className="w-3 h-3 rounded-full border-2 border-blue-400/30 border-t-blue-400 animate-spin" />
+            Uploading...
+          </div>
+        )}
+
+        {/* Upload error */}
+        {uploadError && (
+          <div className="mb-2 text-[11px] text-red-400/70">{uploadError}</div>
+        )}
+
         <div className="flex items-end gap-2">
+          {/* Clip button */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files?.length) addFiles(e.target.files)
+              e.target.value = ""
+            }}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isStreaming || isUploading}
+            aria-label="Attach files"
+            className="px-2 py-2.5 text-white/25 hover:text-white/50 disabled:opacity-30 transition-colors shrink-0"
+          >
+            <Paperclip className="w-[18px] h-[18px]" />
+          </button>
+
           <label htmlFor="chat-message-input" className="sr-only">Message</label>
           <textarea
             id="chat-message-input"
@@ -416,7 +754,7 @@ export function ChatPanel({
             onKeyDown={handleKeyDown}
             placeholder="Message Hermes..."
             rows={1}
-            disabled={isStreaming}
+            disabled={isStreaming || isUploading}
             className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white/90 placeholder:text-white/25 outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 focus:border-white/25 resize-none disabled:opacity-50 transition-colors"
           />
           {isStreaming ? (
@@ -429,8 +767,8 @@ export function ChatPanel({
             </button>
           ) : (
             <button
-              onClick={handleSend}
-              disabled={!input.trim()}
+              onClick={() => void handleSend()}
+              disabled={!canSend}
               aria-label="Send message"
               className="px-4 py-2.5 bg-white text-black text-sm font-medium rounded-lg hover:bg-white/90 disabled:bg-white/10 disabled:text-white/30 transition-all shrink-0"
             >

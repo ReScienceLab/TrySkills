@@ -3,6 +3,7 @@
 import { useState } from "react"
 import type { FileEntry } from "@/lib/workspace/types"
 import { getFileIcon, IGNORED_DIRS } from "@/lib/workspace/types"
+import { Folder as FolderIcon } from "lucide-react"
 
 function TreeNode({
   entry,
@@ -21,7 +22,7 @@ function TreeNode({
 }) {
   const isExpanded = expanded.has(entry.path)
   const isSelected = selectedPath === entry.path
-  const icon = getFileIcon(entry)
+  const IconComponent = getFileIcon(entry)
   const paddingLeft = 16 + depth * 16
 
   return (
@@ -48,7 +49,7 @@ function TreeNode({
         ) : (
           <span className="w-[9px]" />
         )}
-        <span className="text-[13px] shrink-0">{icon}</span>
+        <IconComponent className="w-3.5 h-3.5 shrink-0 text-white/40" />
         <span className="truncate">{entry.name}</span>
       </button>
       {entry.type === "folder" && isExpanded && entry.children && (
@@ -103,9 +104,7 @@ export function FileTree({
   if (entries.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 gap-2">
-        <svg className="w-8 h-8 text-white/10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-        </svg>
+        <FolderIcon className="w-8 h-8 text-white/10" />
         <span className="text-[11px] text-white/20">No files yet</span>
         <span className="text-[10px] text-white/10">Files will appear as the agent works</span>
       </div>
