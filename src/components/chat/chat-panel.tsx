@@ -5,17 +5,19 @@ import ReactMarkdown from "react-markdown"
 import rehypeHighlight from "rehype-highlight"
 import { useChat, type ToolCall, type ChatError } from "./use-chat"
 import type { ChatMessage } from "@/lib/sandbox/hermes-api"
+import {
+  CreditCard, KeyRound, Clock, MailX, AlertTriangle, Globe,
+  ChevronRight, Lightbulb, X, Check, ImageIcon, Paperclip, Upload,
+  BookOpen, FilePen, FileSearch, Terminal, FolderOpen, Wrench,
+} from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 
 const MAX_UPLOAD_SIZE = 4 * 1024 * 1024
 
 const ChevronIcon = ({ open, className }: { open: boolean; className?: string }) => (
-  <svg
-    width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-    className={`transition-transform duration-150 ${open ? "rotate-90" : ""} ${className ?? ""}`}
-  >
-    <polyline points="9 18 15 12 9 6" />
-  </svg>
+  <ChevronRight
+    className={`w-3 h-3 transition-transform duration-150 ${open ? "rotate-90" : ""} ${className ?? ""}`}
+  />
 )
 
 function ThinkingCard({ text, isLive }: { text: string; isLive: boolean }) {
@@ -39,9 +41,7 @@ function ThinkingCard({ text, isLive }: { text: string; isLive: boolean }) {
         {isLive && (
           <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
         )}
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-70">
-          <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-        </svg>
+        <Lightbulb className="w-3.5 h-3.5 shrink-0 opacity-70" />
         <span className="font-semibold tracking-wide">Thinking</span>
         <ChevronIcon open={open} className="ml-auto text-amber-500/50" />
       </button>
@@ -78,16 +78,12 @@ function ToolCard({ tool }: { tool: ToolCall }) {
         {tool.status === "running" ? (
           <span className="w-[7px] h-[7px] rounded-full bg-blue-400 animate-pulse shrink-0" />
         ) : tool.isError ? (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-red-400 shrink-0">
-            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
+          <X className="w-3 h-3 text-red-400 shrink-0" strokeWidth={2.5} />
         ) : (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-green-500/60 shrink-0">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
+          <Check className="w-3 h-3 text-green-500/60 shrink-0" strokeWidth={2.5} />
         )}
         <span className="text-white/60 font-mono font-semibold text-[11px] shrink-0">
-          {tool.emoji ? `${tool.emoji} ` : ""}{tool.name}
+          {tool.name}
         </span>
         {tool.preview && (
           <span className="text-white/30 truncate flex-1 text-left text-[11px]">{tool.preview}</span>
@@ -113,13 +109,13 @@ function ToolCard({ tool }: { tool: ToolCall }) {
   )
 }
 
-const ERROR_ICONS: Record<string, string> = {
-  credit_error: "\u{1F4B3}",
-  auth_error: "\u{1F511}",
-  rate_limit: "\u{23F3}",
-  empty_response: "\u{1F4ED}",
-  provider_error: "\u{26A0}\u{FE0F}",
-  network: "\u{1F310}",
+const ERROR_ICONS: Record<string, LucideIcon> = {
+  credit_error: CreditCard,
+  auth_error: KeyRound,
+  rate_limit: Clock,
+  empty_response: MailX,
+  provider_error: AlertTriangle,
+  network: Globe,
 }
 
 const ERROR_COLORS: Record<string, { bg: string; border: string; text: string }> = {
@@ -143,12 +139,12 @@ function ErrorCard({
   onSessionError?: () => void
 }) {
   const colors = ERROR_COLORS[error.type] || ERROR_COLORS.provider_error
-  const icon = ERROR_ICONS[error.type] || "\u{26A0}\u{FE0F}"
+  const Icon = ERROR_ICONS[error.type] || AlertTriangle
 
   return (
     <div className={`p-3 ${colors.bg} border ${colors.border} rounded mb-4`}>
       <div className="flex items-start gap-2">
-        <span className="text-base shrink-0">{icon}</span>
+        <Icon className={`w-4 h-4 shrink-0 mt-0.5 ${colors.text}`} />
         <div className="flex-1 min-w-0">
           <p className={`text-sm ${colors.text}`}>{error.message}</p>
           <div className="flex flex-wrap gap-2 mt-2">
@@ -180,7 +176,7 @@ function ErrorCard({
 function CreditWarningBanner({ message }: { message: string }) {
   return (
     <div className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-xs text-amber-400 flex items-center gap-2">
-      <span>{"\u{26A0}\u{FE0F}"}</span>
+      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
       <span>{message}</span>
     </div>
   )
@@ -255,7 +251,7 @@ function WorkspaceImage({ src, alt, sandboxId, sandboxKey, workspacePath }: {
   return (
     <span className="not-prose my-3 block overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070b0d]/95 shadow-[0_18px_50px_rgba(0,0,0,0.28)]">
       <span className="flex items-center gap-3 border-b border-white/[0.06] px-3.5 py-3">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-[15px]">{"\u{1F5BC}\u{FE0F}"}</span>
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06]"><ImageIcon className="w-4 h-4 text-white/50" /></span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-medium text-white/[0.82]">{alt || fileName}</span>
           <span className="block truncate font-mono text-[10px] text-white/[0.28]">{resolvedSrc}</span>
@@ -626,11 +622,7 @@ export function ChatPanel({
       {isDragOver && (
         <div className="absolute inset-0 z-50 bg-blue-500/10 border-2 border-dashed border-blue-500/40 rounded-lg flex items-center justify-center pointer-events-none">
           <div className="text-blue-400 text-sm font-medium flex items-center gap-2">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-              <polyline points="17 8 12 3 7 8" />
-              <line x1="12" y1="3" x2="12" y2="15" />
-            </svg>
+            <Upload className="w-5 h-5" />
             Drop files here
           </div>
         </div>
@@ -701,18 +693,14 @@ export function ChatPanel({
                 key={`${file.name}-${i}`}
                 className="flex items-center gap-1.5 px-2.5 py-1 bg-white/[0.06] border border-white/[0.08] rounded-md text-[11px] text-white/50 max-w-[200px]"
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-white/30">
-                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
-                </svg>
+                <Paperclip className="w-3 h-3 shrink-0 text-white/30" />
                 <span className="truncate">{file.name}</span>
                 <button
                   onClick={() => removeFile(i)}
                   className="shrink-0 text-white/20 hover:text-white/50 transition-colors"
                   aria-label={`Remove ${file.name}`}
                 >
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
+                  <X className="w-2.5 h-2.5" strokeWidth={3} />
                 </button>
               </div>
             ))}
@@ -750,9 +738,7 @@ export function ChatPanel({
             aria-label="Attach files"
             className="px-2 py-2.5 text-white/25 hover:text-white/50 disabled:opacity-30 transition-colors shrink-0"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
-            </svg>
+            <Paperclip className="w-[18px] h-[18px]" />
           </button>
 
           <label htmlFor="chat-message-input" className="sr-only">Message</label>

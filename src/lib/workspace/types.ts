@@ -1,3 +1,9 @@
+import type { LucideIcon } from "lucide-react"
+import {
+  Folder, FileText, FileJson, FileCode, FileCode2,
+  Terminal as TerminalIcon, ImageIcon, File,
+} from "lucide-react"
+
 export interface FileEntry {
   name: string
   path: string
@@ -58,16 +64,16 @@ export function isMarkdownFile(name: string): boolean {
   return ext === "md" || ext === "mdx"
 }
 
-export function getFileIcon(entry: FileEntry): string {
-  if (entry.type === "folder") return "\u{1F4C1}"
+export function getFileIcon(entry: FileEntry): LucideIcon {
+  if (entry.type === "folder") return Folder
   const ext = getFileExt(entry.name)
-  if (ext === "md" || ext === "mdx") return "\u{1F4C4}"
-  if (ext === "json") return "\u{1F4CB}"
-  if (ext === "ts" || ext === "tsx" || ext === "js" || ext === "jsx") return "\u{1F4DC}"
-  if (ext === "py") return "\u{1F40D}"
-  if (ext === "sh") return "\u{1F4DF}"
-  if (IMAGE_EXTS.has(ext)) return "\u{1F5BC}\u{FE0F}"
-  return "\u{1F4C3}"
+  if (ext === "md" || ext === "mdx") return FileText
+  if (ext === "json") return FileJson
+  if (ext === "ts" || ext === "tsx" || ext === "js" || ext === "jsx") return FileCode
+  if (ext === "py") return FileCode2
+  if (ext === "sh") return TerminalIcon
+  if (IMAGE_EXTS.has(ext)) return ImageIcon
+  return File
 }
 
 export function formatBytes(bytes: number): string {
