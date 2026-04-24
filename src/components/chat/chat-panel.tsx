@@ -62,38 +62,52 @@ function ThinkingCard({ text, isLive }: { text: string; isLive: boolean }) {
 function ToolCard({ tool }: { tool: ToolCall }) {
   const [open, setOpen] = useState(false)
   const hasDetail = tool.args && Object.keys(tool.args).length > 0
+  const subject = tool.args?.path || tool.args?.file_path || tool.args?.filename || tool.preview
+  const toolLabel = tool.name.replace(/_/g, " ")
+  const statusLabel = tool.status === "running"
+    ? "Working"
+    : tool.isError
+      ? "Needs attention"
+      : tool.name === "write_file"
+        ? "File written"
+        : "Completed"
 
   return (
     <div className={`my-1 border rounded-lg overflow-hidden transition-colors ${
       tool.status === "running"
-        ? "border-blue-500/30 bg-blue-500/5"
+        ? "border-blue-400/30 bg-blue-400/[0.06] shadow-[0_0_24px_rgba(96,165,250,0.08)]"
         : tool.isError
-          ? "border-red-500/20 bg-red-500/5"
-          : "border-white/[0.07] bg-white/[0.03] hover:border-white/[0.12]"
+          ? "border-red-400/25 bg-red-500/[0.06]"
+          : "border-emerald-400/15 bg-emerald-400/[0.04] hover:border-emerald-400/25"
     }`}>
       <button
         onClick={() => hasDetail && setOpen(!open)}
-        className={`flex items-center gap-2 w-full px-3 py-1.5 text-xs ${hasDetail ? "cursor-pointer" : "cursor-default"}`}
+        className={`flex items-center gap-3 w-full px-3 py-2 text-xs ${hasDetail ? "cursor-pointer" : "cursor-default"}`}
       >
         {tool.status === "running" ? (
-          <span className="w-[7px] h-[7px] rounded-full bg-blue-400 animate-pulse shrink-0" />
+          <span className="w-2 h-2 rounded-full bg-blue-300 animate-pulse shrink-0 shadow-[0_0_10px_rgba(147,197,253,0.7)]" />
         ) : tool.isError ? (
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-red-400 shrink-0">
             <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
           </svg>
         ) : (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-green-500/60 shrink-0">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-400/75 shrink-0">
             <polyline points="20 6 9 17 4 12" />
           </svg>
         )}
-        <span className="text-white/60 font-mono font-semibold text-[11px] shrink-0">
-          {tool.emoji ? `${tool.emoji} ` : ""}{tool.name}
+        <span className="min-w-0 flex-1 text-left">
+          <span className="flex items-center gap-2 min-w-0">
+            <span className="text-white/75 font-medium text-[12px] shrink-0">{statusLabel}</span>
+            <span className="text-white/30 font-mono text-[10px] uppercase tracking-[0.14em] truncate">
+              {tool.emoji ? `${tool.emoji} ` : ""}{toolLabel}
+            </span>
+          </span>
+          {subject && (
+            <span className="block mt-0.5 text-white/[0.38] truncate text-[11px]">{subject}</span>
+          )}
         </span>
-        {tool.preview && (
-          <span className="text-white/30 truncate flex-1 text-left text-[11px]">{tool.preview}</span>
-        )}
         {tool.duration != null && (
-          <span className="text-white/20 text-[10px] shrink-0">{tool.duration.toFixed(1)}s</span>
+          <span className="text-white/25 text-[10px] shrink-0 tabular-nums">{tool.duration.toFixed(1)}s</span>
         )}
         {hasDetail && <ChevronIcon open={open} className="text-white/30 shrink-0" />}
       </button>
@@ -205,22 +219,31 @@ function WorkspaceImage({ src, alt, sandboxId, sandboxKey, workspacePath }: {
   sandboxKey?: string | null
   workspacePath?: string | null
 }) {
-  const [dataUrl, setDataUrl] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  const isExternalUrl = src?.startsWith("http://") || src?.startsWith("https://")
-  const resolvedSrc = (() => {
+  const [preview, setPreview] = useState<{ path: string; dataUrl: string | null; error: string | null } | null>(null)
+  const [copiedPath, setCopiedPath] = useState<string | null>(null)
+  const isExternalUrl = /^(https?:|data:|blob:)/i.test(src ?? "")
+  const resolvedPath = (() => {
     if (!src || isExternalUrl) return null
     if (src.startsWith("/")) return normalizeImagePath(src)
     if (workspacePath) return normalizeImagePath(`${workspacePath}/${src}`)
     return null
   })()
-  const isWorkspacePath = !!(resolvedSrc && workspacePath && resolvedSrc.startsWith(workspacePath + "/") && !resolvedSrc.includes(".."))
+  const isWorkspacePath = !!(resolvedPath && workspacePath && resolvedPath.startsWith(`${workspacePath}/`) && !resolvedPath.includes(".."))
+  const fileName = (resolvedPath || src || alt || "image").split("/").pop() || "image"
+  const markdown = `![${alt || fileName}](${src || resolvedPath || fileName})`
+  const dataUrl = preview?.path === resolvedPath ? preview.dataUrl : null
+  const error = preview?.path === resolvedPath ? preview.error : null
+  const copied = copiedPath === resolvedPath
 
   useEffect(() => {
-    if (!isWorkspacePath || !sandboxId || !sandboxKey || !resolvedSrc) return
+    if (!isWorkspacePath || !sandboxId || !sandboxKey || !resolvedPath) return
+    let cancelled = false
     const params = new URLSearchParams({
-      action: "read", sandboxId, key: sandboxKey, path: resolvedSrc, maxSize: String(MAX_INLINE_IMAGE_SIZE),
+      action: "read",
+      sandboxId,
+      key: sandboxKey,
+      path: resolvedPath,
+      maxSize: String(MAX_INLINE_IMAGE_SIZE),
     })
     fetch(`/api/workspace?${params}`)
       .then((r) => {
@@ -228,25 +251,95 @@ function WorkspaceImage({ src, alt, sandboxId, sandboxKey, workspacePath }: {
         return r.json()
       })
       .then((data) => {
-        if (data.error) { setError(data.error); return }
-        if (data.type !== "image") { setError("Not an image"); return }
-        setDataUrl(data.content)
+        if (cancelled) return
+        if (data.error) {
+          setPreview({ path: resolvedPath, dataUrl: null, error: data.error })
+          return
+        }
+        if (data.type !== "image") {
+          setPreview({ path: resolvedPath, dataUrl: null, error: "Not an image" })
+          return
+        }
+        setPreview({ path: resolvedPath, dataUrl: data.content, error: null })
       })
-      .catch(() => setError("Failed to load"))
-  }, [resolvedSrc, sandboxId, sandboxKey, isWorkspacePath])
+      .catch(() => {
+        if (!cancelled) setPreview({ path: resolvedPath, dataUrl: null, error: "Failed to load" })
+      })
+    return () => { cancelled = true }
+  }, [resolvedPath, sandboxId, sandboxKey, isWorkspacePath])
 
-  if (isExternalUrl) {
+  const copyMarkdown = async () => {
+    if (!navigator.clipboard) return
+    await navigator.clipboard.writeText(markdown)
+    setCopiedPath(resolvedPath)
+    window.setTimeout(() => {
+      setCopiedPath((current) => current === resolvedPath ? null : current)
+    }, 1400)
+  }
+
+  if (!resolvedPath) {
+    if (!src) return null
     // eslint-disable-next-line @next/next/no-img-element
     return <img src={src} alt={alt || ""} loading="lazy" className="max-w-full rounded" />
   }
+
   if (!isWorkspacePath) {
-    if (src) return <span className="text-white/30 text-xs">[image: {alt || src}]</span>
-    return null
+    return <span className="text-white/30 text-xs">[image blocked outside workspace: {alt || src}]</span>
   }
-  if (error) return <span className="text-white/30 text-xs">[{error}: {alt || src?.split("/").pop()}]</span>
-  if (!dataUrl) return <span className="text-white/20 text-xs animate-pulse">Loading image...</span>
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={dataUrl} alt={alt || ""} className="max-w-full rounded border border-white/10" />
+
+  return (
+    <span className="not-prose my-3 block overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070b0d]/95 shadow-[0_18px_50px_rgba(0,0,0,0.28)]">
+      <span className="flex items-center gap-3 border-b border-white/[0.06] px-3.5 py-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-[15px]">{"\u{1F5BC}\u{FE0F}"}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] font-medium text-white/[0.82]">{alt || fileName}</span>
+          <span className="block truncate font-mono text-[10px] text-white/[0.28]">{resolvedPath}</span>
+        </span>
+        <span className={`rounded-full px-2 py-1 text-[10px] font-medium ${
+          error
+            ? "bg-red-500/10 text-red-300/80"
+            : dataUrl
+              ? "bg-emerald-400/10 text-emerald-300/80"
+              : "bg-blue-400/10 text-blue-300/80"
+        }`}>
+          {error ? "Preview failed" : dataUrl ? "Preview ready" : "Loading"}
+        </span>
+      </span>
+      <span className="block bg-white/[0.025] p-3">
+        {error ? (
+          <span className="block rounded-xl border border-red-400/15 bg-red-500/[0.04] px-3 py-6 text-center text-[12px] text-red-300/70">
+            {error}. Open the workspace file panel to inspect `{fileName}`.
+          </span>
+        ) : dataUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={dataUrl} alt={alt || ""} className="mx-auto max-h-[520px] max-w-full rounded-xl border border-white/10 bg-white shadow-sm" />
+        ) : (
+          <span className="flex h-36 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.025] text-[12px] text-white/[0.35]">
+            Loading image preview...
+          </span>
+        )}
+      </span>
+      <span className="flex flex-wrap items-center gap-2 border-t border-white/[0.06] px-3.5 py-2.5">
+        <button
+          type="button"
+          onClick={() => void copyMarkdown()}
+          className="rounded-md border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-[11px] text-white/55 transition-colors hover:border-white/[0.16] hover:text-white/80"
+        >
+          {copied ? "Copied" : "Copy markdown"}
+        </button>
+        {dataUrl && (
+          <a
+            href={dataUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-md border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-[11px] text-white/55 no-underline transition-colors hover:border-white/[0.16] hover:text-white/80"
+          >
+            Open preview
+          </a>
+        )}
+      </span>
+    </span>
+  )
 }
 
 function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath }: {
@@ -258,7 +351,7 @@ function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath }: {
   if (msg.role === "user") {
     return (
       <div className="flex justify-end mb-4">
-        <div className="max-w-[85%] bg-white/10 rounded-2xl rounded-br-sm px-4 py-2.5">
+        <div className="max-w-[min(82%,42rem)] rounded-2xl rounded-br-sm border border-white/[0.08] bg-white/[0.1] px-4 py-2.5 shadow-[0_12px_32px_rgba(0,0,0,0.22)]">
           <p className="text-sm text-white/90 whitespace-pre-wrap">{msg.content}</p>
         </div>
       </div>
@@ -266,9 +359,10 @@ function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath }: {
   }
 
   return (
-    <div className="mb-4">
+    <div className="mb-5">
       {msg.content && (
-        <div className="prose prose-invert prose-sm max-w-none text-white/85 [&_pre]:bg-white/5 [&_pre]:border [&_pre]:border-white/10 [&_pre]:rounded [&_code]:text-emerald-400/80 [&_a]:text-blue-400 [&_a:hover]:underline">
+        <div className="rounded-2xl border border-white/[0.07] bg-[#080c0f]/90 px-4 py-3.5 shadow-[0_16px_48px_rgba(0,0,0,0.24)]">
+          <div className="prose prose-invert prose-sm max-w-none text-white/85 prose-p:leading-7 prose-li:leading-7 [&_pre]:overflow-x-auto [&_pre]:bg-[#030608]/90 [&_pre]:border [&_pre]:border-white/10 [&_pre]:rounded-xl [&_pre]:p-3 [&_code]:text-emerald-300/85 [&_a]:text-blue-300 [&_a:hover]:underline">
           <ReactMarkdown
             rehypePlugins={[rehypeHighlight]}
             components={{
@@ -285,6 +379,7 @@ function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath }: {
           >
             {msg.content}
           </ReactMarkdown>
+          </div>
         </div>
       )}
     </div>
@@ -402,7 +497,13 @@ export function ChatPanel({
       }, 1000)
     }
     const stop = () => { if (timer) { clearInterval(timer); timer = null } }
-    const onVisibility = () => { document.hidden ? stop() : start() }
+    const onVisibility = () => {
+      if (document.hidden) {
+        stop()
+      } else {
+        start()
+      }
+    }
     start()
     document.addEventListener("visibilitychange", onVisibility)
     return () => { stop(); document.removeEventListener("visibilitychange", onVisibility) }
@@ -605,7 +706,7 @@ export function ChatPanel({
       {creditWarning && <CreditWarningBanner message={creditWarning} />}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="flex-1 overflow-y-auto px-4 py-5 pb-32 [scrollbar-gutter:stable]">
         {messages.map((msg, i) => (
           <MessageBubble key={i} msg={msg} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
         ))}
@@ -634,7 +735,7 @@ export function ChatPanel({
       </div>
 
       {/* Input */}
-      <div className="shrink-0 border-t border-white/10 px-4 py-3">
+      <div className="relative shrink-0 border-t border-white/10 bg-[#080a0c]/95 px-4 py-3 shadow-[0_-24px_60px_rgba(0,0,0,0.42)] backdrop-blur-md before:pointer-events-none before:absolute before:inset-x-0 before:-top-10 before:h-10 before:bg-gradient-to-t before:from-[#080a0c]/95 before:to-transparent">
         {/* Attachment tray */}
         {pendingFiles.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
