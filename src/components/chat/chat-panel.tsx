@@ -1,115 +1,42 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react"
-import ReactMarkdown from "react-markdown"
-import rehypeHighlight from "rehype-highlight"
 import { useChat, type ToolCall, type ChatError } from "./use-chat"
 import { formatUploadedFilesMessage, isPreviewableImageName, type UploadedFile } from "./upload-message"
 import type { ChatMessage } from "@/lib/sandbox/hermes-api"
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation"
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+  type MessageResponseProps,
+} from "@/components/ai-elements/message"
+import {
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
+} from "@/components/ai-elements/reasoning"
+import {
+  Tool,
+  ToolContent,
+  ToolHeader,
+  ToolInput,
+  type ToolPart,
+} from "@/components/ai-elements/tool"
+import { Terminal } from "@/components/ai-elements/terminal"
 import { Button } from "@/components/ui/button"
 import {
   CreditCard, KeyRound, Clock, MailX, AlertTriangle, Globe,
-  ChevronRight, Lightbulb, X, Check, ImageIcon, Paperclip, Upload,
+  X, ImageIcon, Paperclip, Upload,
   Music, Video,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
 const MAX_UPLOAD_SIZE = 4 * 1024 * 1024
-
-const ChevronIcon = ({ open, className }: { open: boolean; className?: string }) => (
-  <ChevronRight
-    className={`w-3 h-3 transition-transform duration-150 ${open ? "rotate-90" : ""} ${className ?? ""}`}
-  />
-)
-
-function ThinkingCard({ text, isLive }: { text: string; isLive: boolean }) {
-  const [open, setOpen] = useState(false)
-  const bodyRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (open && isLive && bodyRef.current) {
-      bodyRef.current.scrollTop = bodyRef.current.scrollHeight
-    }
-  }, [text, open, isLive])
-
-  if (!text && !isLive) return null
-
-  return (
-    <div className="my-1.5 overflow-hidden rounded-lg bg-[#0a0a0a] shadow-[var(--shadow-border)]">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-      >
-        {isLive && (
-          <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[#f5a524]" />
-        )}
-        <Lightbulb className="h-3.5 w-3.5 shrink-0 text-[#f5a524]" />
-        <span className="font-mono text-[11px] font-medium uppercase">Thinking</span>
-        <ChevronIcon open={open} className="ml-auto text-muted-foreground" />
-      </button>
-      {open && (
-        <div
-          ref={bodyRef}
-          className="max-h-[200px] overflow-y-auto px-3 pb-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
-        >
-          <pre className="m-0 whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-muted-foreground">
-            {text || "Thinking\u2026"}
-          </pre>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function ToolCard({ tool }: { tool: ToolCall }) {
-  const [open, setOpen] = useState(false)
-  const hasDetail = tool.args && Object.keys(tool.args).length > 0
-
-  return (
-    <div className={`my-1 overflow-hidden rounded-lg transition-shadow ${
-      tool.status === "running"
-        ? "bg-[rgba(10,114,239,0.08)] shadow-[0_0_0_1px_rgba(10,114,239,0.28)]"
-        : tool.isError
-          ? "bg-[rgba(255,91,79,0.08)] shadow-[0_0_0_1px_rgba(255,91,79,0.24)]"
-          : "bg-[#0a0a0a] shadow-[var(--shadow-border)] hover:shadow-[var(--shadow-border-strong)]"
-    }`}>
-      <button
-        onClick={() => hasDetail && setOpen(!open)}
-        className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs ${hasDetail ? "cursor-pointer" : "cursor-default"}`}
-      >
-        {tool.status === "running" ? (
-          <span className="h-[7px] w-[7px] shrink-0 animate-pulse rounded-full bg-[#0a72ef]" />
-        ) : tool.isError ? (
-          <X className="h-3 w-3 shrink-0 text-[#ff5b4f]" strokeWidth={2.5} />
-        ) : (
-          <Check className="h-3 w-3 shrink-0 text-muted-foreground" strokeWidth={2.5} />
-        )}
-        <span className="shrink-0 font-mono text-[11px] font-medium text-foreground">
-          {tool.name}
-        </span>
-        {tool.preview && (
-          <span className="flex-1 truncate text-left text-[11px] text-muted-foreground">{tool.preview}</span>
-        )}
-        {tool.duration != null && (
-          <span className="shrink-0 text-[10px] text-muted-foreground">{tool.duration.toFixed(1)}s</span>
-        )}
-        {hasDetail && <ChevronIcon open={open} className="shrink-0 text-muted-foreground" />}
-      </button>
-      {open && hasDetail && (
-        <div className="px-3 pb-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
-          <div className="mt-1.5">
-            {Object.entries(tool.args!).map(([k, v]) => (
-              <div key={k} className="text-[11px] leading-relaxed font-mono">
-                <span className="text-[#58a6ff]">{k}</span>{" "}
-                <span className="break-all text-muted-foreground">{typeof v === "string" ? v : JSON.stringify(v)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
 
 const ERROR_ICONS: Record<string, LucideIcon> = {
   credit_error: CreditCard,
@@ -452,19 +379,33 @@ function WorkspaceMedia({ src, alt, sandboxId, sandboxKey, workspacePath }: {
   )
 }
 
-function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath }: {
-  msg: ChatMessage
+type StreamdownComponents = NonNullable<MessageResponseProps["components"]>
+
+function createStreamdownComponents({
+  sandboxId,
+  sandboxKey,
+  workspacePath,
+  isUser,
+}: {
   sandboxId?: string | null
   sandboxKey?: string | null
   workspacePath?: string | null
-}) {
-  const isUser = msg.role === "user"
-  const mdComponents = useMemo(() => ({
-    img: (props: React.ComponentProps<"img">) => {
+  isUser: boolean
+}): StreamdownComponents {
+  return {
+    img: (props) => {
       const imgSrc = typeof props.src === "string" ? props.src : undefined
       const imgAlt = typeof props.alt === "string" ? props.alt : undefined
       if (imgSrc && getMediaType(imgSrc)) {
-        return <WorkspaceMedia src={imgSrc} alt={imgAlt} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
+        return (
+          <WorkspaceMedia
+            src={imgSrc}
+            alt={imgAlt}
+            sandboxId={sandboxId}
+            sandboxKey={sandboxKey}
+            workspacePath={workspacePath}
+          />
+        )
       }
       return (
         <WorkspaceImage
@@ -478,42 +419,147 @@ function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath }: {
         />
       )
     },
-    a: (props: React.ComponentProps<"a">) => {
+    a: (props) => {
       const href = typeof props.href === "string" ? props.href : undefined
       if (href && getMediaType(href)) {
-        return <WorkspaceMedia src={href} alt={typeof props.children === "string" ? props.children : undefined} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
+        return (
+          <WorkspaceMedia
+            src={href}
+            alt={typeof props.children === "string" ? props.children : undefined}
+            sandboxId={sandboxId}
+            sandboxKey={sandboxKey}
+            workspacePath={workspacePath}
+          />
+        )
       }
       return <a {...props} />
     },
-  }), [sandboxId, sandboxKey, workspacePath, isUser])
+  }
+}
+
+function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath, isStreamingContent = false }: {
+  msg: ChatMessage
+  sandboxId?: string | null
+  sandboxKey?: string | null
+  workspacePath?: string | null
+  isStreamingContent?: boolean
+}) {
+  const isUser = msg.role === "user"
+  const streamComponents = useMemo(
+    () => createStreamdownComponents({ sandboxId, sandboxKey, workspacePath, isUser }),
+    [sandboxId, sandboxKey, workspacePath, isUser],
+  )
 
   if (isUser) {
     return (
-      <div className="flex justify-end mb-4">
-        <div className="max-w-[85%] rounded-lg rounded-br-[3px] bg-[#111111] px-4 py-2.5 shadow-[var(--shadow-border)]">
-          <div className="prose prose-invert prose-sm max-w-none whitespace-pre-wrap text-foreground [&_code]:text-[#58a6ff] [&_li]:my-0 [&_p]:my-0 [&_p+p]:mt-2 [&_ul]:my-2">
-            <ReactMarkdown components={mdComponents}>
-              {msg.content}
-            </ReactMarkdown>
-          </div>
-        </div>
-      </div>
+      <Message from="user" className="mb-4">
+        <MessageContent className="max-w-[85%] rounded-lg rounded-br-[3px] bg-[#111111] px-4 py-2.5 shadow-[var(--shadow-border)]">
+          <MessageResponse
+            className="prose prose-invert prose-sm max-w-none whitespace-pre-wrap text-foreground [&_code]:text-[#58a6ff] [&_li]:my-0 [&_p]:my-0 [&_p+p]:mt-2 [&_ul]:my-2"
+            components={streamComponents}
+            mode="static"
+          >
+            {msg.content}
+          </MessageResponse>
+        </MessageContent>
+      </Message>
     )
   }
 
   return (
-    <div className="mb-4">
+    <Message from="assistant" className="mb-4 max-w-full">
       {msg.content && (
-        <div className="prose prose-invert prose-sm max-w-none text-foreground/90 [&_a]:text-[#58a6ff] [&_a:hover]:underline [&_code]:text-[#58a6ff] [&_pre]:rounded-[6px] [&_pre]:bg-[#0a0a0a] [&_pre]:shadow-[var(--shadow-border)]">
-          <ReactMarkdown
-            rehypePlugins={[rehypeHighlight]}
-            components={mdComponents}
+        <MessageContent className="w-full max-w-full">
+          <MessageResponse
+            className="prose prose-invert prose-sm max-w-none text-foreground/90 [&_a]:text-[#58a6ff] [&_a:hover]:underline [&_code]:text-[#58a6ff] [&_pre]:rounded-[6px] [&_pre]:bg-[#0a0a0a] [&_pre]:shadow-[var(--shadow-border)]"
+            components={streamComponents}
+            mode={isStreamingContent ? "streaming" : "static"}
+            parseIncompleteMarkdown={isStreamingContent}
           >
             {msg.content}
-          </ReactMarkdown>
-        </div>
+          </MessageResponse>
+        </MessageContent>
       )}
-    </div>
+    </Message>
+  )
+}
+
+function AgentReasoning({ text, isLive }: { text: string; isLive: boolean }) {
+  if (!text && !isLive) return null
+
+  return (
+    <Reasoning
+      className="my-1.5 rounded-lg bg-[#0a0a0a] px-3 py-2 shadow-[var(--shadow-border)]"
+      defaultOpen={isLive}
+      isStreaming={isLive}
+    >
+      <ReasoningTrigger
+        className="font-mono text-[11px] font-medium uppercase"
+        getThinkingMessage={(streaming, duration) => {
+          if (streaming) return "Thinking"
+          if (duration === undefined) return "Thought"
+          return `Thought for ${duration}s`
+        }}
+      />
+      <ReasoningContent className="max-h-[220px] overflow-y-auto font-mono text-[11px] leading-relaxed">
+        {text || "Thinking..."}
+      </ReasoningContent>
+    </Reasoning>
+  )
+}
+
+function getToolState(tool: ToolCall): ToolPart["state"] {
+  if (tool.isError) return "output-error"
+  if (tool.status === "running") return "input-available"
+  return "output-available"
+}
+
+function AgentToolCard({ tool }: { tool: ToolCall }) {
+  const hasArgs = !!(tool.args && Object.keys(tool.args).length > 0)
+  const hasPreview = !!tool.preview
+  const state = getToolState(tool)
+
+  return (
+    <Tool
+      className={`my-1 overflow-hidden border-0 transition-shadow ${
+        tool.status === "running"
+          ? "bg-[rgba(10,114,239,0.08)] shadow-[0_0_0_1px_rgba(10,114,239,0.28)]"
+          : tool.isError
+            ? "bg-[rgba(255,91,79,0.08)] shadow-[0_0_0_1px_rgba(255,91,79,0.24)]"
+            : "bg-[#0a0a0a] shadow-[var(--shadow-border)] hover:shadow-[var(--shadow-border-strong)]"
+      }`}
+      defaultOpen={tool.status === "running" || tool.isError}
+    >
+      <ToolHeader
+        className="px-3 py-1.5"
+        state={state}
+        title={tool.name}
+        type={`tool-${tool.name}`}
+      />
+      {(hasArgs || hasPreview) && (
+        <ToolContent className="space-y-2 px-3 pb-3 pt-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
+          {hasArgs && (
+            <ToolInput
+              input={tool.args}
+              className="[&_h4]:text-[10px] [&_h4]:tracking-normal"
+            />
+          )}
+          {hasPreview && (
+            <Terminal
+              autoScroll
+              className="border-0 bg-[#050505] text-xs shadow-[var(--shadow-border)]"
+              isStreaming={tool.status === "running"}
+              output={tool.preview ?? ""}
+            />
+          )}
+          {tool.duration != null && (
+            <div className="font-mono text-[10px] text-muted-foreground">
+              Completed in {tool.duration.toFixed(1)}s
+            </div>
+          )}
+        </ToolContent>
+      )}
+    </Tool>
   )
 }
 
@@ -583,7 +629,6 @@ export function ChatPanel({
 
   const [input, setInput] = useState("")
   const [elapsed, setElapsed] = useState(0)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const autoIntroSent = useRef(false)
@@ -591,24 +636,6 @@ export function ChatPanel({
     () => `Use skill_view to look up the /${skillPath} skill, then briefly introduce it - what it does, when to use it, and a quick example.`,
     [skillPath],
   )
-
-  const mdComponents = useMemo(() => ({
-    img: (props: React.ComponentProps<"img">) => {
-      const imgSrc = typeof props.src === "string" ? props.src : undefined
-      const imgAlt = typeof props.alt === "string" ? props.alt : undefined
-      if (imgSrc && getMediaType(imgSrc)) {
-        return <WorkspaceMedia src={imgSrc} alt={imgAlt} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
-      }
-      return <WorkspaceImage src={imgSrc} alt={imgAlt} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
-    },
-    a: (props: React.ComponentProps<"a">) => {
-      const href = typeof props.href === "string" ? props.href : undefined
-      if (href && getMediaType(href)) {
-        return <WorkspaceMedia src={href} alt={typeof props.children === "string" ? props.children : undefined} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
-      }
-      return <a {...props} />
-    },
-  }), [sandboxId, sandboxKey, workspacePath])
 
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [isUploading, setIsUploading] = useState(false)
@@ -673,10 +700,6 @@ export function ChatPanel({
     document.addEventListener("visibilitychange", onVisibility)
     return () => { stop(); document.removeEventListener("visibilitychange", onVisibility) }
   }, [startedAt])
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages, isStreaming])
 
   useEffect(() => {
     if (isStreaming || isUploading) return
@@ -892,64 +915,64 @@ export function ChatPanel({
       {creditWarning && <CreditWarningBanner message={creditWarning} />}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto bg-background px-4 py-4">
-        {segments.length > 0 ? (
-          <>
-            {/* Previous messages; skip last if it's the assistant message mirrored by segments */}
-            {(messages[messages.length - 1]?.role === "assistant" ? messages.slice(0, -1) : messages).map((msg, i) => (
-              <MessageBubble key={i} msg={msg} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
-            ))}
-            {/* Interleaved segments for current assistant turn */}
-            {segments.map((seg, i) =>
-              seg.type === "text" ? (
-                seg.content.trim() ? (
-                  <div key={`seg-text-${i}`} className="mb-4">
-                    <div className="prose prose-invert prose-sm max-w-none text-foreground/90 [&_a]:text-[#58a6ff] [&_a:hover]:underline [&_code]:text-[#58a6ff] [&_pre]:rounded-[6px] [&_pre]:bg-[#0a0a0a] [&_pre]:shadow-[var(--shadow-border)]">
-                      <ReactMarkdown
-                        rehypePlugins={[rehypeHighlight]}
-                        components={mdComponents}
-                      >
-                        {seg.content}
-                      </ReactMarkdown>
-                    </div>
-                  </div>
-                ) : null
-              ) : (
-                <ToolCard key={`seg-tool-${i}`} tool={seg.tool} />
-              )
-            )}
-          </>
-        ) : (
-          <>
-            {shouldShowOptimisticAutoIntro && (
-              <MessageBubble
-                msg={{ role: "user", content: autoIntroPrompt }}
-                sandboxId={sandboxId}
-                sandboxKey={sandboxKey}
-                workspacePath={workspacePath}
-              />
-            )}
-            {messages.map((msg, i) => (
-              <MessageBubble key={i} msg={msg} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
-            ))}
-          </>
-        )}
-        {(thinkingText || isThinking) && (
-          <ThinkingCard text={thinkingText} isLive={isThinking} />
-        )}
-        {isStreaming && !thinkingText && !isThinking && segments.length === 0 && toolCalls.length === 0 && messages[messages.length - 1]?.role !== "assistant" && (
-          <ThinkingDots />
-        )}
-        {error && (
-          <ErrorCard
-            error={error}
-            sessionFailed={sessionFailed}
-            isProviderError={isProviderError}
-            onSessionError={onSessionError}
-          />
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+      <Conversation className="bg-background">
+        <ConversationContent className="gap-0 px-4 py-4">
+          {segments.length > 0 ? (
+            <>
+              {/* Previous messages; skip last if it's the assistant message mirrored by segments */}
+              {(messages[messages.length - 1]?.role === "assistant" ? messages.slice(0, -1) : messages).map((msg, i) => (
+                <MessageBubble key={i} msg={msg} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
+              ))}
+              {/* Interleaved segments for current assistant turn */}
+              {segments.map((seg, i) =>
+                seg.type === "text" ? (
+                  seg.content.trim() ? (
+                    <MessageBubble
+                      key={`seg-text-${i}`}
+                      msg={{ role: "assistant", content: seg.content }}
+                      sandboxId={sandboxId}
+                      sandboxKey={sandboxKey}
+                      workspacePath={workspacePath}
+                      isStreamingContent
+                    />
+                  ) : null
+                ) : (
+                  <AgentToolCard key={`seg-tool-${i}`} tool={seg.tool} />
+                )
+              )}
+            </>
+          ) : (
+            <>
+              {shouldShowOptimisticAutoIntro && (
+                <MessageBubble
+                  msg={{ role: "user", content: autoIntroPrompt }}
+                  sandboxId={sandboxId}
+                  sandboxKey={sandboxKey}
+                  workspacePath={workspacePath}
+                />
+              )}
+              {messages.map((msg, i) => (
+                <MessageBubble key={i} msg={msg} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
+              ))}
+            </>
+          )}
+          {(thinkingText || isThinking) && (
+            <AgentReasoning text={thinkingText} isLive={isThinking} />
+          )}
+          {isStreaming && !thinkingText && !isThinking && segments.length === 0 && toolCalls.length === 0 && messages[messages.length - 1]?.role !== "assistant" && (
+            <ThinkingDots />
+          )}
+          {error && (
+            <ErrorCard
+              error={error}
+              sessionFailed={sessionFailed}
+              isProviderError={isProviderError}
+              onSessionError={onSessionError}
+            />
+          )}
+        </ConversationContent>
+        <ConversationScrollButton className="bottom-4 shadow-[var(--shadow-card)]" />
+      </Conversation>
 
       {/* Input */}
       <div className="shrink-0 bg-background px-4 py-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
