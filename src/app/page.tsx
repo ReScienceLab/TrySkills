@@ -8,14 +8,13 @@ import {
   ArrowRight,
   BookOpenText,
   Globe2,
-  Loader2,
   LockKeyhole,
   Search,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 import { PageContent, PageShell, StatusBadge, Surface } from "@/components/product-ui"
 import { SiteHeader } from "@/components/site-header"
 import { SkillPicker } from "@/components/skill-picker"
@@ -61,6 +60,30 @@ function Footer() {
         <span>ReScience Lab Inc.</span>
       </PageContent>
     </footer>
+  )
+}
+
+function SkillTreeSkeleton() {
+  const widths = ["w-44", "w-64", "w-56", "w-72", "w-48", "w-60", "w-52"]
+
+  return (
+    <Surface className="overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.08)]">
+        <Skeleton className="h-4 w-full max-w-[420px]" />
+        <Skeleton className="h-6 w-16 shrink-0 rounded-full" />
+      </div>
+      <div className="space-y-2 px-4 py-4">
+        <Skeleton className="h-4 w-36" />
+        {widths.map((width, index) => (
+          <div key={`${width}-${index}`} className="flex items-center gap-2">
+            <span className="w-8 shrink-0 font-mono text-xs text-muted-foreground/40">
+              {index % 3 === 0 ? "├──" : index % 3 === 1 ? "│" : "└──"}
+            </span>
+            <Skeleton className={`h-4 ${width}`} />
+          </div>
+        ))}
+      </div>
+    </Surface>
   )
 }
 
@@ -302,12 +325,7 @@ export default function Home() {
               </div>
 
               {treeLoading ? (
-                <Card>
-                  <CardContent className="flex flex-col items-center py-10">
-                    <Loader2 className="mb-4 size-7 animate-spin text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">Fetching skill structure...</span>
-                  </CardContent>
-                </Card>
+                <SkillTreeSkeleton />
               ) : treeData ? (
                 <SkillTree tree={treeData} skillName={skillName} resolvedPath={treeResolvedPath} />
               ) : treeError ? (

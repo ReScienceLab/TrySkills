@@ -9,6 +9,7 @@ import { useKeyStore } from "@/hooks/use-key-store";
 import { ProviderTabs, ModelSelector, ApiKeyInput } from "@/components/provider-config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge, Surface } from "@/components/product-ui";
 
 export interface LaunchConfig {
@@ -17,6 +18,30 @@ export interface LaunchConfig {
   llmKey: string;
   sandboxKey: string;
   envVars?: Record<string, string>;
+}
+
+function ConfigPanelSkeleton() {
+  return (
+    <Surface className="p-6">
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <div className="space-y-2">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-5 w-48" />
+        </div>
+        <Skeleton className="h-8 w-28 rounded-[6px]" />
+      </div>
+      <div className="space-y-5">
+        <div className="grid gap-2 sm:grid-cols-3">
+          <Skeleton className="h-10 rounded-[6px]" />
+          <Skeleton className="h-10 rounded-[6px]" />
+          <Skeleton className="h-10 rounded-[6px]" />
+        </div>
+        <Skeleton className="h-10 rounded-[6px]" />
+        <Skeleton className="h-10 rounded-[6px]" />
+        <Skeleton className="h-10 rounded-[6px]" />
+      </div>
+    </Surface>
+  );
 }
 
 export function ConfigPanel({
@@ -54,8 +79,8 @@ export function ConfigPanel({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="size-8 animate-spin rounded-full border-2 border-white/10 border-t-white/60" />
+      <div className="py-4">
+        <ConfigPanelSkeleton />
       </div>
     );
   }

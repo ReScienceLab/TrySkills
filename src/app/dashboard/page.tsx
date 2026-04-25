@@ -21,6 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Surface, StatusBadge } from "@/components/product-ui";
 
 interface SandboxLiveInfo {
@@ -38,6 +39,64 @@ interface SandboxLiveInfo {
 }
 
 const PAGE_SIZE = 20;
+
+function SandboxDetailsSkeleton() {
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-4 w-full max-w-[320px]" />
+        </div>
+        <div className="space-y-2">
+          <Skeleton className="h-3 w-20" />
+          <Skeleton className="h-4 w-28" />
+        </div>
+        <div className="space-y-2">
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-4 w-24" />
+        </div>
+        <div className="space-y-2">
+          <Skeleton className="h-3 w-20" />
+          <Skeleton className="h-4 w-24" />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Skeleton className="h-3 w-28" />
+        <div className="flex flex-wrap gap-1.5">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <Skeleton key={index} className="h-7 w-24 rounded-full" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DashboardRowsSkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: rows }).map((_, index) => (
+        <div
+          key={index}
+          className="flex items-center justify-between gap-4 rounded-lg bg-white/[0.03] px-4 py-3 shadow-[var(--shadow-border)]"
+        >
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <Skeleton className="h-1.5 w-1.5 shrink-0 rounded-full" />
+            <div className="min-w-0 flex-1 space-y-2">
+              <Skeleton className="h-4 w-full max-w-[280px]" />
+              <Skeleton className="h-3 w-full max-w-[220px]" />
+            </div>
+          </div>
+          <div className="hidden shrink-0 items-center gap-2 sm:flex">
+            <Skeleton className="h-8 w-24 rounded-[6px]" />
+            <Skeleton className="h-8 w-20 rounded-[6px]" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const { isSignedIn, isLoaded } = useAuth();
@@ -195,10 +254,14 @@ export default function DashboardPage() {
                 <h2 className="text-lg font-medium text-foreground">Hermes Agent</h2>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <StatusBadge tone={statusTone}>
-                  {statusLabel}
-                </StatusBadge>
-                {isRealSandbox && (
+                {dataLoading ? (
+                  <Skeleton className="h-6 w-16 rounded-full" />
+                ) : (
+                  <StatusBadge tone={statusTone}>
+                    {statusLabel}
+                  </StatusBadge>
+                )}
+                {!dataLoading && isRealSandbox && (
                   <>
                     <Button
                       type="button"
@@ -261,10 +324,7 @@ export default function DashboardPage() {
             </div>
 
             {dataLoading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="size-3.5 animate-spin" />
-                Loading sandbox...
-              </div>
+              <SandboxDetailsSkeleton />
             ) : isCreating && !isRealSandbox ? (
               <div className="flex items-center gap-2 text-sm text-[#58a6ff]">
                 <Loader2 className="size-3.5 animate-spin" />
@@ -360,10 +420,7 @@ export default function DashboardPage() {
               </div>
 
               {dataLoading ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="size-3.5 animate-spin" />
-                  Loading sessions...
-                </div>
+                <DashboardRowsSkeleton rows={3} />
               ) : sessions.length === 0 ? (
                 <div className="text-sm text-muted-foreground">
                   No chat sessions yet. Start chatting with a skill to create one.
@@ -434,10 +491,7 @@ export default function DashboardPage() {
             <h2 className="mb-4 text-lg font-medium text-foreground">Skill Trials</h2>
 
             {dataLoading ? (
-              <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-                <Loader2 className="size-3.5 animate-spin" />
-                Loading skill trials...
-              </div>
+              <DashboardRowsSkeleton rows={4} />
             ) : trialList.length === 0 ? (
               <div className="text-center py-8">
                 <p className="mb-4 text-sm text-muted-foreground">No skills tried yet.</p>

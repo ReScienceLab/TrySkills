@@ -5,6 +5,7 @@ import { FileViewer } from "./file-viewer"
 import type { FileEntry, FileContent } from "@/lib/workspace/types"
 import { formatBytes, isImageFile } from "@/lib/workspace/types"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Folder, RefreshCw, X, ChevronLeft } from "lucide-react"
 
 function flattenFiles(entries: FileEntry[]): FileEntry[] {
@@ -112,9 +113,21 @@ export function WorkspacePanel({
 
       {/* Loading indicator for initial load */}
       {loadingTree && entries.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-12 gap-3">
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/10 border-t-white/50" />
-          <span className="text-[11px] text-muted-foreground">Loading workspace...</span>
+        <div className="space-y-2 px-4 py-4">
+          {Array.from({ length: 9 }).map((_, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <Skeleton className="size-3.5 shrink-0 rounded-[4px]" />
+              <Skeleton
+                className={
+                  index % 3 === 0
+                    ? "h-3 w-28"
+                    : index % 3 === 1
+                      ? "h-3 w-40"
+                      : "h-3 w-24"
+                }
+              />
+            </div>
+          ))}
         </div>
       )}
 

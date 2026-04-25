@@ -6,6 +6,7 @@ import rehypeHighlight from "rehype-highlight"
 import type { FileContent } from "@/lib/workspace/types"
 import { isMarkdownFile } from "@/lib/workspace/types"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { X } from "lucide-react"
 
 export function FileViewer({
@@ -71,8 +72,14 @@ export function FileViewer({
 
       <div className="min-h-0 flex-1 overflow-auto">
         {loading && (
-          <div className="flex items-center justify-center py-12">
-            <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/10 border-t-white/50" />
+          <div className="space-y-2 px-4 py-4">
+            <Skeleton className="h-4 w-5/6" />
+            <Skeleton className="h-4 w-2/3" />
+            <Skeleton className="h-4 w-11/12" />
+            <Skeleton className="h-4 w-1/2" />
+            <div className="pt-3">
+              <Skeleton className="h-32 w-full rounded-[6px]" />
+            </div>
           </div>
         )}
 
