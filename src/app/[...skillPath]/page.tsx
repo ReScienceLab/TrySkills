@@ -590,6 +590,8 @@ export default function SkillPage({
                 onCloseFile={workspace.closeFile}
                 onRefresh={workspace.refreshTree}
                 onClose={() => workspace.setPanelOpen(false)}
+                sandboxId={session?.sandboxId}
+                sandboxKey={savedConfig?.sandboxKey}
               />
             </div>
           )}

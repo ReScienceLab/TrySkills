@@ -31,6 +31,8 @@ export function WorkspacePanel({
   onCloseFile,
   onRefresh,
   onClose,
+  sandboxId,
+  sandboxKey,
 }: {
   entries: FileEntry[]
   selectedFile: FileEntry | null
@@ -43,6 +45,8 @@ export function WorkspacePanel({
   onCloseFile: () => void
   onRefresh: () => void
   onClose: () => void
+  sandboxId?: string | null
+  sandboxKey?: string | null
 }) {
   const files = flattenFiles(entries)
   const imageCount = files.filter((file) => isImageFile(file.name)).length
@@ -136,6 +140,8 @@ export function WorkspacePanel({
             loading={loadingFile}
             error={fileError}
             onClose={onCloseFile}
+            sandboxId={sandboxId}
+            sandboxKey={sandboxKey}
           />
         </div>
       )}

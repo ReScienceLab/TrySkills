@@ -9,6 +9,7 @@ import type { ChatMessage } from "@/lib/sandbox/hermes-api"
 import {
   CreditCard, KeyRound, Clock, MailX, AlertTriangle, Globe,
   ChevronRight, Lightbulb, X, Check, ImageIcon, Paperclip, Upload,
+  Music, Video,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
@@ -331,6 +332,123 @@ function WorkspaceImage({ src, alt, sandboxId, sandboxKey, workspacePath, varian
   )
 }
 
+const AUDIO_EXTS_SET = new Set(["mp3", "wav", "ogg", "flac", "aac", "m4a"])
+const VIDEO_EXTS_SET = new Set(["mp4", "webm", "mov", "avi", "mkv"])
+
+function getMediaType(filename: string): "audio" | "video" | null {
+  const dot = filename.lastIndexOf(".")
+  if (dot < 0) return null
+  const ext = filename.slice(dot + 1).toLowerCase()
+  if (AUDIO_EXTS_SET.has(ext)) return "audio"
+  if (VIDEO_EXTS_SET.has(ext)) return "video"
+  return null
+}
+
+function WorkspaceMedia({ src, alt, sandboxId, sandboxKey, workspacePath }: {
+  src?: string
+  alt?: string
+  sandboxId?: string | null
+  sandboxKey?: string | null
+  workspacePath?: string | null
+}) {
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const isExternalUrl = src?.startsWith("http://") || src?.startsWith("https://")
+  const resolvedSrc = (() => {
+    if (!src || isExternalUrl) return null
+    if (src.startsWith("/")) return normalizeImagePath(src)
+    if (workspacePath) return normalizeImagePath(`${workspacePath}/${src}`)
+    return null
+  })()
+  const isWorkspacePath = !!(resolvedSrc && workspacePath && resolvedSrc.startsWith(workspacePath + "/") && !resolvedSrc.includes(".."))
+  const fileName = (resolvedSrc || src || alt || "media").split("/").pop() || "media"
+  const mediaType = getMediaType(fileName)
+  const MediaTypeIcon = mediaType === "audio" ? Music : Video
+
+  useEffect(() => {
+    if (!isWorkspacePath || !sandboxId || !sandboxKey || !resolvedSrc) return
+    let cancelled = false
+    const params = new URLSearchParams({
+      action: "media-url", sandboxId, key: sandboxKey, path: resolvedSrc,
+    })
+    fetch(`/api/workspace?${params}`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
+      .then((data) => {
+        if (cancelled) return
+        if (data.error) { setError(data.error); return }
+        setMediaUrl(data.url)
+      })
+      .catch(() => {
+        if (!cancelled) setError("Failed to get media URL")
+      })
+    return () => { cancelled = true }
+  }, [resolvedSrc, sandboxId, sandboxKey, isWorkspacePath])
+
+  if (isExternalUrl) {
+    if (mediaType === "audio") return <audio controls src={src} className="max-w-full my-2" />
+    if (mediaType === "video") return <video controls src={src} className="max-w-full rounded my-2" />
+    return null
+  }
+  if (!isWorkspacePath) {
+    if (src) return <span className="text-white/30 text-xs">[media: {alt || src}]</span>
+    return null
+  }
+
+  return (
+    <span className="not-prose my-3 block overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070b0d]/95 shadow-[0_18px_50px_rgba(0,0,0,0.28)]">
+      <span className="flex items-center gap-3 border-b border-white/[0.06] px-3.5 py-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06]">
+          <MediaTypeIcon className="w-4 h-4 text-white/50" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] font-medium text-white/[0.82]">{alt || fileName}</span>
+          <span className="block truncate font-mono text-[10px] text-white/[0.28]">{resolvedSrc}</span>
+        </span>
+        <span className={`rounded-full px-2 py-1 text-[10px] font-medium ${
+          error ? "bg-red-500/10 text-red-300/80"
+            : mediaUrl ? "bg-emerald-400/10 text-emerald-300/80"
+            : "bg-blue-400/10 text-blue-300/80"
+        }`}>
+          {error ? "Failed" : mediaUrl ? "Ready" : "Loading"}
+        </span>
+      </span>
+      <span className="block bg-white/[0.025] p-3">
+        {error ? (
+          <span className="block rounded-xl border border-red-400/15 bg-red-500/[0.04] px-3 py-6 text-center text-[12px] text-red-300/70">
+            {error}
+          </span>
+        ) : mediaUrl ? (
+          mediaType === "audio" ? (
+            <audio controls src={mediaUrl} className="w-full" />
+          ) : (
+            <video controls src={mediaUrl} className="mx-auto max-h-[520px] max-w-full rounded-xl" />
+          )
+        ) : (
+          <span className="flex h-20 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.025] text-[12px] text-white/[0.35] animate-pulse">
+            Loading {mediaType || "media"}...
+          </span>
+        )}
+      </span>
+      {mediaUrl && (
+        <span className="flex flex-wrap items-center gap-2 border-t border-white/[0.06] px-3.5 py-2.5">
+          <a
+            href={mediaUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-md border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-[11px] text-white/55 no-underline transition-colors hover:border-white/[0.16] hover:text-white/80"
+          >
+            Open in new tab
+          </a>
+        </span>
+      )}
+    </span>
+  )
+}
+
 function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath }: {
   msg: ChatMessage
   sandboxId?: string | null
@@ -339,17 +457,31 @@ function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath }: {
 }) {
   const isUser = msg.role === "user"
   const mdComponents = useMemo(() => ({
-    img: (props: React.ComponentProps<"img">) => (
-      <WorkspaceImage
-        src={typeof props.src === "string" ? props.src : undefined}
-        alt={typeof props.alt === "string" ? props.alt : undefined}
-        sandboxId={sandboxId}
-        sandboxKey={sandboxKey}
-        workspacePath={workspacePath}
-        variant={isUser ? "attachment" : "artifact"}
-        allowExternal={!isUser}
-      />
-    ),
+    img: (props: React.ComponentProps<"img">) => {
+      const imgSrc = typeof props.src === "string" ? props.src : undefined
+      const imgAlt = typeof props.alt === "string" ? props.alt : undefined
+      if (imgSrc && getMediaType(imgSrc)) {
+        return <WorkspaceMedia src={imgSrc} alt={imgAlt} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
+      }
+      return (
+        <WorkspaceImage
+          src={imgSrc}
+          alt={imgAlt}
+          sandboxId={sandboxId}
+          sandboxKey={sandboxKey}
+          workspacePath={workspacePath}
+          variant={isUser ? "attachment" : "artifact"}
+          allowExternal={!isUser}
+        />
+      )
+    },
+    a: (props: React.ComponentProps<"a">) => {
+      const href = typeof props.href === "string" ? props.href : undefined
+      if (href && getMediaType(href)) {
+        return <WorkspaceMedia src={href} alt={typeof props.children === "string" ? props.children : undefined} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
+      }
+      return <a {...props} />
+    },
   }), [sandboxId, sandboxKey, workspacePath, isUser])
 
   if (isUser) {
@@ -454,15 +586,21 @@ export function ChatPanel({
   const autoIntroSent = useRef(false)
 
   const mdComponents = useMemo(() => ({
-    img: (props: React.ComponentProps<"img">) => (
-      <WorkspaceImage
-        src={typeof props.src === "string" ? props.src : undefined}
-        alt={typeof props.alt === "string" ? props.alt : undefined}
-        sandboxId={sandboxId}
-        sandboxKey={sandboxKey}
-        workspacePath={workspacePath}
-      />
-    ),
+    img: (props: React.ComponentProps<"img">) => {
+      const imgSrc = typeof props.src === "string" ? props.src : undefined
+      const imgAlt = typeof props.alt === "string" ? props.alt : undefined
+      if (imgSrc && getMediaType(imgSrc)) {
+        return <WorkspaceMedia src={imgSrc} alt={imgAlt} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
+      }
+      return <WorkspaceImage src={imgSrc} alt={imgAlt} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
+    },
+    a: (props: React.ComponentProps<"a">) => {
+      const href = typeof props.href === "string" ? props.href : undefined
+      if (href && getMediaType(href)) {
+        return <WorkspaceMedia src={href} alt={typeof props.children === "string" ? props.children : undefined} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
+      }
+      return <a {...props} />
+    },
   }), [sandboxId, sandboxKey, workspacePath])
 
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
