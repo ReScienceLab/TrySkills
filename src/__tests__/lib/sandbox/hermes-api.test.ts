@@ -16,6 +16,20 @@ function mockFetch(body: string, status = 200) {
   })
 }
 
+function mockFetchOpenStream(body: string) {
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(body))
+    },
+  })
+  return vi.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    body: stream,
+    text: () => Promise.resolve(body),
+  })
+}
+
 describe("hermes-api chatStream", () => {
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -48,6 +62,60 @@ describe("hermes-api chatStream", () => {
     expect(onDelta).toHaveBeenCalledWith("Hello")
     expect(onDelta).toHaveBeenCalledWith(" world")
     expect(onDone).toHaveBeenCalledWith({ hadContent: true })
+    expect(onError).not.toHaveBeenCalled()
+  })
+
+  it("treats idle open SSE streams as done after visible content arrives", async () => {
+    const sseBody = [
+      'data: {"choices":[{"delta":{"content":"Complete answer"},"finish_reason":null}]}',
+      "",
+    ].join("\n")
+
+    global.fetch = mockFetchOpenStream(sseBody)
+
+    const onDelta = vi.fn()
+    const onDone = vi.fn()
+    const onError = vi.fn()
+    const onToolProgress = vi.fn()
+
+    chatStream("https://example.com", [{ role: "user", content: "hi" }], {
+      onDelta,
+      onDone,
+      onError,
+      onToolProgress,
+    }, undefined, { idleDoneTimeoutMs: 10 })
+
+    await vi.waitFor(() => expect(onDelta).toHaveBeenCalledWith("Complete answer"))
+    await vi.waitFor(() => expect(onDone).toHaveBeenCalledWith({ hadContent: true }), { timeout: 200 })
+
+    expect(onError).not.toHaveBeenCalled()
+  })
+
+  it("handles Hermes-style stream_end terminal events", async () => {
+    const sseBody = [
+      'data: {"choices":[{"delta":{"content":"Done"},"finish_reason":null}]}',
+      'event: stream_end',
+      'data: {"session_id":"session-1"}',
+      "",
+    ].join("\n")
+
+    global.fetch = mockFetch(sseBody)
+
+    const onDelta = vi.fn()
+    const onDone = vi.fn()
+    const onError = vi.fn()
+    const onToolProgress = vi.fn()
+
+    chatStream("https://example.com", [{ role: "user", content: "hi" }], {
+      onDelta,
+      onDone,
+      onError,
+      onToolProgress,
+    })
+
+    await vi.waitFor(() => expect(onDone).toHaveBeenCalledWith({ hadContent: true }))
+
+    expect(onDelta).toHaveBeenCalledWith("Done")
     expect(onError).not.toHaveBeenCalled()
   })
 

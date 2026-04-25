@@ -831,6 +831,14 @@ export function ChatPanel({
     return `${m}:${s.toString().padStart(2, "0")}`
   }
 
+  const handleTopStop = useCallback(() => {
+    if (isStreaming) {
+      cancel()
+      return
+    }
+    onStop()
+  }, [isStreaming, cancel, onStop])
+
   const handleSend = async () => {
     const text = input.trim()
     if ((!text && !pendingFiles.length) || isStreaming || isUploading || uploadingRef.current) return
@@ -904,7 +912,8 @@ export function ChatPanel({
             type="button"
             variant="destructive"
             size="sm"
-            onClick={onStop}
+            onClick={handleTopStop}
+            title={isStreaming ? "Cancel streaming response" : "Stop session"}
           >
             Stop
           </Button>
