@@ -29,15 +29,15 @@ export class ConvexErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         <div className="flex min-h-[200px] flex-col items-center justify-center gap-4 p-8 text-center">
-          <h2 className="text-lg font-semibold text-red-400">
+          <h2 className="text-lg font-semibold text-[#ff5b4f]">
             Something went wrong
           </h2>
-          <p className="text-sm text-white/60">
+          <p className="text-sm text-muted-foreground">
             {this.state.error?.message || "An unexpected error occurred."}
           </p>
           <button
             onClick={() => this.setState({ hasError: false, error: null })}
-            className="rounded bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20 transition-colors"
+            className="rounded-[6px] bg-white/[0.04] px-4 py-2 text-sm text-foreground shadow-[var(--shadow-border)] transition-colors hover:bg-white/[0.08]"
           >
             Try again
           </button>

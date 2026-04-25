@@ -196,6 +196,7 @@ describe("sandbox/daytona", () => {
     expect(npxCmd).toContain("test-owner/test-repo");
     expect(npxCmd).toContain("--skill");
     expect(npxCmd).toContain("--agent universal");
+    expect(npxCmd).toContain("--full-depth");
     // Symlink should be created
     const symlinkCmd = allCmds.find((c: string) => c.includes("ln -sfn"));
     expect(symlinkCmd).toBeDefined();

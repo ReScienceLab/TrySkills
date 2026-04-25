@@ -46,21 +46,60 @@ export interface StreamCallbacks {
   onError: (err: Error) => void
 }
 
+export const STREAM_IDLE_DONE_TIMEOUT_MS = 12_000
+
+export interface ChatStreamOptions {
+  idleDoneTimeoutMs?: number
+}
+
 export function chatStream(
   gatewayBaseUrl: string,
   messages: ChatMessage[],
   callbacks: StreamCallbacks,
   model?: string,
+  options?: ChatStreamOptions,
 ): () => void {
   let aborted = false
   const controller = new AbortController()
+  const idleDoneTimeoutMs = options?.idleDoneTimeoutMs ?? STREAM_IDLE_DONE_TIMEOUT_MS
+  let idleDoneTimer: ReturnType<typeof setTimeout> | null = null
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
+
+  const clearIdleDoneTimer = () => {
+    if (idleDoneTimer) {
+      clearTimeout(idleDoneTimer)
+      idleDoneTimer = null
+    }
+  }
+
+  const abortRead = () => {
+    aborted = true
+    controller.abort()
+    void reader?.cancel().catch(() => {})
+  }
 
   void (async () => {
     let hadContent = false
+    let settled = false
     let rawContent = ""
     let inThinkBlock = false
     let thinkBuffer = ""
     let thinkDecided = false
+
+    const finalize = (meta: StreamDoneMeta, shouldAbortRead = false) => {
+      if (settled) return
+      settled = true
+      clearIdleDoneTimer()
+      if (shouldAbortRead) abortRead()
+      callbacks.onDone(meta)
+    }
+
+    const fail = (err: Error) => {
+      if (settled) return
+      settled = true
+      clearIdleDoneTimer()
+      callbacks.onError(err)
+    }
 
     try {
       const res = await fetch("/api/hermes", {
@@ -88,13 +127,22 @@ export function chatStream(
         throw new Error(text || `Gateway error: ${res.status}`)
       }
 
-      const reader = res.body.getReader()
+      reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ""
       let currentEventType = ""
 
       while (!aborted) {
-        const { done, value } = await reader.read()
+        let readResult: ReadableStreamReadResult<Uint8Array>
+        if (hadContent) {
+          const timeout = new Promise<ReadableStreamReadResult<Uint8Array>>((resolve) =>
+            setTimeout(() => resolve({ done: true, value: undefined as unknown as Uint8Array }), idleDoneTimeoutMs),
+          )
+          readResult = await Promise.race([reader.read(), timeout])
+        } else {
+          readResult = await reader.read()
+        }
+        const { done, value } = readResult
         if (done) break
 
         buffer += decoder.decode(value, { stream: true })
@@ -110,7 +158,7 @@ export function chatStream(
           const data = line.slice(6)
 
           if (data === "[DONE]") {
-            callbacks.onDone({ hadContent })
+            finalize({ hadContent })
             return
           }
 
@@ -120,19 +168,34 @@ export function chatStream(
             if (parsed.error) {
               const errMsg = parsed.error.message || parsed.error.type || "Unknown provider error"
               const errCode = parsed.error.code || parsed.error.type
-              callbacks.onError(new ProviderError(errMsg, errCode))
+              fail(new ProviderError(errMsg, errCode))
+              return
+            }
+
+            if (currentEventType === "done" || currentEventType === "stream_end" || currentEventType === "cancel") {
+              currentEventType = ""
+              finalize({ hadContent })
+              return
+            }
+
+            if (currentEventType === "apperror") {
+              const errMsg = parsed.message || parsed.error || "Provider error during streaming"
+              const errCode = parsed.code || parsed.type
+              fail(new ProviderError(errMsg, errCode))
               return
             }
 
             if (currentEventType === "hermes.tool.progress") {
               callbacks.onToolProgress(parsed as ToolProgress)
               currentEventType = ""
+
               continue
             }
 
             if (currentEventType === "reasoning") {
               callbacks.onReasoning?.(parsed.text ?? "")
               currentEventType = ""
+
               continue
             }
 
@@ -143,6 +206,7 @@ export function chatStream(
                 args: parsed.args,
               })
               currentEventType = ""
+
               continue
             }
 
@@ -155,6 +219,7 @@ export function chatStream(
                 is_error: parsed.is_error,
               })
               currentEventType = ""
+
               continue
             }
 
@@ -163,7 +228,7 @@ export function chatStream(
             const finishReason = parsed.choices?.[0]?.finish_reason
             if (finishReason === "error") {
               const errMsg = parsed.error?.message || "Provider error during streaming"
-              callbacks.onError(new ProviderError(errMsg, parsed.error?.code))
+              fail(new ProviderError(errMsg, parsed.error?.code))
               return
             }
 
@@ -192,6 +257,7 @@ export function chatStream(
                     if (remaining) {
                       hadContent = true
                       callbacks.onDelta(remaining)
+        
                     }
                   } else {
                     callbacks.onReasoning?.(thinkBuffer)
@@ -202,6 +268,7 @@ export function chatStream(
                 thinkDecided = true
                 hadContent = true
                 callbacks.onDelta(rawContent)
+  
                 continue
               }
 
@@ -220,6 +287,7 @@ export function chatStream(
                   if (remaining) {
                     hadContent = true
                     callbacks.onDelta(remaining)
+      
                   }
                 } else {
                   callbacks.onReasoning?.(delta.content)
@@ -229,10 +297,11 @@ export function chatStream(
 
               hadContent = true
               callbacks.onDelta(delta.content)
+
             }
 
             if (finishReason === "stop") {
-              callbacks.onDone({ hadContent })
+              finalize({ hadContent })
               return
             }
           } catch {
@@ -241,17 +310,17 @@ export function chatStream(
         }
       }
 
-      if (!aborted) callbacks.onDone({ hadContent })
+      if (!aborted) finalize({ hadContent })
     } catch (err) {
-      if (!aborted) {
-        callbacks.onError(err instanceof Error ? err : new Error(String(err)))
+      if (!aborted && !settled) {
+        fail(err instanceof Error ? err : new Error(String(err)))
       }
     }
   })()
 
   return () => {
-    aborted = true
-    controller.abort()
+    clearIdleDoneTimer()
+    abortRead()
   }
 }
 

@@ -1,6 +1,9 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { ChevronDown, Eye, EyeOff, Plus, X } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 
 const COMMON_PRESETS = [
   { key: "OPENAI_API_KEY", label: "OpenAI" },
@@ -99,71 +102,80 @@ export function EnvVarsEditor({
     <div className="space-y-3">
       {rows.map((row) => (
         <div key={row.id} className="flex gap-2 items-start">
-          <input
+          <Input
             type="text"
             value={row.key}
             onChange={(e) => updateRow(row.id, "key", e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ""))}
             placeholder="ENV_VAR_NAME"
             aria-label="Environment variable name"
-            className="w-[200px] shrink-0 px-3 py-2 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 focus:border-white/30 transition-colors placeholder:text-white/20"
+            className="h-10 w-[200px] shrink-0 border-0 bg-white/[0.03] font-mono shadow-[var(--shadow-border)] focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-ring"
           />
           <div className="relative flex-1">
-            <input
+            <Input
               type={visibleIds.has(row.id) ? "text" : "password"}
               value={row.value}
               onChange={(e) => updateRow(row.id, "value", e.target.value)}
               placeholder="value"
               aria-label={`Value for ${row.key || "environment variable"}`}
-              className="w-full px-3 py-2 pr-12 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 focus:border-white/30 transition-colors placeholder:text-white/20"
+              className="h-10 border-0 bg-white/[0.03] pr-11 font-mono shadow-[var(--shadow-border)] focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-ring"
             />
             <button
+              type="button"
               onClick={() => toggleVisible(row.id)}
               aria-label={visibleIds.has(row.id) ? "Hide value" : "Show value"}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors text-xs"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
             >
-              {visibleIds.has(row.id) ? "Hide" : "Show"}
+              {visibleIds.has(row.id) ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
             </button>
           </div>
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
             onClick={() => removeRow(row.id)}
             aria-label={`Remove ${row.key || "variable"}`}
-            className="shrink-0 px-2 py-2 text-white/30 hover:text-red-400 transition-colors"
+            className="shrink-0 text-muted-foreground hover:text-[#ff5b4f]"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+            <X className="size-4" />
+          </Button>
         </div>
       ))}
 
       <div className="flex gap-2">
-        <button
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
           onClick={() => addRow()}
-          className="px-3 py-1.5 text-xs text-white/50 hover:text-white/80 bg-white/5 hover:bg-white/10 border border-white/10 transition-all"
         >
-          + Add Variable
-        </button>
+          <Plus className="size-3.5" />
+          Add Variable
+        </Button>
         {availablePresets.length > 0 && (
           <div className="relative">
-            <button
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
               onClick={() => setShowPresets(!showPresets)}
-              className="px-3 py-1.5 text-xs text-white/50 hover:text-white/80 bg-white/5 hover:bg-white/10 border border-white/10 transition-all"
             >
-              Quick Add &darr;
-            </button>
+              Quick Add
+              <ChevronDown className="size-3.5" />
+            </Button>
             {showPresets && (
-              <div className="absolute top-full left-0 mt-1 z-10 bg-[#111] border border-white/10 shadow-lg min-w-[200px] max-h-[240px] overflow-y-auto">
+              <div className="absolute left-0 top-full z-10 mt-1 max-h-[240px] min-w-[240px] overflow-y-auto rounded-lg bg-popover p-1 shadow-[var(--shadow-card)]">
                 {availablePresets.map((preset) => (
                   <button
+                    type="button"
                     key={preset.key}
                     onClick={() => {
                       addRow(preset.key)
                       setShowPresets(false)
                     }}
-                    className="w-full px-3 py-2 text-left text-xs hover:bg-white/10 transition-colors flex items-center gap-2"
+                    className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-xs transition-colors hover:bg-white/[0.06]"
                   >
-                    <span className="text-white/60 font-mono">{preset.key}</span>
-                    <span className="text-white/30">{preset.label}</span>
+                    <span className="font-mono text-foreground">{preset.key}</span>
+                    <span className="text-muted-foreground">{preset.label}</span>
                   </button>
                 ))}
               </div>
@@ -173,7 +185,7 @@ export function EnvVarsEditor({
       </div>
 
       {rows.length === 0 && (
-        <p className="text-xs text-white/30">
+        <p className="text-xs text-muted-foreground">
           Add environment variables that skills need (e.g., API keys for image generation, web scraping, etc.)
         </p>
       )}

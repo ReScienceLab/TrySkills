@@ -18,7 +18,6 @@ vi.mock("@/lib/providers/check-credit", () => ({
 }))
 
 const mockCreateSession = vi.fn().mockResolvedValue("test-session-id")
-const mockAppendMessages = vi.fn().mockResolvedValue(null)
 
 vi.mock("convex/react", () => ({
   useMutation: () => mockCreateSession,
@@ -129,6 +128,54 @@ describe("useChat", () => {
     })
 
     expect(result.current.error).toBeNull()
+  })
+
+  it("preserves partial assistant content when a stream is cancelled", async () => {
+    const cancelStream = vi.fn()
+    mockChatStream.mockImplementation((_url, _msgs, callbacks) => {
+      setTimeout(() => {
+        callbacks.onDelta("Partial answer")
+      }, 10)
+      return cancelStream
+    })
+
+    const { result } = renderHook(() =>
+      useChat("https://8642-abc.daytonaproxy01.net", "claude-3", "test-skill", undefined, undefined, undefined, "org/repo/test-skill"),
+    )
+
+    await vi.waitFor(() => {
+      expect(result.current.sessionId).toBe("test-session-id")
+    })
+
+    act(() => {
+      result.current.send("test message")
+    })
+
+    await vi.waitFor(() => {
+      expect(result.current.messages).toEqual([
+        { role: "user", content: "test message" },
+        { role: "assistant", content: "Partial answer" },
+      ])
+    })
+
+    act(() => {
+      result.current.cancel()
+    })
+
+    expect(cancelStream).toHaveBeenCalled()
+    expect(result.current.messages).toEqual([
+      { role: "user", content: "test message" },
+      { role: "assistant", content: "Partial answer" },
+    ])
+    await vi.waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalledWith({
+        sessionId: "test-session-id",
+        messages: [
+          { role: "user", content: "test message" },
+          { role: "assistant", content: "Partial answer" },
+        ],
+      })
+    })
   })
 
   it("detects empty response (hadContent=false) and diagnoses", async () => {

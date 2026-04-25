@@ -1,5 +1,17 @@
 import "@testing-library/jest-dom/vitest";
 
+class ResizeObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+Object.defineProperty(globalThis, "ResizeObserver", {
+  configurable: true,
+  writable: true,
+  value: ResizeObserverMock,
+})
+
 const store: Record<string, string> = {};
 
 const localStorageMock = {

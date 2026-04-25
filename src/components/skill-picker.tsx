@@ -1,46 +1,62 @@
 "use client"
 
+import { Github } from "@lobehub/icons"
+import { ArrowRight, SearchX } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+import { StatusBadge, Surface } from "@/components/product-ui"
 import type { DiscoveredSkill } from "@/lib/skill/discovery"
 
-function SkillCard({ skill, onClick }: { skill: DiscoveredSkill; onClick: () => void }) {
+function SkillRow({ skill, index, owner, repo, onClick }: { skill: DiscoveredSkill; index: number; owner: string; repo: string; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="text-left border border-white/10 bg-white/[0.02] hover:bg-white/[0.06] hover:border-white/20 transition-all p-4 group"
+      className="group grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 px-3 py-4 text-left transition-colors hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:grid-cols-[3rem_minmax(0,1.05fr)_minmax(12rem,1fr)_auto] sm:px-4"
     >
-      <div className="flex items-start gap-3">
-        {skill.icon && (
-          <span className="text-lg shrink-0 mt-0.5">{skill.icon}</span>
-        )}
-        <div className="min-w-0">
-          <h3 className="text-sm font-medium text-white/90 group-hover:text-white transition-colors truncate">
-            {skill.name}
-          </h3>
-          {skill.description && (
-            <p className="text-xs text-white/40 mt-1 line-clamp-2 leading-relaxed">
-              {skill.description}
-            </p>
+      <span className="font-mono text-xs text-muted-foreground tabular-nums">
+        {index.toString().padStart(2, "0")}
+      </span>
+      <span className="flex min-w-0 items-center gap-3">
+        <span className="flex size-5 shrink-0 items-center justify-center">
+          {skill.icon ? (
+            <span className="text-base leading-none">{skill.icon}</span>
+          ) : (
+            <span className="size-2 rounded-full bg-[#58a6ff]" />
           )}
-          <span className="text-[10px] font-mono text-white/20 mt-2 block truncate">
-            {skill.skillName}
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium text-foreground">
+            {skill.name}
           </span>
-        </div>
-      </div>
+          <span className="mt-1 block truncate font-mono text-[11px] text-muted-foreground">
+            {owner}/{repo}/{skill.skillName}
+          </span>
+        </span>
+      </span>
+      <span className="hidden min-w-0 text-sm leading-6 text-muted-foreground sm:block">
+        <span className="line-clamp-2">{skill.description || "No description provided."}</span>
+      </span>
+      <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
     </button>
   )
 }
 
-function SkeletonCard() {
+function SkeletonRow({ index }: { index: number }) {
   return (
-    <div className="border border-white/10 bg-white/[0.02] p-4 animate-pulse">
-      <div className="flex items-start gap-3">
-        <div className="w-5 h-5 bg-white/10 rounded shrink-0" />
-        <div className="flex-1 space-y-2">
-          <div className="h-4 bg-white/10 rounded w-2/3" />
-          <div className="h-3 bg-white/5 rounded w-full" />
-          <div className="h-3 bg-white/5 rounded w-1/2" />
+    <div className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 px-3 py-4 sm:grid-cols-[3rem_minmax(0,1.05fr)_minmax(12rem,1fr)_auto] sm:px-4">
+      <span className="font-mono text-xs text-muted-foreground/60 tabular-nums">
+        {index.toString().padStart(2, "0")}
+      </span>
+      <div className="flex items-center gap-3">
+        <Skeleton className="size-5 shrink-0 rounded-full" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-3 w-56 max-w-full" />
         </div>
       </div>
+      <Skeleton className="hidden h-4 w-full sm:block" />
+      <Skeleton className="size-4" />
     </div>
   )
 }
@@ -62,54 +78,77 @@ export function SkillPicker({
 }) {
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <a
           href={`https://github.com/${owner}/${repo}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="font-mono text-xs text-white/50 hover:text-white/70 transition-colors flex items-center gap-1.5"
+          className="flex min-w-0 items-center gap-1.5 font-mono text-xs text-muted-foreground transition-colors hover:text-foreground"
         >
-          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-          </svg>
-          {owner}/{repo}
+          <Github size={14} />
+          <span className="truncate">{owner}/{repo}</span>
         </a>
         {skills && (
-          <span className="text-xs text-white/30">
-            {skills.length} skill{skills.length !== 1 ? "s" : ""} found
-          </span>
+          <StatusBadge tone="neutral">
+            {skills.length} skill{skills.length !== 1 ? "s" : ""}
+          </StatusBadge>
         )}
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <SkeletonCard key={i} />
-          ))}
+        <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-border)]">
+          <div className="hidden grid-cols-[3rem_minmax(0,1.05fr)_minmax(12rem,1fr)_auto] gap-3 px-4 py-3 font-mono text-[11px] uppercase text-muted-foreground shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.08)] sm:grid">
+            <span>#</span>
+            <span>Skill</span>
+            <span>Description</span>
+            <span />
+          </div>
+          <div className="divide-y divide-white/[0.08]">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonRow key={i} index={i + 1} />
+            ))}
+          </div>
         </div>
       ) : error ? (
-        <div className="border border-yellow-500/20 bg-yellow-500/5 px-4 py-3">
-          <span className="text-xs font-mono text-yellow-400/80">{error}</span>
-        </div>
+        <Surface className="bg-[rgba(255,91,79,0.08)] px-4 py-3">
+          <span className="font-mono text-xs text-[#ffb4ac]">{error}</span>
+        </Surface>
       ) : skills && skills.length === 0 ? (
-        <div className="border border-white/10 bg-white/[0.02] px-6 py-10 text-center">
-          <p className="text-sm text-white/40">No skills found in this repository.</p>
-          <p className="text-xs text-white/20 mt-2">
-            Skills are detected by looking for <code className="text-white/30">SKILL.md</code> files
-            in the repository.
+        <Surface className="px-6 py-10 text-center">
+          <SearchX className="mx-auto mb-3 size-7 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">No skills found in this repository.</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Skills are detected by looking for <code className="text-foreground">SKILL.md</code> files.
           </p>
-        </div>
+        </Surface>
       ) : skills ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {skills.map((skill) => (
-            <SkillCard
-              key={skill.skillPath}
-              skill={skill}
-              onClick={() => onSelect(skill)}
-            />
-          ))}
+        <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-border)]">
+          <div className="hidden grid-cols-[3rem_minmax(0,1.05fr)_minmax(12rem,1fr)_auto] gap-3 px-4 py-3 font-mono text-[11px] uppercase text-muted-foreground shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.08)] sm:grid">
+            <span>#</span>
+            <span>Skill</span>
+            <span>Description</span>
+            <span />
+          </div>
+          <div className="divide-y divide-white/[0.08]">
+            {skills.map((skill, index) => (
+              <SkillRow
+                key={skill.skillPath}
+                skill={skill}
+                index={index + 1}
+                owner={owner}
+                repo={repo}
+                onClick={() => onSelect(skill)}
+              />
+            ))}
+          </div>
         </div>
       ) : null}
+
+      {skills && skills.length > 1 && (
+        <Button variant="ghost" size="sm" className="text-muted-foreground">
+          Select one skill to inspect its files
+        </Button>
+      )}
     </div>
   )
 }

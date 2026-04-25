@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useCallback, use } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, use, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
+import { Folder, LockKeyhole, Paperclip, X } from "lucide-react";
 
 async function computeConfigHash(provider: string, model: string, key: string, envVars?: Record<string, string>): Promise<string> {
   const envPart = envVars && Object.keys(envVars).length > 0
@@ -33,10 +34,189 @@ import { extractSkillEnvVars, type SkillEnvVar } from "@/lib/skill/env-vars";
 import { WorkspacePanel } from "@/components/workspace/workspace-panel";
 import { useWorkspace } from "@/hooks/use-workspace";
 import type { SandboxState, SandboxSession } from "@/lib/sandbox/types";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Surface } from "@/components/product-ui";
 
 type AppPhase = "config" | "launching" | "running";
 
 const autoLaunchLock = new Map<string, boolean>();
+
+function LaunchWarmupSkeleton({ skillPath }: { skillPath: string }) {
+  const introPrompt = `Use skill_view to look up the /${skillPath} skill, then briefly introduce it - what it does, when to use it, and a quick example.`;
+
+  return (
+    <div className="w-full">
+      <div className="mb-6 flex justify-end">
+        <div className="max-w-[85%] rounded-lg rounded-br-[3px] bg-[#111111] px-4 py-2.5 shadow-[var(--shadow-border)]">
+          <p className="m-0 whitespace-pre-wrap text-sm leading-6 text-foreground">
+            {introPrompt}
+          </p>
+        </div>
+      </div>
+
+      <div className="max-w-none space-y-5">
+        <div className="space-y-2.5">
+          <Skeleton className="h-5 w-44 rounded-[4px]" />
+          <Skeleton className="h-4 w-full max-w-[760px] rounded-[4px]" />
+          <Skeleton className="h-4 w-full max-w-[700px] rounded-[4px]" />
+          <Skeleton className="h-4 w-full max-w-[560px] rounded-[4px]" />
+        </div>
+
+        <div className="space-y-2.5">
+          <Skeleton className="h-5 w-36 rounded-[4px]" />
+          <Skeleton className="h-4 w-full max-w-[820px] rounded-[4px]" />
+          <Skeleton className="h-4 w-full max-w-[720px] rounded-[4px]" />
+        </div>
+
+        <div className="space-y-2.5">
+          <Skeleton className="h-5 w-40 rounded-[4px]" />
+          <Skeleton className="h-8 w-full max-w-[780px] rounded-[6px]" />
+          <Skeleton className="h-4 w-full max-w-[420px] rounded-[4px]" />
+          <Skeleton className="h-8 w-full max-w-[720px] rounded-[6px]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LaunchingSessionShell({
+  skillName,
+  status,
+  children,
+  contentClassName = "flex items-center px-4 py-8",
+  action,
+}: {
+  skillName: string;
+  status: string;
+  children: ReactNode;
+  contentClassName?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="relative z-10 flex-1 overflow-hidden bg-background pt-14">
+      <div className="mx-auto min-w-0 max-w-4xl flex-1">
+        <div className="relative flex h-[calc(100vh-56px)] w-full flex-col bg-background">
+          <div className="flex shrink-0 items-center gap-3 bg-background px-4 py-3 shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.08)]">
+            <div className="h-2 w-2 rounded-full bg-[#0a72ef]" aria-hidden="true" />
+            <span className="font-mono text-sm text-foreground">{skillName}</span>
+            <span className="font-mono text-xs text-muted-foreground">{status}</span>
+            {action && <div className="ml-auto">{action}</div>}
+          </div>
+
+          <div className={`flex-1 overflow-y-auto bg-background ${contentClassName}`}>
+            {children}
+          </div>
+
+          <div className="shrink-0 bg-background px-4 py-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
+            <div className="flex items-end gap-2">
+              <span className="flex h-11 w-10 shrink-0 items-center justify-center text-muted-foreground">
+                <Paperclip className="size-4" />
+              </span>
+              <Skeleton className="h-11 flex-1 rounded-lg" />
+              <Button type="button" disabled className="shrink-0">
+                Send
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LaunchingProgressShell({
+  skillName,
+  state,
+  error,
+  onRetry,
+  onCancel,
+  mode,
+  needsWake,
+}: {
+  skillName: string;
+  state: SandboxState;
+  error?: string;
+  onRetry: () => void;
+  onCancel: () => void;
+  mode: LaunchMode;
+  needsWake: boolean;
+}) {
+  return (
+    <LaunchingSessionShell skillName={skillName} status="launching">
+      <div className="mx-auto w-full max-w-[640px]">
+        <LaunchProgress
+          state={state}
+          error={error}
+          onRetry={onRetry}
+          onCancel={onCancel}
+          mode={mode}
+          needsWake={needsWake}
+        />
+      </div>
+    </LaunchingSessionShell>
+  );
+}
+
+function getLaunchStatus(state: SandboxState, mode: LaunchMode, needsWake: boolean) {
+  if (state === "creating") return "creating sandbox";
+  if (state === "installing") return "installing runtime";
+  if (state === "configuring") return "configuring";
+  if (state === "uploading") return mode === "hotswap" && !needsWake ? "installing skill" : "uploading skill";
+  if (state === "starting") return needsWake ? "waking sandbox" : "starting agent";
+  return "preparing";
+}
+
+function LaunchingWarmupShell({
+  skillName,
+  skillPath,
+  status = "preparing",
+  onCancel,
+}: {
+  skillName: string;
+  skillPath: string;
+  status?: string;
+  onCancel?: () => void;
+}) {
+  return (
+    <LaunchingSessionShell
+      skillName={skillName}
+      status={status}
+      contentClassName="px-4 py-4"
+      action={onCancel ? (
+        <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+          <X className="size-4" />
+          Cancel
+        </Button>
+      ) : undefined}
+    >
+      <LaunchWarmupSkeleton skillPath={skillPath} />
+    </LaunchingSessionShell>
+  );
+}
+
+function ResumeSessionShell({ skillName }: { skillName: string }) {
+  return (
+    <LaunchingSessionShell skillName={skillName} status="resuming">
+      <div className="mx-auto w-full max-w-[640px] space-y-4">
+        <div className="flex gap-3">
+          <Skeleton className="size-8 shrink-0 rounded-full" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-4 w-full max-w-[560px]" />
+            <Skeleton className="h-4 w-full max-w-[420px]" />
+          </div>
+        </div>
+        <div className="flex gap-3">
+          <Skeleton className="size-8 shrink-0 rounded-full" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-4 w-full max-w-[500px]" />
+            <Skeleton className="h-4 w-full max-w-[360px]" />
+          </div>
+        </div>
+      </div>
+    </LaunchingSessionShell>
+  );
+}
 
 export default function SkillPage({
   params,
@@ -47,6 +227,12 @@ export default function SkillPage({
   const { skillPath } = resolvedParams;
   const searchParams = useSearchParams();
   const resumeSessionId = searchParams.get("session") ?? undefined;
+  // Freeze at mount: was the page opened WITH a ?session= URL param?
+  // Any new ?session= that appears mid-stream (via history.replaceState from
+  // ChatPanel after the Convex session is created) must NOT flip us into
+  // the ResumeSessionShell, or the ChatPanel would unmount and the auto-intro
+  // prompt would be re-sent on remount. See /tmp/e2e-* reports.
+  const [isGenuineResume] = useState<boolean>(() => !!resumeSessionId);
   const { isSignedIn, isLoaded: authLoaded, userId } = useAuth();
   const { isAuthenticated } = useConvexAuth();
   const { config: savedConfig, loading: keysLoading, save: saveConfig } = useKeyStore();
@@ -85,29 +271,24 @@ export default function SkillPage({
   const autoLaunchFired = useRef(false);
   const launchAbortRef = useRef<AbortController | null>(null);
   const placeholderIdRef = useRef<string | null>(null);
-  const userCancelled = useRef(false);
+  const [userCancelled, setUserCancelled] = useState(false);
 
   const [detectedEnvVars, setDetectedEnvVars] = useState<SkillEnvVar[]>([]);
   const [showEnvPrompt, setShowEnvPrompt] = useState(false);
+  const [pendingEnvVars, setPendingEnvVars] = useState<Record<string, string>>({});
   const pendingLaunchRef = useRef<LaunchConfig | null>(null);
 
   useHeartbeat(session?.sandboxId ?? null, savedConfig?.sandboxKey ?? null);
 
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const [chatIsStreaming, setChatIsStreaming] = useState(false);
+  const effectiveWorkspacePath = workspacePath ?? resumeSession?.workspacePath ?? null;
   const workspace = useWorkspace(
     session?.sandboxId ?? null,
     savedConfig?.sandboxKey ?? null,
-    workspacePath,
+    effectiveWorkspacePath,
     chatIsStreaming,
   );
-
-  // For resumed sessions, set workspace path from Convex session data
-  useEffect(() => {
-    if (resumeSession?.workspacePath && !workspacePath) {
-      setWorkspacePath(resumeSession.workspacePath);
-    }
-  }, [resumeSession, workspacePath]);
 
   // Early fetch: detect env vars from SKILL.md on page load
   useEffect(() => {
@@ -128,11 +309,13 @@ export default function SkillPage({
       const missing = detectedEnvVars.filter((v) => !configured[v.name])
       if (missing.length > 0) {
         pendingLaunchRef.current = config
+        setPendingEnvVars(config.envVars ?? {})
         setShowEnvPrompt(true)
         return
       }
     }
     pendingLaunchRef.current = null
+    setPendingEnvVars({})
 
     launchAbortRef.current?.abort();
     const abort = new AbortController();
@@ -370,7 +553,9 @@ export default function SkillPage({
     // Retry when: sandbox found (another tab finished) OR null (stale lock expired)
     if (userSandbox === undefined) return; // query still loading
     if (userSandbox && userSandbox.status === "creating") return; // still creating, keep waiting
-    void handleLaunch(launchConfigRef.current);
+    queueMicrotask(() => {
+      if (launchConfigRef.current) void handleLaunch(launchConfigRef.current);
+    });
   }, [userSandbox, phase, sandboxState]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCancel = () => {
@@ -387,14 +572,14 @@ export default function SkillPage({
     setSandboxState("idle");
     setSandboxError(undefined);
     setPhase("config");
-    userCancelled.current = true;
+    setUserCancelled(true);
   };
 
   const hasCompleteConfig = !!(savedConfig?.llmKey && savedConfig?.sandboxKey);
   const sandboxQueryReady = userSandbox !== undefined;
 
   useEffect(() => {
-    if (autoLaunchLock.get(skillKey) || autoLaunchFired.current || userCancelled.current) return;
+    if (autoLaunchLock.get(skillKey) || autoLaunchFired.current || userCancelled) return;
     if (phase !== "config") return;
     if (!isSignedIn || !isAuthenticated || keysLoading || !savedConfig) return;
     if (!sandboxQueryReady) return;
@@ -404,15 +589,15 @@ export default function SkillPage({
 
     autoLaunchFired.current = true;
     autoLaunchLock.set(skillKey, true);
-    void handleLaunch({
+    queueMicrotask(() => void handleLaunch({
       provider,
       model: savedConfig.model,
       llmKey: savedConfig.llmKey,
       sandboxKey: savedConfig.sandboxKey,
       envVars: savedConfig.envVars,
-    });
+    }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSignedIn, isAuthenticated, keysLoading, savedConfig, phase, sandboxQueryReady]);
+  }, [isSignedIn, isAuthenticated, keysLoading, savedConfig, phase, sandboxQueryReady, userCancelled]);
 
   useEffect(() => {
     const cleanup = () => {
@@ -433,7 +618,6 @@ export default function SkillPage({
         // no-op: sandbox remains active
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [skillKey]);
 
   const handleStop = async () => {
@@ -450,7 +634,7 @@ export default function SkillPage({
     sessionRef.current = null;
     setSandboxState("idle");
     setPhase("config");
-    userCancelled.current = true;
+    setUserCancelled(true);
   };
 
   const handleTryAnother = () => {
@@ -459,7 +643,7 @@ export default function SkillPage({
     sessionRef.current = null;
     setSandboxState("idle");
     setPhase("config");
-    window.location.href = "/";
+    window.location.assign("/");
   };
 
   const handleRetryLaunch = () => {
@@ -479,6 +663,7 @@ export default function SkillPage({
       await saveConfig({ ...savedConfig, envVars: merged }).catch(() => {})
     }
     pendingLaunchRef.current = updatedConfig
+    setPendingEnvVars(updatedConfig.envVars ?? {})
     void handleLaunch(updatedConfig)
   }
 
@@ -487,6 +672,7 @@ export default function SkillPage({
     const config = pendingLaunchRef.current
     if (!config) return
     pendingLaunchRef.current = config
+    setPendingEnvVars(config.envVars ?? {})
     void handleLaunch(config)
   }
 
@@ -500,79 +686,82 @@ export default function SkillPage({
 
   if (!isValidPath) {
     return (
-      <main className="relative min-h-screen bg-black flex flex-col overflow-hidden">
+      <main className="relative flex min-h-screen flex-col overflow-hidden bg-background">
         <SiteHeader />
-        <div className="flex-1 flex items-center justify-center relative z-10 px-6">
-          <div className="flex flex-col items-center animate-fade-in">
-            <div className="text-white font-semibold mb-2">Invalid skill path</div>
-            <div className="text-white/50 text-sm mb-6">Expected format: /owner/repo/skill-name</div>
-            <Link href="/" className="px-6 py-3 bg-white text-black text-sm font-medium hover:bg-white/90 transition-colors">Go home</Link>
+        <div className="relative z-10 flex flex-1 items-center justify-center px-6">
+          <div className="flex animate-fade-in flex-col items-center">
+            <div className="mb-2 font-semibold text-foreground">Invalid skill path</div>
+            <div className="mb-6 text-sm text-muted-foreground">Expected format: /owner/repo/skill-name</div>
+            <Button asChild>
+              <Link href="/">Go home</Link>
+            </Button>
           </div>
         </div>
       </main>
     );
   }
 
-  const needsOnboarding = isSignedIn && !keysLoading && !hasCompleteConfig && !userCancelled.current;
-  const readyToAutoLaunch = isSignedIn && !keysLoading && hasCompleteConfig && !userCancelled.current && !autoLaunchLock.get(skillKey);
-  const isResumeSessionLoading = !!resumeSessionId && (!isAuthenticated || resumeSession === undefined);
+  const needsOnboarding = isSignedIn && !keysLoading && !hasCompleteConfig && !userCancelled;
+  const readyToAutoLaunch = isSignedIn && !keysLoading && hasCompleteConfig && !userCancelled;
+  const isResumeSessionLoading = isGenuineResume && (!isAuthenticated || resumeSession === undefined);
   const verifiedResumeSessionId = resumeSession ? resumeSessionId : undefined;
+  const showLaunchWarmup = phase === "config" && (
+    !authLoaded ||
+    (isSignedIn && keysLoading) ||
+    readyToAutoLaunch
+  );
 
   return (
-    <main className="relative min-h-screen bg-black flex flex-col overflow-hidden">
+    <main className="relative flex min-h-screen flex-col overflow-hidden bg-background">
       <SiteHeader breadcrumb={`${owner}/${repo}/${skillName}`} />
 
       {showEnvPrompt && detectedEnvVars.length > 0 && (
         <EnvVarsPrompt
           skillName={skillName}
           missingVars={detectedEnvVars.filter(
-            (v) => !(pendingLaunchRef.current?.envVars ?? {})[v.name],
+            (v) => !pendingEnvVars[v.name],
           )}
           onConfigure={handleEnvVarsConfigure}
           onSkip={handleEnvVarsSkip}
         />
       )}
 
-      {phase === "running" && session ? (
-        <div className={`flex-1 relative z-10 overflow-hidden bg-black pt-14 ${workspace.panelOpen ? "lg:pr-[360px]" : ""}`}>
+      {phase === "running" && session && isResumeSessionLoading ? (
+        <ResumeSessionShell skillName={skillName} />
+      ) : phase === "running" && session ? (
+        <div className={`relative z-10 flex-1 overflow-hidden bg-background pt-14 ${workspace.panelOpen ? "lg:pr-[360px]" : ""}`}>
           {/* Chat column */}
-          <div className="flex-1 min-w-0 max-w-4xl mx-auto">
-            {isResumeSessionLoading ? (
-              <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center">
-                <div className="text-sm text-white/55">Loading chat session...</div>
-              </div>
-            ) : (
-              <ChatPanel
-                gatewayBaseUrl={session.gatewayBaseUrl || session.gatewayUrl}
-                model={savedConfig?.model || "anthropic/claude-sonnet-4"}
-                skillName={skillName}
-                skillPath={skillKey}
-                startedAt={session.startedAt}
-                providerId={savedConfig?.providerId}
-                apiKey={savedConfig?.llmKey}
-                initialSessionId={verifiedResumeSessionId}
-                initialMessages={resumeSession?.messages}
-                sandboxId={session.sandboxId}
-                sandboxKey={savedConfig?.sandboxKey}
-                initialWorkspacePath={resumeSession?.workspacePath}
-                onStop={handleStop}
-                onTryAnother={handleTryAnother}
-                onToolComplete={workspace.onToolComplete}
-                onWorkspacePathChange={handleWorkspacePathChange}
-                onStreamingChange={handleStreamingChange}
-                onSessionError={async () => {
-                  if (session?.sandboxId && launchConfigRef.current) {
-                    destroySandbox(launchConfigRef.current.sandboxKey, session.sandboxId).catch(() => {});
-                    await removeSandboxRecord({ sandboxId: session.sandboxId }).catch(() => {});
-                  }
-                  setSession(null);
-                  sessionRef.current = null;
-                  autoLaunchFired.current = false;
-                  autoLaunchLock.delete(skillKey);
-                  setPhase("config");
-                }}
-              />
-            )}
+          <div className="mx-auto min-w-0 max-w-4xl flex-1">
+            <ChatPanel
+              gatewayBaseUrl={session.gatewayBaseUrl || session.gatewayUrl}
+              model={savedConfig?.model || "anthropic/claude-sonnet-4"}
+              skillName={skillName}
+              skillPath={skillKey}
+              startedAt={session.startedAt}
+              providerId={savedConfig?.providerId}
+              apiKey={savedConfig?.llmKey}
+              initialSessionId={verifiedResumeSessionId}
+              initialMessages={resumeSession?.messages}
+              sandboxId={session.sandboxId}
+              sandboxKey={savedConfig?.sandboxKey}
+              initialWorkspacePath={resumeSession?.workspacePath}
+              onStop={handleStop}
+              onTryAnother={handleTryAnother}
+              onToolComplete={workspace.onToolComplete}
+              onWorkspacePathChange={handleWorkspacePathChange}
+              onStreamingChange={handleStreamingChange}
+              onSessionError={async () => {
+                if (session?.sandboxId && launchConfigRef.current) {
+                  destroySandbox(launchConfigRef.current.sandboxKey, session.sandboxId).catch(() => {});
+                  await removeSandboxRecord({ sandboxId: session.sandboxId }).catch(() => {});
+                }
+                setSession(null);
+                sessionRef.current = null;
+                autoLaunchFired.current = false;
+                autoLaunchLock.delete(skillKey);
+                setPhase("config");
+              }}
+            />
           </div>
 
           {/* Workspace panel */}
@@ -598,46 +787,53 @@ export default function SkillPage({
 
           {/* Workspace toggle button (when panel is closed) */}
           {!workspace.panelOpen && workspace.entries.length > 0 && (
-            <button
+            <Button
+              type="button"
+              variant="outline"
               onClick={() => workspace.setPanelOpen(true)}
-              className="fixed right-4 bottom-6 z-20 hidden lg:flex items-center gap-2 px-3 py-2 bg-white/[0.06] backdrop-blur-sm border border-white/[0.08] rounded-lg text-[13px] text-white/40 hover:text-white/60 hover:bg-white/[0.1] hover:border-white/[0.12] transition-all shadow-lg shadow-black/20"
+              className="fixed right-4 bottom-6 z-20 hidden items-center gap-2 text-[13px] lg:flex"
               title="Open workspace files"
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-              </svg>
+              <Folder className="h-4 w-4" />
               Files
-              <span className="text-[11px] text-white/20 bg-white/[0.06] px-1.5 py-0.5 rounded">{workspace.entries.length}</span>
-            </button>
+              <span className="rounded-full bg-[rgba(0,112,243,0.16)] px-1.5 py-0.5 text-[11px] text-[#58a6ff]">{workspace.entries.length}</span>
+            </Button>
           )}
         </div>
+      ) : phase === "launching" && sandboxState !== "error" ? (
+        <LaunchingWarmupShell
+          skillName={skillName}
+          skillPath={skillKey}
+          status={getLaunchStatus(sandboxState, launchMode, needsWake)}
+          onCancel={handleCancel}
+        />
+      ) : phase === "launching" ? (
+        <LaunchingProgressShell
+          skillName={skillName}
+          state={sandboxState}
+          error={sandboxError}
+          onRetry={handleRetryLaunch}
+          onCancel={handleCancel}
+          mode={launchMode}
+          needsWake={needsWake}
+        />
+      ) : showLaunchWarmup ? (
+        <LaunchingWarmupShell skillName={skillName} skillPath={skillKey} />
       ) : (
-        <div className="flex-1 flex items-center justify-center relative z-10 px-6">
+        <div className="relative z-10 flex flex-1 items-center justify-center px-6">
           <div className="w-full max-w-[640px]">
-          {phase === "config" && !authLoaded && (
-            <div className="flex items-center justify-center py-20">
-              <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
-            </div>
-          )}
-
           {phase === "config" && authLoaded && !isSignedIn && (
             <div className="animate-fade-in">
-              <div className="border border-white/20 bg-black/40 backdrop-blur-sm p-8 text-center">
-                <svg className="w-10 h-10 mx-auto mb-4 text-white/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                </svg>
-                <h2 className="text-lg font-semibold text-white/90 mb-2">Sign in to continue</h2>
-                <p className="text-sm text-white/50 mb-6">Sign in with GitHub to configure and launch your agent session.</p>
+              <Surface className="p-8 text-center">
+                <span className="mx-auto mb-4 flex size-10 items-center justify-center rounded-[8px] bg-white/[0.04] text-muted-foreground shadow-[var(--shadow-border)]">
+                  <LockKeyhole className="size-5" />
+                </span>
+                <h2 className="mb-2 text-lg font-semibold text-foreground">Sign in to continue</h2>
+                <p className="mb-6 text-sm text-muted-foreground">Sign in with GitHub to configure and launch your agent session.</p>
                 <SignInButton mode="modal" forceRedirectUrl={`/${skillPath.join("/")}`}>
-                  <button className="px-6 py-3 bg-white text-black text-sm font-medium hover:bg-white/90 transition-all">Sign in with GitHub</button>
+                  <Button>Sign in with GitHub</Button>
                 </SignInButton>
-              </div>
-            </div>
-          )}
-
-          {phase === "config" && isSignedIn && keysLoading && (
-            <div className="flex items-center justify-center py-20">
-              <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
+              </Surface>
             </div>
           )}
 
@@ -649,30 +845,11 @@ export default function SkillPage({
           )}
 
           {/* Show config after user cancels */}
-          {phase === "config" && isSignedIn && !keysLoading && userCancelled.current && (
+          {phase === "config" && isSignedIn && !keysLoading && userCancelled && (
             <ConfigPanel
               onLaunch={handleLaunch}
-              onBack={() => { window.location.href = "/"; }}
+              onBack={() => { window.location.assign("/"); }}
             />
-          )}
-
-          {phase === "config" && readyToAutoLaunch && (
-            <div className="flex items-center justify-center py-20">
-              <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
-            </div>
-          )}
-
-          {phase === "launching" && (
-            <div className="space-y-6">
-              <LaunchProgress
-                state={sandboxState}
-                error={sandboxError}
-                onRetry={handleRetryLaunch}
-                onCancel={handleCancel}
-                mode={launchMode}
-                needsWake={needsWake}
-              />
-            </div>
           )}
         </div>
       </div>

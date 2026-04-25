@@ -1,4 +1,5 @@
 import type { SandboxConfig, SandboxSession, SandboxState } from "./types";
+import type { Daytona, Sandbox as DaytonaSandbox } from "@daytona/sdk";
 import { getProviderData } from "@/lib/providers/provider-data";
 
 const SNAPSHOT_NAME = process.env.NEXT_PUBLIC_HERMES_SNAPSHOT || "hermes-ready";
@@ -24,15 +25,30 @@ const DAYTONA_NETWORK_SETTINGS = {
   networkAllowList: DAYTONA_NETWORK_ALLOW_LIST,
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getCommandOutput(result: any): string {
-  return (result.result?.output ?? result.output ?? result.result ?? "")
+type CommandResult = {
+  exitCode?: number;
+  output?: unknown;
+  result?: unknown;
+};
+
+function getCommandOutput(result: CommandResult): string {
+  const nestedOutput = typeof result.result === "object" && result.result !== null && "output" in result.result
+    ? (result.result as { output?: unknown }).output
+    : result.result;
+  return (nestedOutput ?? result.output ?? "")
     .toString()
     .trim();
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function discoverSkillsOnDisk(sandbox: any): Promise<string[]> {
+function cleanCommandOutput(output: string): string {
+  return output
+    .replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "")
+    .replace(/\r/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+async function discoverSkillsOnDisk(sandbox: DaytonaSandbox): Promise<string[]> {
   try {
     const result = await sandbox.process.executeCommand(
       `for d in ${HERMES_HOME}/skills/*/; do [ -f "$d/SKILL.md" ] && basename "$d"; done 2>/dev/null || true`,
@@ -73,10 +89,8 @@ function resolveProviderMapping(llmProvider: string) {
   return { envVar, hermesProvider, baseUrl };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let activeDaytona: any = null;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let activeSandbox: any = null;
+let activeDaytona: Daytona | null = null;
+let activeSandbox: DaytonaSandbox | null = null;
 
 async function getDaytonaSDK() {
   const { Daytona } = await import("@daytona/sdk");
@@ -171,7 +185,7 @@ function shellSafe(value: string): string | null {
   return value;
 }
 
-async function isGatewayHealthy(sandbox: any): Promise<boolean> {
+async function isGatewayHealthy(sandbox: DaytonaSandbox): Promise<boolean> {
   try {
     const result = await sandbox.process.executeCommand(
       `curl -sf http://localhost:${GATEWAY_PORT}/health 2>/dev/null`,
@@ -183,7 +197,7 @@ async function isGatewayHealthy(sandbox: any): Promise<boolean> {
 }
 
 async function startGateway(
-  sandbox: any,
+  sandbox: DaytonaSandbox,
   hermesCmd: string,
   log: (label: string) => void,
   reason: string,
@@ -204,9 +218,8 @@ async function startGateway(
   log(`gateway start requested (${reason})`);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function npxSkillsInstall(
-  sandbox: any,
+  sandbox: DaytonaSandbox,
   source: SkillSource,
   destDir: string,
   log: (label: string) => void,
@@ -222,12 +235,12 @@ async function npxSkillsInstall(
   // npx skills CLI matches by canonical skill name (leaf segment only)
   const leafName = skill.split("/").pop() || skill;
 
-  const cmd = `npx -y skills add ${owner}/${repo} --skill "${leafName}" --agent universal -g -y --copy 2>&1`;
+  const cmd = `NO_COLOR=1 CI=1 npx -y skills add ${owner}/${repo} --skill "${leafName}" --agent universal -g -y --copy --full-depth 2>&1`;
   const result = await sandbox.process.executeCommand(cmd);
   if (result.exitCode !== 0) {
-    const output = getCommandOutput(result);
+    const output = cleanCommandOutput(getCommandOutput(result));
     throw new Error(
-      `npx skills add failed (exit ${result.exitCode}): ${output.slice(0, 200)}`,
+      `npx skills add failed (exit ${result.exitCode}): ${output.slice(0, 500)}`,
     );
   }
   log("npx skills add succeeded");
@@ -328,7 +341,7 @@ export async function createHermesSandbox(
         },
       );
       usedSnapshot = true;
-    } catch (imageErr) {
+    } catch {
       log("image fallback failed, trying bare create + curl install");
       // Final fallback: bare sandbox + curl install (works even if GHCR image not published yet)
       sandbox = await daytona.create(
@@ -605,8 +618,7 @@ export async function findReusableSandbox(
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function waitForHealth(sandbox: any): Promise<void> {
+async function waitForHealth(sandbox: DaytonaSandbox): Promise<void> {
   const start = Date.now();
   const healthCmd = `curl -sf http://localhost:${GATEWAY_PORT}/health 2>/dev/null`;
   while (Date.now() - start < HEALTH_TIMEOUT_MS) {

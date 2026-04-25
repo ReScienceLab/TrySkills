@@ -1,45 +1,80 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
-import { PROVIDERS, type Provider } from "@/lib/providers/registry";
+import { Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { PROVIDERS } from "@/lib/providers/registry";
 import { useKeyStore } from "@/hooks/use-key-store";
 import { ProviderSection } from "@/components/provider-config";
 import { EnvVarsEditor } from "@/components/env-vars-editor";
 import { SiteHeader } from "@/components/site-header";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Surface } from "@/components/product-ui";
+
+function SettingsPageSkeleton() {
+  return (
+    <main className="relative flex min-h-screen flex-col overflow-hidden bg-background">
+      <SiteHeader />
+      <div className="relative z-10 flex flex-1 items-center justify-center px-6 pb-10 pt-20">
+        <div className="w-full max-w-[640px]">
+          <Skeleton className="mb-8 h-8 w-32" />
+          <div className="mb-6">
+            <Skeleton className="mb-3 h-4 w-32" />
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <Surface key={index} className="p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-36" />
+                      <Skeleton className="h-3 w-48" />
+                    </div>
+                    <Skeleton className="h-8 w-24 rounded-[6px]" />
+                  </div>
+                </Surface>
+              ))}
+            </div>
+          </div>
+          <Surface className="mb-4 p-6">
+            <Skeleton className="mb-5 h-5 w-28" />
+            <Skeleton className="h-10 rounded-[6px]" />
+          </Surface>
+          <Surface className="p-6">
+            <Skeleton className="mb-5 h-5 w-44" />
+            <Skeleton className="h-10 rounded-[6px]" />
+          </Surface>
+        </div>
+      </div>
+    </main>
+  );
+}
 
 export default function SettingsPage() {
   const { isSignedIn, isLoaded } = useAuth();
   const { config: savedConfig, loading, save, clear } = useKeyStore();
 
   if (!isLoaded || loading) {
-    return (
-      <main className="relative min-h-screen bg-black flex flex-col overflow-hidden">
-        <SiteHeader />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
-        </div>
-      </main>
-    );
+    return <SettingsPageSkeleton />;
   }
 
   if (!isSignedIn) {
     return (
-      <main className="relative min-h-screen bg-black flex flex-col overflow-hidden">
+      <main className="relative flex min-h-screen flex-col overflow-hidden bg-background">
         <SiteHeader />
-        <div className="flex-1 flex items-center justify-center relative z-10 px-6">
-          <div className="border border-white/20 bg-black/40 backdrop-blur-sm p-8 text-center max-w-md">
-            <h2 className="text-lg font-semibold text-white/90 mb-2">Sign in to manage settings</h2>
-            <p className="text-sm text-white/50 mb-6">
+        <div className="relative z-10 flex flex-1 items-center justify-center px-6">
+          <Surface className="max-w-md p-8 text-center">
+            <h2 className="mb-2 text-lg font-semibold text-foreground">Sign in to manage settings</h2>
+            <p className="mb-6 text-sm text-muted-foreground">
               Your API keys will be encrypted and stored securely in your account.
             </p>
             <SignInButton mode="modal">
-              <button className="px-6 py-3 bg-white text-black text-sm font-medium hover:bg-white/90 transition-all">
+              <Button>
                 Sign in with GitHub
-              </button>
+              </Button>
             </SignInButton>
-          </div>
+          </Surface>
         </div>
       </main>
     );
@@ -110,15 +145,15 @@ function SettingsForm({
   };
 
   return (
-    <main className="relative min-h-screen bg-black flex flex-col overflow-hidden">
+    <main className="relative flex min-h-screen flex-col overflow-hidden bg-background">
       <SiteHeader />
 
-      <div className="flex-1 flex items-center justify-center relative z-10 px-6 pt-20 pb-10">
+      <div className="relative z-10 flex flex-1 items-center justify-center px-6 pb-10 pt-20">
         <div className="w-full max-w-[640px]">
-          <h1 className="text-2xl font-semibold text-white/90 mb-8">Settings</h1>
+          <h1 className="mb-8 text-2xl font-semibold text-foreground">Settings</h1>
 
           <div className="mb-6">
-            <h2 className="text-sm font-medium text-white/50 uppercase tracking-wider mb-3">LLM Providers</h2>
+            <h2 className="mb-3 font-mono text-sm font-medium uppercase text-muted-foreground">LLM Providers</h2>
             <div className="space-y-2">
               {PROVIDERS.map((p) => (
                 <ProviderSection
@@ -137,84 +172,79 @@ function SettingsForm({
             </div>
           </div>
 
-          <div className="border border-white/20 bg-black/40 backdrop-blur-sm mb-4">
-            <div className="px-6 py-5 border-b border-white/10">
+          <Surface className="mb-4">
+            <div className="px-6 py-5 shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.08)]">
               <div className="flex items-center gap-3">
-                <h2 className="text-base font-semibold text-white/90">Sandbox</h2>
-                <span className="text-xs text-white/30">Daytona &middot; $200 free credits</span>
+                <h2 className="text-base font-semibold text-foreground">Sandbox</h2>
+                <span className="text-xs text-muted-foreground">Daytona &middot; $200 free credits</span>
               </div>
             </div>
             <div className="px-6 py-5">
-              <label htmlFor="settings-sandbox-key" className="block text-xs text-white/50 uppercase tracking-wider mb-2">
+              <label htmlFor="settings-sandbox-key" className="mb-2 block font-mono text-xs font-medium uppercase text-muted-foreground">
                 Daytona API Key
-                <a href="https://app.daytona.io/dashboard/keys" target="_blank" rel="noopener noreferrer" className="ml-2 text-blue-400 hover:underline normal-case tracking-normal">
+                <a href="https://app.daytona.io/dashboard/keys" target="_blank" rel="noopener noreferrer" className="ml-2 font-sans normal-case text-[#58a6ff] hover:underline">
                   Get a key &rarr;
                 </a>
               </label>
               <div className="relative">
-                <input
+                <Input
                   id="settings-sandbox-key"
                   type={showSandboxKey ? "text" : "password"}
                   value={sandboxKey}
                   onChange={(e) => setSandboxKey(e.target.value)}
                   placeholder="dtn_..."
-                  className="w-full px-4 py-2.5 pr-12 bg-white/5 border border-white/10 text-white/90 text-sm font-mono outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 focus:border-white/30 transition-colors placeholder:text-white/20"
+                  className="h-10 border-0 bg-white/[0.03] pr-11 font-mono shadow-[var(--shadow-border)] focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-ring"
                 />
                 <button
+                  type="button"
                   onClick={() => setShowSandboxKey(!showSandboxKey)}
                   aria-label={showSandboxKey ? "Hide Daytona API key" : "Show Daytona API key"}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors text-xs"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
                 >
-                  {showSandboxKey ? "Hide" : "Show"}
+                  {showSandboxKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                 </button>
               </div>
             </div>
-          </div>
+          </Surface>
 
-          <div className="border border-white/20 bg-black/40 backdrop-blur-sm mb-4">
-            <div className="px-6 py-5 border-b border-white/10">
+          <Surface className="mb-4">
+            <div className="px-6 py-5 shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.08)]">
               <div className="flex items-center gap-3">
-                <h2 className="text-base font-semibold text-white/90">Environment Variables</h2>
-                <span className="text-xs text-white/30">For skills that need extra API keys</span>
+                <h2 className="text-base font-semibold text-foreground">Environment Variables</h2>
+                <span className="text-xs text-muted-foreground">For skills that need extra API keys</span>
               </div>
             </div>
             <div className="px-6 py-5">
               <EnvVarsEditor value={envVars} onChange={setEnvVars} />
             </div>
-          </div>
+          </Surface>
 
-          <div className="border border-green-500/20 bg-green-500/5 px-5 py-3 mb-4">
+          <div className="mb-4 rounded-lg bg-[rgba(10,114,239,0.08)] px-5 py-3 shadow-[0_0_0_1px_rgba(10,114,239,0.18)]">
             <div className="flex items-center gap-2">
-              <svg className="w-4 h-4 text-green-400/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-              </svg>
-              <span className="text-xs text-green-400/60">
+              <ShieldCheck className="size-4 shrink-0 text-[#58a6ff]" />
+              <span className="text-xs text-[#58a6ff]">
                 Keys are encrypted and saved to your account automatically
               </span>
             </div>
           </div>
 
           <div className="flex gap-3">
-            <button
+            <Button
+              type="button"
               onClick={handleSave}
               disabled={!hasKeys}
-              className={`flex-1 py-3 text-sm font-medium transition-all ${
-                hasKeys
-                  ? saved
-                    ? "bg-green-500 text-white"
-                    : "bg-white text-black hover:bg-white/90"
-                  : "bg-white/10 text-white/30 cursor-not-allowed"
-              }`}
+              className={`flex-1 ${saved ? "bg-[rgba(10,114,239,0.18)] text-[#58a6ff]" : ""}`}
             >
               {saved ? "Saved!" : "Save Settings"}
-            </button>
+            </Button>
             {savedConfig && (
-              <button
+              <Button
+                type="button"
+                variant="destructive"
                 onClick={handleClear}
-                className="px-6 py-3 bg-red-500/10 text-red-400 hover:bg-red-500/20 text-sm font-medium transition-all"
               >
                 Clear Keys
-              </button>
+              </Button>
             )}
           </div>
         </div>

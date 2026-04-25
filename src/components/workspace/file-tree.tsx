@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { createElement, useState } from "react"
 import type { FileEntry } from "@/lib/workspace/types"
 import { getFileIcon, IGNORED_DIRS } from "@/lib/workspace/types"
-import { Folder as FolderIcon } from "lucide-react"
+import { ChevronRight, Folder as FolderIcon } from "lucide-react"
 
 function TreeNode({
   entry,
@@ -22,7 +22,6 @@ function TreeNode({
 }) {
   const isExpanded = expanded.has(entry.path)
   const isSelected = selectedPath === entry.path
-  const IconComponent = getFileIcon(entry)
   const paddingLeft = 16 + depth * 16
 
   return (
@@ -37,19 +36,20 @@ function TreeNode({
         }}
         className={`flex w-full items-center gap-2 py-1.5 pr-3 text-left text-[13px] leading-tight transition-colors ${
           isSelected
-            ? "bg-white/10 text-white/90"
-            : "text-white/50 hover:bg-white/[0.04] hover:text-white/70"
+            ? "bg-white/[0.06] text-foreground shadow-[inset_2px_0_0_0_#0072f5]"
+            : "text-muted-foreground hover:bg-white/[0.04] hover:text-foreground"
         }`}
         style={{ paddingLeft }}
       >
         {entry.type === "folder" ? (
-          <span className={`text-[9px] text-white/30 transition-transform duration-150 ${isExpanded ? "rotate-90" : ""}`}>
-            {"\u25B6"}
-          </span>
+          <ChevronRight className={`h-3 w-3 text-muted-foreground transition-transform duration-150 ${isExpanded ? "rotate-90" : ""}`} />
         ) : (
           <span className="w-[9px]" />
         )}
-        <IconComponent className="w-3.5 h-3.5 shrink-0 text-white/40" />
+        {createElement(getFileIcon(entry), {
+          className: "h-3.5 w-3.5 shrink-0 text-muted-foreground",
+          "aria-hidden": true,
+        })}
         <span className="truncate">{entry.name}</span>
       </button>
       {entry.type === "folder" && isExpanded && entry.children && (
@@ -68,7 +68,7 @@ function TreeNode({
               />
             ))}
           {entry.children.filter((c) => !IGNORED_DIRS.has(c.name)).length === 0 && (
-            <div className="text-[11px] text-white/20 italic py-1" style={{ paddingLeft: paddingLeft + 16 }}>
+            <div className="py-1 text-[11px] italic text-muted-foreground" style={{ paddingLeft: paddingLeft + 16 }}>
               empty
             </div>
           )}
@@ -104,9 +104,9 @@ export function FileTree({
   if (entries.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 gap-2">
-        <FolderIcon className="w-8 h-8 text-white/10" />
-        <span className="text-[11px] text-white/20">No files yet</span>
-        <span className="text-[10px] text-white/10">Files will appear as the agent works</span>
+        <FolderIcon className="h-8 w-8 text-muted-foreground/35" />
+        <span className="text-[11px] text-muted-foreground">No files yet</span>
+        <span className="text-[10px] text-muted-foreground/60">Files will appear as the agent works</span>
       </div>
     )
   }

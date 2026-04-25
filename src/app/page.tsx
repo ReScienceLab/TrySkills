@@ -1,415 +1,414 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import Image from "next/image";
-import { useAuth } from "@clerk/nextjs";
-import { SignInButton } from "@clerk/nextjs";
-import { parseSkillUrl, parseRepoUrl } from "@/lib/skill/url-parser";
-import { fetchSkillTree, type TreeNode } from "@/lib/skill/tree";
-import { discoverSkills, type DiscoveredSkill } from "@/lib/skill/discovery";
-import { SkillTree } from "@/components/skill-tree";
-import { SkillPicker } from "@/components/skill-picker";
-import { GlowMesh } from "@/components/glow-mesh";
-import { SiteHeader } from "@/components/site-header";
-import { GitHubRateLimitError } from "@/lib/github-fetch";
+import { useCallback, useEffect, useRef, useState } from "react"
+import { SignInButton, useAuth } from "@clerk/nextjs"
+import { Github, NousResearch } from "@lobehub/icons"
+import {
+  ArrowLeft,
+  BookOpenText,
+  CornerDownLeft,
+  Globe2,
+  LockKeyhole,
+  Search,
+} from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Skeleton } from "@/components/ui/skeleton"
+import { PageContent, PageShell, StatusBadge, Surface } from "@/components/product-ui"
+import { SiteHeader } from "@/components/site-header"
+import { SkillPicker } from "@/components/skill-picker"
+import { SkillTree } from "@/components/skill-tree"
+import { GitHubRateLimitError } from "@/lib/github-fetch"
+import { discoverSkills, type DiscoveredSkill } from "@/lib/skill/discovery"
+import { fetchSkillTree, type TreeNode } from "@/lib/skill/tree"
+import { parseRepoUrl, parseSkillUrl } from "@/lib/skill/url-parser"
 
 function Footer() {
   return (
-    <footer className="relative z-10 border-t border-white/10">
-      <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-        <nav aria-label="Footer links" className="flex items-center gap-6">
+    <footer className="relative z-10 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
+      <PageContent className="flex min-h-14 flex-col gap-3 py-4 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:py-0">
+        <nav aria-label="Footer links" className="flex flex-wrap items-center gap-4">
           <a
             href="https://skills.sh"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 text-sm text-white/50 hover:text-white/80 transition-colors"
+            className="inline-flex items-center gap-2 transition-colors hover:text-foreground"
           >
-            <svg
-              className="w-4 h-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.5}
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418"
-              />
-            </svg>
+            <Globe2 className="size-4" />
             Browse Skills
           </a>
           <a
             href="https://agentskills.io/specification"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 text-sm text-white/50 hover:text-white/80 transition-colors"
+            className="inline-flex items-center gap-2 transition-colors hover:text-foreground"
           >
-            <svg
-              className="w-4 h-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.5}
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
-              />
-            </svg>
+            <BookOpenText className="size-4" />
             Specification
           </a>
           <a
             href="https://github.com/ReScienceLab/TrySkills"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 text-sm text-white/50 hover:text-white/80 transition-colors"
+            className="inline-flex items-center gap-2 transition-colors hover:text-foreground"
           >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-            </svg>
+            <Github size={16} />
             GitHub
           </a>
         </nav>
-
-        <span className="text-sm text-white/30">ReScience Lab Inc.</span>
-      </div>
+        <span>ReScience Lab Inc.</span>
+      </PageContent>
     </footer>
-  );
+  )
+}
+
+function SkillTreeSkeleton() {
+  const widths = ["w-44", "w-64", "w-56", "w-72", "w-48", "w-60", "w-52"]
+
+  return (
+    <Surface className="overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.08)]">
+        <Skeleton className="h-4 w-full max-w-[420px]" />
+        <Skeleton className="h-6 w-16 shrink-0 rounded-full" />
+      </div>
+      <div className="space-y-2 px-4 py-4">
+        <Skeleton className="h-4 w-36" />
+        {widths.map((width, index) => (
+          <div key={`${width}-${index}`} className="flex items-center gap-2">
+            <span className="w-8 shrink-0 font-mono text-xs text-muted-foreground/40">
+              {index % 3 === 0 ? "├──" : index % 3 === 1 ? "│" : "└──"}
+            </span>
+            <Skeleton className={`h-4 ${width}`} />
+          </div>
+        ))}
+      </div>
+    </Surface>
+  )
 }
 
 export default function Home() {
-  const { isSignedIn, isLoaded: authLoaded } = useAuth();
-  const [url, setUrl] = useState("");
-  const [phase, setPhase] = useState<"input" | "tree" | "repo">("input");
-  const [urlError, setUrlError] = useState<string | null>(null);
-  const [parsedPath, setParsedPath] = useState<string | null>(null);
-  const [treeData, setTreeData] = useState<TreeNode[] | null>(null);
-  const [treeResolvedPath, setTreeResolvedPath] = useState("");
-  const [treeLoading, setTreeLoading] = useState(false);
-  const [treeError, setTreeError] = useState<string | null>(null);
-  const [isRateLimited, setIsRateLimited] = useState(false);
-  const [repoOwner, setRepoOwner] = useState("");
-  const [repoName, setRepoName] = useState("");
-  const [repoSkills, setRepoSkills] = useState<DiscoveredSkill[] | null>(null);
-  const [repoLoading, setRepoLoading] = useState(false);
-  const [repoError, setRepoError] = useState<string | null>(null);
-  const [repoBranch, setRepoBranch] = useState<string | undefined>(undefined);
+  const { isSignedIn, isLoaded: authLoaded } = useAuth()
+  const [url, setUrl] = useState("")
+  const [phase, setPhase] = useState<"input" | "tree" | "repo">("input")
+  const [urlError, setUrlError] = useState<string | null>(null)
+  const [parsedPath, setParsedPath] = useState<string | null>(null)
+  const [treeData, setTreeData] = useState<TreeNode[] | null>(null)
+  const [treeResolvedPath, setTreeResolvedPath] = useState("")
+  const [treeLoading, setTreeLoading] = useState(false)
+  const [treeError, setTreeError] = useState<string | null>(null)
+  const [isRateLimited, setIsRateLimited] = useState(false)
+  const [repoOwner, setRepoOwner] = useState("")
+  const [repoName, setRepoName] = useState("")
+  const [repoSkills, setRepoSkills] = useState<DiscoveredSkill[] | null>(null)
+  const [repoLoading, setRepoLoading] = useState(false)
+  const [repoError, setRepoError] = useState<string | null>(null)
+  const [repoBranch, setRepoBranch] = useState<string | undefined>(undefined)
+  const urlInputRef = useRef<HTMLInputElement>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!url.trim()) return;
-    setUrlError(null);
+    e.preventDefault()
+    if (!url.trim()) return
+    setUrlError(null)
 
-    const parsed = parseSkillUrl(url);
+    const parsed = parseSkillUrl(url)
     if (parsed) {
-      setParsedPath(parsed);
+      setParsedPath(parsed)
 
-      const segments = parsed.split("/").filter(Boolean);
-      const owner = segments[0];
-      const repo = segments[1];
-      const skillName = segments.slice(2).join("/");
+      const segments = parsed.split("/").filter(Boolean)
+      const owner = segments[0]
+      const repo = segments[1]
+      const skillName = segments.slice(2).join("/")
 
-      setPhase("tree");
-      setTreeLoading(true);
-      setTreeError(null);
-      setTreeData(null);
+      setPhase("tree")
+      setTreeLoading(true)
+      setTreeError(null)
+      setTreeData(null)
 
       try {
-        const result = await fetchSkillTree(owner, repo, skillName);
+        const result = await fetchSkillTree(owner, repo, skillName)
         if (result) {
-          setTreeData(result.tree);
-          setTreeResolvedPath(result.resolvedPath);
+          setTreeData(result.tree)
+          setTreeResolvedPath(result.resolvedPath)
         } else {
-          setTreeError("Could not find skill directory in repository. The skill may still work — proceed to configure.");
+          setTreeError("Could not find skill directory in repository. The skill may still work, so you can continue to configure it.")
         }
       } catch (err) {
         if (err instanceof GitHubRateLimitError) {
-          setIsRateLimited(true);
-          setTreeError(err.message);
+          setIsRateLimited(true)
+          setTreeError(err.message)
         } else {
-          setTreeError("Failed to fetch skill structure. The skill may still work — proceed to configure.");
+          setTreeError("Failed to fetch skill structure. The skill may still work, so you can continue to configure it.")
         }
       } finally {
-        setTreeLoading(false);
+        setTreeLoading(false)
       }
-      return;
+      return
     }
 
-    const repoInfo = parseRepoUrl(url);
+    const repoInfo = parseRepoUrl(url)
     if (repoInfo) {
-      setRepoOwner(repoInfo.owner);
-      setRepoName(repoInfo.repo);
-      setPhase("repo");
-      setRepoLoading(true);
-      setRepoError(null);
-      setRepoSkills(null);
+      setRepoOwner(repoInfo.owner)
+      setRepoName(repoInfo.repo)
+      setPhase("repo")
+      setRepoLoading(true)
+      setRepoError(null)
+      setRepoSkills(null)
 
       try {
-        const result = await discoverSkills(repoInfo.owner, repoInfo.repo);
+        const result = await discoverSkills(repoInfo.owner, repoInfo.repo)
         if (result.skills.length === 1) {
-          window.location.href = result.skills[0].skillPath;
-          return;
+          window.location.href = result.skills[0].skillPath
+          return
         }
-        setRepoSkills(result.skills);
-        setRepoBranch(result.branch);
+        setRepoSkills(result.skills)
+        setRepoBranch(result.branch)
       } catch (err) {
         if (err instanceof GitHubRateLimitError) {
-          setIsRateLimited(true);
-          setRepoError(err.message);
+          setIsRateLimited(true)
+          setRepoError(err.message)
         } else {
-          setRepoError("Failed to scan repository for skills.");
+          setRepoError("Failed to scan repository for skills.")
         }
       } finally {
-        setRepoLoading(false);
+        setRepoLoading(false)
       }
-      return;
+      return
     }
 
-    setUrlError(
-      "Invalid URL. Supported formats: github.com/owner/repo, skills.sh/owner/repo/skill, or owner/repo/skill",
-    );
-  };
+    setUrlError("Invalid URL. Use github.com/owner/repo, skills.sh/owner/repo/skill, or owner/repo/skill.")
+  }
 
   const handleSkillSelect = (skill: DiscoveredSkill) => {
-    setParsedPath(skill.skillPath);
+    setParsedPath(skill.skillPath)
 
-    const segments = skill.skillPath.split("/").filter(Boolean);
-    const owner = segments[0];
-    const repo = segments[1];
-    const selectedSkillName = segments.slice(2).join("/");
+    const segments = skill.skillPath.split("/").filter(Boolean)
+    const owner = segments[0]
+    const repo = segments[1]
+    const selectedSkillName = segments.slice(2).join("/")
 
-    setPhase("tree");
-    setTreeLoading(true);
-    setTreeError(null);
-    setTreeData(null);
+    setPhase("tree")
+    setTreeLoading(true)
+    setTreeError(null)
+    setTreeData(null)
 
     fetchSkillTree(owner, repo, selectedSkillName, repoBranch)
       .then((result) => {
         if (result) {
-          setTreeData(result.tree);
-          setTreeResolvedPath(result.resolvedPath);
+          setTreeData(result.tree)
+          setTreeResolvedPath(result.resolvedPath)
         } else {
-          setTreeError("Could not find skill directory in repository. The skill may still work — proceed to configure.");
+          setTreeError("Could not find skill directory in repository. The skill may still work, so you can continue to configure it.")
         }
       })
       .catch((err) => {
         if (err instanceof GitHubRateLimitError) {
-          setIsRateLimited(true);
-          setTreeError(err.message);
+          setIsRateLimited(true)
+          setTreeError(err.message)
         } else {
-          setTreeError("Failed to fetch skill structure. The skill may still work — proceed to configure.");
+          setTreeError("Failed to fetch skill structure. The skill may still work, so you can continue to configure it.")
         }
       })
       .finally(() => {
-        setTreeLoading(false);
-      });
-  };
+        setTreeLoading(false)
+      })
+  }
 
   const resetToInput = () => {
-    setPhase("input");
-    setTreeData(null);
-    setTreeError(null);
-    setRepoSkills(null);
-    setRepoError(null);
-    setIsRateLimited(false);
-    setRepoBranch(undefined);
-  };
+    setPhase("input")
+    setTreeData(null)
+    setTreeError(null)
+    setRepoSkills(null)
+    setRepoError(null)
+    setIsRateLimited(false)
+    setRepoBranch(undefined)
+  }
 
-  const skillName = parsedPath?.split("/").filter(Boolean).slice(2).join("/") || "";
+  const canConfigureLaunch = phase === "tree" && authLoaded && isSignedIn && !treeLoading && !!parsedPath
+  const goToConfigureLaunch = useCallback(() => {
+    if (parsedPath) window.location.href = parsedPath
+  }, [parsedPath])
+
+  useEffect(() => {
+    if (!canConfigureLaunch) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Enter" || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+      const target = event.target as HTMLElement | null
+      if (target?.closest("a, button, input, textarea, select, [contenteditable='true']")) return
+      event.preventDefault()
+      goToConfigureLaunch()
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [canConfigureLaunch, goToConfigureLaunch])
+
+  useEffect(() => {
+    if (phase !== "input") return
+    const frame = window.requestAnimationFrame(() => {
+      urlInputRef.current?.focus({ preventScroll: true })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [phase])
+
+  const skillName = parsedPath?.split("/").filter(Boolean).slice(2).join("/") || ""
 
   return (
-    <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
-      <GlowMesh />
-
+    <PageShell className="flex flex-col overflow-hidden">
       <SiteHeader />
 
-      <div className="flex-1 flex flex-col items-center justify-center relative z-10 px-6">
-        <h1
-          className="text-white text-[80px] md:text-[100px] lg:text-[120px] leading-none mb-6 animate-fade-in"
-          style={{ fontFamily: "var(--font-bilbo)" }}
-        >
-          TrySkills.sh
-        </h1>
+      <PageContent className="relative z-10 flex flex-1 flex-col items-center justify-center py-16 sm:py-24">
+        <section className="w-full max-w-3xl text-center">
+          <StatusBadge tone="blue" className="mb-6">
+            Try any agent skill in a sandbox
+          </StatusBadge>
+          <h1 className="mx-auto max-w-3xl text-balance text-5xl font-semibold leading-[1.04] text-foreground md:text-6xl">
+            TrySkills.sh
+          </h1>
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-3 text-sm text-muted-foreground">
+            <p className="font-mono">One URL to try any agent skill.</p>
+            <a
+              href="https://hermes-agent.nousresearch.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground"
+            >
+              powered by
+              <NousResearch size={14} />
+            </a>
+          </div>
+        </section>
 
-        <div className="flex items-center gap-4 mb-10 animate-fade-in-up delay-200">
-          <p className="font-mono text-white/70 text-sm md:text-base tracking-wider">
-            One URL to try any agent skill.
-          </p>
-          <a
-            href="https://hermes-agent.nousresearch.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors"
-          >
-            powered by
-            <Image
-              src="/nousresearch.svg"
-              alt="Hermes Agent"
-              width={14}
-              height={14}
-              style={{ filter: "brightness(0) invert(1)" }}
-            />
-          </a>
+        <div className="mt-10 w-full max-w-3xl">
+          {phase === "input" ? (
+            <form onSubmit={handleSubmit} className="animate-fade-in-up">
+              <Surface className="p-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <label htmlFor="skill-url-input" className="sr-only">
+                    Skill URL
+                  </label>
+                  <div className="relative flex-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      id="skill-url-input"
+                      ref={urlInputRef}
+                      type="text"
+                      value={url}
+                      onChange={(e) => setUrl(e.target.value)}
+                      placeholder="github.com/owner/repo or owner/repo/skill"
+                      className="h-11 rounded-[6px] border-0 bg-white/[0.03] pl-9 font-mono shadow-[var(--shadow-border)] focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-ring"
+                    />
+                  </div>
+                  <Button type="submit" size="lg" className="sm:w-auto">
+                    Configure
+                    <CornerDownLeft className="size-4" />
+                  </Button>
+                </div>
+              </Surface>
+              {urlError && (
+                <div className="mt-3 rounded-[6px] bg-[rgba(255,91,79,0.12)] px-4 py-2.5 text-left font-mono text-xs text-[#ffb4ac] shadow-[var(--shadow-border)]">
+                  {urlError}
+                </div>
+              )}
+            </form>
+          ) : phase === "repo" ? (
+            <div className="animate-fade-in-up space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <Button variant="ghost" size="sm" onClick={resetToInput} aria-label="Go back and change URL">
+                  <ArrowLeft className="size-4" />
+                  Change URL
+                </Button>
+                <span className="truncate font-mono text-xs text-muted-foreground">
+                  {url}
+                </span>
+              </div>
+
+              <SkillPicker
+                owner={repoOwner}
+                repo={repoName}
+                skills={repoSkills}
+                loading={repoLoading}
+                error={repoError}
+                onSelect={handleSkillSelect}
+              />
+
+              {isRateLimited && !isSignedIn && (
+                <div className="flex items-center gap-3">
+                  <SignInButton mode="modal">
+                    <Button size="sm">Sign in with GitHub</Button>
+                  </SignInButton>
+                  <span className="text-xs text-muted-foreground">to increase API limits</span>
+                </div>
+              )}
+            </div>
+          ) : phase === "tree" ? (
+            <div className="animate-fade-in-up space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <Button variant="ghost" size="sm" onClick={resetToInput} aria-label="Go back and change URL">
+                  <ArrowLeft className="size-4" />
+                  Change URL
+                </Button>
+                <span className="truncate font-mono text-xs text-muted-foreground">
+                  {url}
+                </span>
+              </div>
+
+              {treeLoading ? (
+                <SkillTreeSkeleton />
+              ) : treeData ? (
+                <SkillTree tree={treeData} skillName={skillName} resolvedPath={treeResolvedPath} />
+              ) : treeError ? (
+                <Surface className={`p-4 ${isRateLimited ? "bg-[rgba(255,91,79,0.08)]" : "bg-white/[0.03]"}`}>
+                  <span className={`font-mono text-xs ${isRateLimited ? "text-[#ffb4ac]" : "text-muted-foreground"}`}>
+                    {treeError}
+                  </span>
+                  {isRateLimited && !isSignedIn && (
+                    <div className="mt-3 flex items-center gap-3">
+                      <SignInButton mode="modal">
+                        <Button size="sm">Sign in with GitHub</Button>
+                      </SignInButton>
+                      <span className="text-xs text-muted-foreground">to increase API limits</span>
+                    </div>
+                  )}
+                  {isRateLimited && isSignedIn && (
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      Please wait a few minutes and try again.
+                    </div>
+                  )}
+                </Surface>
+              ) : null}
+
+              {!authLoaded ? (
+                <Button disabled className="w-full" size="lg">
+                  Loading...
+                </Button>
+              ) : isSignedIn ? (
+                <Button
+                  onClick={goToConfigureLaunch}
+                  disabled={treeLoading || !parsedPath}
+                  className="w-full"
+                  size="lg"
+                  aria-keyshortcuts="Enter"
+                >
+                  Configure & Launch
+                  <CornerDownLeft className="size-4" />
+                </Button>
+              ) : (
+                <SignInButton mode="modal" forceRedirectUrl={parsedPath || "/"}>
+                  <Button disabled={treeLoading} className="w-full" size="lg">
+                    <LockKeyhole className="size-4" />
+                    Sign in to Configure & Launch
+                  </Button>
+                </SignInButton>
+              )}
+            </div>
+          ) : null}
         </div>
 
-        {phase === "input" ? (
-          <form
-            onSubmit={handleSubmit}
-            className="w-full max-w-[640px] animate-fade-in-up delay-300"
-          >
-            <div className="flex items-center bg-white overflow-hidden shadow-2xl shadow-black/30">
-              <label htmlFor="skill-url-input" className="sr-only">Skill URL</label>
-              <input
-                id="skill-url-input"
-                type="text"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://github.com/owner/repo or owner/repo/skill"
-                className="flex-1 px-5 py-3.5 text-[#111] text-sm font-mono bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 placeholder:text-gray-400"
-              />
-              <button
-                type="submit"
-                className="px-5 py-3.5 bg-[#0a0a0a] text-white text-sm font-medium hover:bg-[#1a1a1a] transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-blue-500/50"
-              >
-                Configure
-              </button>
-            </div>
-            {urlError && (
-              <div className="mt-3 px-4 py-2.5 bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-mono">
-                {urlError}
-              </div>
-            )}
-          </form>
-        ) : phase === "repo" ? (
-          <div className="w-full max-w-[800px] animate-fade-in-up space-y-4">
-            <div className="flex items-center justify-between">
-              <button
-                onClick={resetToInput}
-                className="flex items-center gap-2 text-sm text-white/40 hover:text-white/70 transition-colors"
-                aria-label="Go back and change URL"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-                </svg>
-                Change URL
-              </button>
-              <span className="font-mono text-xs text-white/30 truncate ml-4">
-                {url}
-              </span>
-            </div>
-
-            <SkillPicker
-              owner={repoOwner}
-              repo={repoName}
-              skills={repoSkills}
-              loading={repoLoading}
-              error={repoError}
-              onSelect={handleSkillSelect}
-            />
-
-            {isRateLimited && !isSignedIn && (
-              <div className="flex items-center gap-3">
-                <SignInButton mode="modal">
-                  <button className="px-3 py-1.5 bg-white text-black text-xs font-medium hover:bg-white/90 transition-colors">
-                    Sign in with GitHub
-                  </button>
-                </SignInButton>
-                <span className="text-xs text-white/30">to increase API limits</span>
-              </div>
-            )}
-          </div>
-        ) : phase === "tree" ? (
-          <div className="w-full max-w-[640px] animate-fade-in-up space-y-4">
-            <div className="flex items-center justify-between">
-              <button
-                onClick={resetToInput}
-                className="flex items-center gap-2 text-sm text-white/40 hover:text-white/70 transition-colors"
-                aria-label="Go back and change URL"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-                </svg>
-                Change URL
-              </button>
-              <span className="font-mono text-xs text-white/30 truncate ml-4">
-                {url}
-              </span>
-            </div>
-
-            {treeLoading ? (
-              <div className="border border-white/10 bg-white/[0.02] px-6 py-10 flex flex-col items-center">
-                <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin mb-4" />
-                <span className="text-sm text-white/40">Fetching skill structure...</span>
-              </div>
-            ) : treeData ? (
-              <SkillTree tree={treeData} skillName={skillName} resolvedPath={treeResolvedPath} />
-            ) : treeError ? (
-              <div className={`border px-4 py-3 ${isRateLimited ? "border-red-500/30 bg-red-500/10" : "border-yellow-500/20 bg-yellow-500/5"}`}>
-                <span className={`text-xs font-mono ${isRateLimited ? "text-red-400" : "text-yellow-400/80"}`}>{treeError}</span>
-                {isRateLimited && !isSignedIn && (
-                  <div className="mt-3 flex items-center gap-3">
-                    <SignInButton mode="modal">
-                      <button className="px-3 py-1.5 bg-white text-black text-xs font-medium hover:bg-white/90 transition-colors">
-                        Sign in with GitHub
-                      </button>
-                    </SignInButton>
-                    <span className="text-xs text-white/30">to increase API limits</span>
-                  </div>
-                )}
-                {isRateLimited && isSignedIn && (
-                  <div className="mt-2">
-                    <span className="text-xs text-white/40">
-                      Please wait a few minutes and try again.
-                    </span>
-                  </div>
-                )}
-              </div>
-            ) : null}
-
-            {!authLoaded ? (
-              <button
-                disabled
-                className="w-full py-3 text-sm font-medium bg-white/10 text-white/30 cursor-not-allowed transition-all"
-              >
-                Loading...
-              </button>
-            ) : isSignedIn ? (
-              <button
-                onClick={() => {
-                  if (parsedPath) window.location.href = parsedPath;
-                }}
-                disabled={treeLoading || !parsedPath}
-                className={`w-full py-3 text-sm font-medium transition-all ${
-                  treeLoading || !parsedPath
-                    ? "bg-white/10 text-white/30 cursor-not-allowed"
-                    : "bg-white text-black hover:bg-white/90"
-                }`}
-              >
-                Configure & Launch
-              </button>
-            ) : (
-              <SignInButton mode="modal" forceRedirectUrl={parsedPath || "/"}>
-                <button
-                  disabled={treeLoading}
-                  className={`w-full py-3 text-sm font-medium transition-all ${
-                    treeLoading
-                      ? "bg-white/10 text-white/30 cursor-not-allowed"
-                      : "bg-white text-black hover:bg-white/90"
-                  }`}
-                >
-                  Sign in to Configure & Launch
-                </button>
-              </SignInButton>
-            )}
-          </div>
-        ) : null}
-      </div>
+      </PageContent>
 
       <Footer />
-    </main>
-  );
+    </PageShell>
+  )
 }
