@@ -39,6 +39,10 @@ export interface ToolCall {
   isError?: boolean
 }
 
+export type Segment =
+  | { type: "text"; content: string }
+  | { type: "tool"; tool: ToolCall }
+
 const PROVIDER_BILLING_URLS: Record<string, string> = {
   openrouter: "https://openrouter.ai/credits",
   anthropic: "https://console.anthropic.com/settings/billing",
@@ -182,6 +186,7 @@ export function useChat(
 ) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages ?? [])
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([])
+  const [segments, setSegments] = useState<Segment[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<ChatError | null>(null)
   const [creditWarning, setCreditWarning] = useState<string | null>(null)
@@ -201,6 +206,8 @@ export function useChat(
   const sessionIdRef = useRef<string | null>(initialSessionId ?? null)
   const onToolCompleteRef = useRef(onToolComplete)
   onToolCompleteRef.current = onToolComplete
+  const segmentsRef = useRef<Segment[]>([])
+  const textOffsetRef = useRef(0)
 
   const createSession = useMutation(api.chatSessions.create)
   const appendMessages = useMutation(api.chatSessions.appendMessages)
@@ -269,6 +276,9 @@ export function useChat(
       setIsStreaming(true)
       setError(null)
       setToolCalls([])
+      setSegments([])
+      segmentsRef.current = []
+      textOffsetRef.current = 0
 
       const lastUserMsg = allMessages[allMessages.length - 1]
 
@@ -297,6 +307,15 @@ export function useChat(
               }
               return [...prev, { role: "assistant", content: currentContentRef.current }]
             })
+            const segs = segmentsRef.current
+            const last = segs[segs.length - 1]
+            const currentText = currentContentRef.current.slice(textOffsetRef.current)
+            if (last?.type === "text") {
+              last.content = currentText
+            } else {
+              segs.push({ type: "text", content: currentText })
+            }
+            setSegments([...segs])
           },
           onReasoning: (text) => {
             thinkingRef.current += text
@@ -317,6 +336,14 @@ export function useChat(
               ]
             })
             setIsThinking(false)
+            // Push tool segment for progress events too
+            const segs = segmentsRef.current
+            const alreadyTracked = segs.some((s) => s.type === "tool" && s.tool.name === tool.tool && s.tool.status === "running")
+            if (!alreadyTracked) {
+              textOffsetRef.current = currentContentRef.current.length
+              segs.push({ type: "tool", tool: { name: tool.tool, emoji: tool.emoji, status: "running" } })
+              setSegments([...segs])
+            }
           },
           onToolStart: (tool: ToolStartEvent) => {
             setToolCalls((prev) => {
@@ -335,6 +362,11 @@ export function useChat(
               ]
             })
             setIsThinking(false)
+            // Push tool segment; subsequent text tokens create a new text segment
+            textOffsetRef.current = currentContentRef.current.length
+            const tc: ToolCall = { name: tool.name, status: "running", preview: tool.preview, args: tool.args }
+            segmentsRef.current.push({ type: "tool", tool: tc })
+            setSegments([...segmentsRef.current])
           },
           onToolComplete: (tool: ToolCompleteEvent) => {
             setToolCalls((prev) => {
@@ -367,6 +399,24 @@ export function useChat(
               onToolCompleteRef.current?.(updated[realIdx].name)
               return updated
             })
+            // Update matching tool segment
+            const segs = segmentsRef.current
+            for (let i = segs.length - 1; i >= 0; i--) {
+              const s = segs[i]
+              if (s.type === "tool" && s.tool.status === "running" && (!tool.name || s.tool.name === tool.name)) {
+                s.tool = {
+                  ...s.tool,
+                  status: "done",
+                  preview: tool.preview || s.tool.preview,
+                  args: tool.args || s.tool.args,
+                  duration: tool.duration,
+                  isError: tool.is_error,
+                }
+                onToolCompleteRef.current?.(s.tool.name)
+                break
+              }
+            }
+            setSegments([...segs])
           },
           onDone: async (meta) => {
             setIsThinking(false)
@@ -524,5 +574,5 @@ export function useChat(
 
   const isProviderError = error?.type === "credit_error" || error?.type === "auth_error" || error?.type === "rate_limit"
 
-  return { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, workspacePath, thinkingText, isThinking, send, cancel }
+  return { messages, toolCalls, segments, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, workspacePath, thinkingText, isThinking, send, cancel }
 }
