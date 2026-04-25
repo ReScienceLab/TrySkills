@@ -1,6 +1,8 @@
 "use client";
 
 import type { SkillMeta } from "@/lib/skill/resolver";
+import { Button } from "@/components/ui/button";
+import { Surface } from "@/components/product-ui";
 
 export function SkillPreview({
   meta,
@@ -19,19 +21,19 @@ export function SkillPreview({
 }) {
   return (
     <div className="animate-fade-in">
-      <div className="card p-8 mb-6">
+      <Surface className="mb-6 p-8">
         <div className="flex items-start gap-5">
-          <div className="w-16 h-16 rounded-xl bg-[var(--accent-subtle)] flex items-center justify-center text-3xl shrink-0">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[8px] bg-white/[0.04] text-3xl shadow-[var(--shadow-border)]">
             {meta.icon || "\u26A1"}
           </div>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-1">
+            <h1 className="mb-1 text-2xl font-semibold text-foreground">
               {meta.name || skillName}
             </h1>
-            <div className="text-sm text-[var(--text-muted)] mb-3">
+            <div className="mb-3 text-sm text-muted-foreground">
               by {owner}/{repo}
               {meta.version && (
-                <span className="ml-2 text-[var(--text-tertiary)]">
+                <span className="ml-2">
                   v{meta.version}
                 </span>
               )}
@@ -39,35 +41,36 @@ export function SkillPreview({
                 <span className="ml-2">{meta.installs} installs</span>
               )}
             </div>
-            <p className="text-[var(--text-secondary)] leading-relaxed">
+            <p className="leading-relaxed text-muted-foreground">
               {meta.description}
             </p>
           </div>
         </div>
-      </div>
+      </Surface>
 
       {body && (
-        <div className="card p-8 mb-6">
-          <h2 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-4">
+        <Surface className="mb-6 p-8">
+          <h2 className="mb-4 font-mono text-sm font-medium uppercase text-muted-foreground">
             Skill Documentation
           </h2>
-          <div className="prose prose-sm max-w-none text-[var(--text-secondary)] leading-relaxed whitespace-pre-wrap">
+          <div className="prose prose-invert prose-sm max-w-none whitespace-pre-wrap leading-relaxed text-muted-foreground">
             {body.slice(0, 2000)}
             {body.length > 2000 && (
-              <span className="text-[var(--text-muted)]">
+              <span className="text-muted-foreground">
                 ... ({Math.round(body.length / 1000)}K chars)
               </span>
             )}
           </div>
-        </div>
+        </Surface>
       )}
 
-      <button
+      <Button
+        type="button"
         onClick={onLaunch}
-        className="w-full py-4 rounded-xl bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-semibold text-lg transition-all duration-200 hover:shadow-xl hover:shadow-[var(--accent)]/20 active:scale-[0.98] shadow-sm"
+        className="h-12 w-full text-base"
       >
         Configure & Launch
-      </button>
+      </Button>
     </div>
   );
 }

@@ -1,27 +1,38 @@
-"use client";
+"use client"
 
-import type { TreeNode } from "@/lib/skill/tree";
+import {
+  File,
+  FileCode2,
+  FileJson,
+  FileText,
+  Folder,
+  Settings,
+  Star,
+  Terminal,
+} from "lucide-react"
+import type { ComponentProps } from "react"
+
+import { StatusBadge, Surface } from "@/components/product-ui"
+import type { TreeNode } from "@/lib/skill/tree"
 
 function TreeItem({
   node,
   isLast,
   prefix,
 }: {
-  node: TreeNode;
-  isLast: boolean;
-  prefix: string;
+  node: TreeNode
+  isLast: boolean
+  prefix: string
 }) {
-  const connector = isLast ? "\u2514\u2500\u2500 " : "\u251C\u2500\u2500 ";
-  const childPrefix = prefix + (isLast ? "    " : "\u2502   ");
-
-  const icon = node.type === "dir" ? "\uD83D\uDCC1" : getFileIcon(node.name);
+  const connector = isLast ? "└── " : "├── "
+  const childPrefix = prefix + (isLast ? "    " : "│   ")
 
   return (
     <>
-      <div className="flex items-center">
-        <span className="text-white/30 select-none whitespace-pre">{prefix}{connector}</span>
-        <span className="text-white/50 mr-1.5 text-xs">{icon}</span>
-        <span className={node.type === "dir" ? "text-white/80 font-medium" : "text-white/60"}>
+      <div className="flex items-center whitespace-nowrap">
+        <span className="select-none whitespace-pre text-muted-foreground/60">{prefix}{connector}</span>
+        <TreeIcon type={node.type} name={node.name} className="mr-1.5 size-3.5 shrink-0 text-muted-foreground" />
+        <span className={node.type === "dir" ? "font-medium text-foreground" : "text-muted-foreground"}>
           {node.name}
         </span>
       </div>
@@ -34,17 +45,25 @@ function TreeItem({
         />
       ))}
     </>
-  );
+  )
 }
 
-function getFileIcon(name: string): string {
-  if (name === "SKILL.md" || name === "skill.md") return "\u2B50";
-  if (name.endsWith(".md")) return "\uD83D\uDCC4";
-  if (name.endsWith(".sh")) return "\u2699\uFE0F";
-  if (name.endsWith(".py")) return "\uD83D\uDC0D";
-  if (name.endsWith(".ts") || name.endsWith(".js")) return "\uD83D\uDFE8";
-  if (name.endsWith(".json") || name.endsWith(".yaml") || name.endsWith(".yml")) return "\u2699\uFE0F";
-  return "\uD83D\uDCC4";
+function TreeIcon({
+  type,
+  name,
+  ...props
+}: ComponentProps<typeof File> & {
+  type: TreeNode["type"]
+  name: string
+}) {
+  if (type === "dir") return <Folder {...props} />
+  if (name === "SKILL.md" || name === "skill.md") return <Star {...props} />
+  if (name.endsWith(".md")) return <FileText {...props} />
+  if (name.endsWith(".sh")) return <Terminal {...props} />
+  if (name.endsWith(".py") || name.endsWith(".ts") || name.endsWith(".js")) return <FileCode2 {...props} />
+  if (name.endsWith(".json") || name.endsWith(".yaml") || name.endsWith(".yml")) return <FileJson {...props} />
+  if (name.startsWith(".")) return <Settings {...props} />
+  return <File {...props} />
 }
 
 export function SkillTree({
@@ -52,24 +71,24 @@ export function SkillTree({
   skillName,
   resolvedPath,
 }: {
-  tree: TreeNode[];
-  skillName: string;
-  resolvedPath: string;
+  tree: TreeNode[]
+  skillName: string
+  resolvedPath: string
 }) {
   return (
-    <div className="border border-white/20 bg-black/40 backdrop-blur-sm">
-      <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
-        <span className="font-mono text-xs text-white/50">
+    <Surface className="overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.08)]">
+        <span className="truncate font-mono text-xs text-muted-foreground">
           {resolvedPath}
         </span>
-        <span className="text-xs text-white/30">
+        <StatusBadge tone="neutral">
           {countFiles(tree)} files
-        </span>
+        </StatusBadge>
       </div>
-      <div className="px-4 py-3 font-mono text-xs leading-relaxed overflow-x-auto">
-        <div className="flex items-center mb-1">
-          <span className="text-white/50 mr-1.5 text-xs">{"\uD83D\uDCC1"}</span>
-          <span className="text-white/90 font-medium">{skillName}</span>
+      <div className="overflow-x-auto px-4 py-3 font-mono text-xs leading-relaxed">
+        <div className="mb-1 flex items-center">
+          <Folder className="mr-1.5 size-3.5 text-muted-foreground" />
+          <span className="font-medium text-foreground">{skillName}</span>
         </div>
         {tree.map((node, i) => (
           <TreeItem
@@ -80,15 +99,15 @@ export function SkillTree({
           />
         ))}
       </div>
-    </div>
-  );
+    </Surface>
+  )
 }
 
 function countFiles(nodes: TreeNode[]): number {
-  let count = 0;
+  let count = 0
   for (const node of nodes) {
-    if (node.type === "file") count++;
-    if (node.children) count += countFiles(node.children);
+    if (node.type === "file") count++
+    if (node.children) count += countFiles(node.children)
   }
-  return count;
+  return count
 }

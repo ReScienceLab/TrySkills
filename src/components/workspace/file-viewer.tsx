@@ -5,6 +5,8 @@ import ReactMarkdown from "react-markdown"
 import rehypeHighlight from "rehype-highlight"
 import type { FileContent } from "@/lib/workspace/types"
 import { isMarkdownFile } from "@/lib/workspace/types"
+import { Button } from "@/components/ui/button"
+import { X } from "lucide-react"
 
 export function FileViewer({
   filePath,
@@ -23,21 +25,27 @@ export function FileViewer({
   sandboxId?: string | null
   sandboxKey?: string | null
 }) {
-  const [mediaUrl, setMediaUrl] = useState<string | null>(null)
+  const [mediaResult, setMediaResult] = useState<{ path: string; url: string | null } | null>(null)
+  const mediaUrl = mediaResult?.path === filePath ? mediaResult.url : null
 
   useEffect(() => {
-    setMediaUrl(null)
     if (!content || (content.type !== "audio" && content.type !== "video")) return
     if (!filePath || !sandboxId || !sandboxKey) return
+    let cancelled = false
     const params = new URLSearchParams({ action: "media-url", sandboxId, key: sandboxKey, path: filePath })
     fetch(`/api/workspace?${params}`)
       .then((r) => r.json())
-      .then((data) => { if (data.url) setMediaUrl(data.url) })
-      .catch(() => {})
+      .then((data) => {
+        if (!cancelled) setMediaResult({ path: filePath, url: data.url ?? null })
+      })
+      .catch(() => {
+        if (!cancelled) setMediaResult({ path: filePath, url: null })
+      })
+    return () => { cancelled = true }
   }, [content, filePath, sandboxId, sandboxKey])
   if (!filePath) {
     return (
-      <div className="flex-1 flex items-center justify-center text-[11px] text-white/15">
+      <div className="flex flex-1 items-center justify-center text-[11px] text-muted-foreground">
         Select a file to preview
       </div>
     )
@@ -46,26 +54,30 @@ export function FileViewer({
   const fileName = filePath.split("/").pop() || filePath
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/[0.06] shrink-0 bg-white/[0.02]">
-        <span className="text-[12px] text-white/50 truncate flex-1 font-mono">{fileName}</span>
-        <button
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 items-center gap-2 bg-white/[0.02] px-4 py-2.5 shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.08)]">
+        <span className="flex-1 truncate font-mono text-[12px] text-muted-foreground">{fileName}</span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
           onClick={onClose}
-          className="text-white/20 hover:text-white/50 text-xs transition-colors p-0.5"
+          className="text-muted-foreground hover:text-foreground"
+          aria-label="Close file preview"
         >
-          {"\u2715"}
-        </button>
+          <X className="h-3.5 w-3.5" />
+        </Button>
       </div>
 
-      <div className="flex-1 overflow-auto min-h-0">
+      <div className="min-h-0 flex-1 overflow-auto">
         {loading && (
           <div className="flex items-center justify-center py-12">
-            <div className="w-5 h-5 rounded-full border-2 border-white/10 border-t-white/30 animate-spin" />
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/10 border-t-white/50" />
           </div>
         )}
 
         {error && (
-          <div className="px-4 py-6 text-[12px] text-red-400/60">{error}</div>
+          <div className="px-4 py-6 text-[12px] text-[#ff8f86]">{error}</div>
         )}
 
         {!loading && !error && content && content.type === "image" && (
@@ -74,7 +86,7 @@ export function FileViewer({
             <img
               src={content.content}
               alt={fileName}
-              className="max-w-full rounded border border-white/10"
+              className="max-w-full rounded-[6px] shadow-[var(--shadow-border)]"
             />
           </div>
         )}
@@ -84,7 +96,7 @@ export function FileViewer({
             {mediaUrl ? (
               <audio controls src={mediaUrl} className="w-full" />
             ) : (
-              <div className="text-[12px] text-white/30 animate-pulse">Loading audio...</div>
+              <div className="animate-pulse text-[12px] text-muted-foreground">Loading audio...</div>
             )}
           </div>
         )}
@@ -92,15 +104,15 @@ export function FileViewer({
         {!loading && !error && content && content.type === "video" && (
           <div className="p-4">
             {mediaUrl ? (
-              <video controls src={mediaUrl} className="max-w-full rounded border border-white/10" />
+              <video controls src={mediaUrl} className="max-w-full rounded-[6px] shadow-[var(--shadow-border)]" />
             ) : (
-              <div className="text-[12px] text-white/30 animate-pulse">Loading video...</div>
+              <div className="animate-pulse text-[12px] text-muted-foreground">Loading video...</div>
             )}
           </div>
         )}
 
         {!loading && !error && content && content.type === "text" && isMarkdownFile(fileName) && (
-          <div className="px-4 py-3 prose prose-invert prose-sm max-w-none text-white/70 [&_pre]:bg-white/[0.03] [&_pre]:border [&_pre]:border-white/[0.06] [&_pre]:rounded [&_code]:text-emerald-400/70 text-[12px] leading-relaxed">
+          <div className="prose prose-invert prose-sm max-w-none px-4 py-3 text-[12px] leading-relaxed text-foreground/80 [&_a]:text-[#58a6ff] [&_code]:text-[#58a6ff] [&_pre]:rounded-[6px] [&_pre]:bg-white/[0.03] [&_pre]:shadow-[var(--shadow-border)]">
             <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
               {content.content}
             </ReactMarkdown>
@@ -108,7 +120,7 @@ export function FileViewer({
         )}
 
         {!loading && !error && content && content.type === "text" && !isMarkdownFile(fileName) && (
-          <pre className="px-4 py-3 text-[11px] leading-[1.7] text-white/50 font-mono whitespace-pre-wrap break-all selection:bg-white/10">
+          <pre className="whitespace-pre-wrap break-all px-4 py-3 font-mono text-[11px] leading-[1.7] text-muted-foreground selection:bg-white/10">
             {content.content}
           </pre>
         )}

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
 import { useQuery, useMutation } from "convex/react";
@@ -10,6 +11,17 @@ import { SiteHeader } from "@/components/site-header";
 import { destroySandbox } from "@/lib/sandbox/daytona";
 import { useKeyStore } from "@/hooks/use-key-store";
 import { NousResearch } from "@lobehub/icons";
+import { Check, Copy, ExternalLink, Loader2, MoreHorizontal, Play, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Surface, StatusBadge } from "@/components/product-ui";
 
 interface SandboxLiveInfo {
   id?: string;
@@ -44,34 +56,34 @@ export default function DashboardPage() {
   );
 
   const STALE_PENDING_MS = 5 * 60 * 1000;
+  const [now] = useState(() => Date.now());
   const sandboxList = sandboxes ?? [];
   const sandbox = sandboxList.find((s) => !s.sandboxId.startsWith("pending-"))
     ?? sandboxList.find((s) =>
-      s.sandboxId.startsWith("pending-") && Date.now() - s.createdAt <= STALE_PENDING_MS
+      s.sandboxId.startsWith("pending-") && now - s.createdAt <= STALE_PENDING_MS
     );
   const trialList = trials ?? [];
 
   const [liveInfo, setLiveInfo] = useState<SandboxLiveInfo | null>(null);
   const [copied, setCopied] = useState(false);
+  const [destroying, setDestroying] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const sessions = (chatSessionsList ?? []).filter((s) => s.messageCount > 0);
 
   const isRealSandbox = sandbox && !sandbox.sandboxId.startsWith("pending-");
 
-  const fetchLiveInfo = useCallback(async (sandboxId: string) => {
-    if (!config?.sandboxKey || sandboxId.startsWith("pending-")) return;
-    try {
-      const res = await fetch(`/api/sandbox?id=${sandboxId}&key=${encodeURIComponent(config.sandboxKey)}`);
-      if (res.ok) setLiveInfo(await res.json());
-    } catch {}
-  }, [config?.sandboxKey]);
-
   useEffect(() => {
-    if (isRealSandbox && config?.sandboxKey && !liveInfo) {
-      fetchLiveInfo(sandbox.sandboxId);
-    }
-  }, [isRealSandbox, sandbox?.sandboxId, config?.sandboxKey, fetchLiveInfo, liveInfo]);
+    if (!isRealSandbox || !sandbox?.sandboxId || !config?.sandboxKey || liveInfo) return;
+    let cancelled = false;
+    void fetch(`/api/sandbox?id=${sandbox.sandboxId}&key=${encodeURIComponent(config.sandboxKey)}`)
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (!cancelled && data) setLiveInfo(data);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isRealSandbox, sandbox?.sandboxId, config?.sandboxKey, liveInfo]);
 
   const handleDeleteSession = async (sessionId: string) => {
     try {
@@ -82,14 +94,19 @@ export default function DashboardPage() {
   };
 
   const handleResumeSession = (session: typeof sessions[0]) => {
-    window.location.href = `/${session.skillPath}?session=${session._id}`;
+    window.location.assign(`/${session.skillPath}?session=${session._id}`);
   };
 
   const handleDestroy = async () => {
-    if (!isRealSandbox || !config?.sandboxKey) return;
-    try { await destroySandbox(config.sandboxKey, sandbox.sandboxId); } catch {}
-    await removeSandbox({ sandboxId: sandbox.sandboxId });
-    setLiveInfo(null);
+    if (!isRealSandbox || !config?.sandboxKey || destroying) return;
+    setDestroying(true);
+    try {
+      try { await destroySandbox(config.sandboxKey, sandbox.sandboxId); } catch {}
+      await removeSandbox({ sandboxId: sandbox.sandboxId });
+      setLiveInfo(null);
+    } finally {
+      setDestroying(false);
+    }
   };
 
   const handleWakeUp = () => {
@@ -99,17 +116,17 @@ export default function DashboardPage() {
 
   const handleCopyId = () => {
     if (!isRealSandbox) return;
-    navigator.clipboard.writeText(sandbox.sandboxId);
+    void navigator.clipboard.writeText(sandbox.sandboxId);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   if (!isLoaded) {
     return (
-      <main className="relative min-h-screen bg-black flex flex-col overflow-hidden">
+      <main className="relative flex min-h-screen flex-col overflow-hidden bg-background">
         <SiteHeader />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
+        <div className="flex flex-1 items-center justify-center">
+          <Loader2 className="size-8 animate-spin text-muted-foreground" />
         </div>
       </main>
     );
@@ -117,18 +134,18 @@ export default function DashboardPage() {
 
   if (!isSignedIn) {
     return (
-      <main className="relative min-h-screen bg-black flex flex-col overflow-hidden">
+      <main className="relative flex min-h-screen flex-col overflow-hidden bg-background">
         <SiteHeader />
-        <div className="flex-1 flex items-center justify-center relative z-10 px-6">
-          <div className="border border-white/20 bg-black/40 backdrop-blur-sm p-8 text-center max-w-md">
-            <h2 className="text-lg font-semibold text-white/90 mb-2">Sign in to view dashboard</h2>
-            <p className="text-sm text-white/50 mb-6">Manage your Hermes agent sandbox.</p>
+        <div className="relative z-10 flex flex-1 items-center justify-center px-6">
+          <Surface className="max-w-md p-8 text-center">
+            <h2 className="mb-2 text-lg font-semibold text-foreground">Sign in to view dashboard</h2>
+            <p className="mb-6 text-sm text-muted-foreground">Manage your Hermes agent sandbox.</p>
             <SignInButton mode="modal">
-              <button className="px-6 py-3 bg-white text-black text-sm font-medium hover:bg-white/90 transition-all">
+              <Button>
                 Sign in with GitHub
-              </button>
+              </Button>
             </SignInButton>
-          </div>
+          </Surface>
         </div>
       </main>
     );
@@ -141,20 +158,13 @@ export default function DashboardPage() {
   const isStopped = poolState === "stopped" || displayState === "stopped";
 
   const statusLabel = isCreating ? "creating" : isActive ? "active" : isStopped ? "stopped" : displayState;
-  const statusColor = isCreating
-    ? "text-blue-400/70 bg-blue-500/10"
-    : isActive
-      ? "text-green-400/70 bg-green-500/10"
-      : isStopped
-        ? "text-orange-400/70 bg-orange-500/10"
-        : "text-white/30 bg-white/5";
   const dotColor = isCreating
-    ? "bg-blue-400 animate-pulse"
+    ? "bg-[#0a72ef] animate-pulse"
     : isActive
-      ? "bg-green-500 animate-pulse"
+      ? "bg-[#0a72ef] animate-pulse"
       : isStopped
-        ? "bg-white/20"
-        : "bg-white/10";
+        ? "bg-white/30"
+        : "bg-white/20";
 
   const formatTime = (ts: number | string) => {
     const d = new Date(ts);
@@ -164,152 +174,198 @@ export default function DashboardPage() {
   const cpu = liveInfo?.cpu ?? sandbox?.cpu;
   const memory = liveInfo?.memory ?? sandbox?.memory;
   const disk = sandbox?.disk;
+  const statusTone = isCreating || isActive ? "develop" : isStopped ? "ship" : "neutral";
 
   return (
-    <main className="relative min-h-screen bg-black flex flex-col overflow-hidden">
+    <main className="relative flex min-h-screen flex-col overflow-hidden bg-background">
       <SiteHeader />
 
-      <div className="flex-1 relative z-10 px-6 pt-20 pb-10">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-2xl font-semibold text-white/90 mb-8">Dashboard</h1>
+      <div className="relative z-10 flex-1 px-6 pb-10 pt-20">
+        <div className="mx-auto max-w-4xl">
+          <h1 className="mb-8 text-2xl font-semibold text-foreground">Dashboard</h1>
 
           {/* Sandbox Card */}
-          <div className="border border-white/10 bg-black/40 backdrop-blur-sm p-6 mb-8">
-            <div className="flex items-center justify-between mb-4">
+          <Surface className="mb-8 p-6">
+            <div className="mb-4 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <NousResearch size={24} className="text-white/80" />
-                  <div className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full ${dotColor}`} />
+                  <NousResearch size={24} className="text-foreground" />
+                  <div className={`absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full ${dotColor}`} />
                 </div>
-                <h2 className="text-lg font-medium text-white/90">Hermes Agent</h2>
+                <h2 className="text-lg font-medium text-foreground">Hermes Agent</h2>
               </div>
-              <span className={`text-xs font-mono px-2 py-1 rounded-full ${statusColor}`}>
-                {statusLabel}
-              </span>
+              <div className="flex shrink-0 items-center gap-2">
+                <StatusBadge tone={statusTone}>
+                  {statusLabel}
+                </StatusBadge>
+                {isRealSandbox && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon-sm"
+                      onClick={handleWakeUp}
+                      disabled={!sandbox.currentSkillPath}
+                      aria-label="Open current skill"
+                    >
+                      <Play className="size-4" />
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon-sm"
+                          aria-label="Sandbox actions"
+                        >
+                          <MoreHorizontal className="size-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-52">
+                        <DropdownMenuLabel>Sandbox Controls</DropdownMenuLabel>
+                        <DropdownMenuItem
+                          onClick={handleWakeUp}
+                          disabled={!sandbox.currentSkillPath}
+                        >
+                          <Play className="size-4" />
+                          Open Current Skill
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <a
+                            href={`https://app.daytona.io/dashboard/sandboxes/${sandbox.sandboxId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <ExternalLink className="size-4" />
+                            Open in Daytona
+                          </a>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleCopyId}>
+                          {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+                          {copied ? "Copied ID" : "Copy Sandbox ID"}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={handleDestroy}
+                          disabled={!config?.sandboxKey || destroying}
+                        >
+                          {destroying ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </>
+                )}
+              </div>
             </div>
 
             {dataLoading ? (
-              <div className="text-sm text-white/40 flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full border-2 border-white/10 border-t-white/40 animate-spin" />
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" />
                 Loading sandbox...
               </div>
             ) : isCreating && !isRealSandbox ? (
-              <div className="text-sm text-blue-400/60 flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full border-2 border-blue-400/30 border-t-blue-400/70 animate-spin" />
+              <div className="flex items-center gap-2 text-sm text-[#58a6ff]">
+                <Loader2 className="size-3.5 animate-spin" />
                 Creating sandbox...
               </div>
             ) : isRealSandbox ? (
               <>
-                <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-xs mb-4">
+                <div className="mb-4 grid grid-cols-1 gap-x-8 gap-y-2 text-xs sm:grid-cols-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-white/30">ID</span>
-                    <span className="font-mono text-white/50 truncate">{sandbox.sandboxId}</span>
-                    <button
+                    <span className="text-muted-foreground">ID</span>
+                    <span className="truncate font-mono text-muted-foreground">{sandbox.sandboxId}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
                       onClick={handleCopyId}
-                      className="text-white/20 hover:text-white/50 transition-colors shrink-0"
+                      className="shrink-0 text-muted-foreground hover:text-foreground"
                       aria-label={copied ? "Copied sandbox ID" : "Copy sandbox ID"}
                     >
-                      {copied ? "✓" : "⎘"}
-                    </button>
-                    <a
-                      href={`https://app.daytona.io/dashboard/sandboxes/${sandbox.sandboxId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-white/20 hover:text-white/50 transition-colors shrink-0"
-                      aria-label="Open in Daytona dashboard"
-                    >
-                      ↗
-                    </a>
+                      {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+                    </Button>
                   </div>
                   {sandbox.region && (
                     <div>
-                      <span className="text-white/30">Region </span>
-                      <span className="text-white/50">{sandbox.region.toUpperCase()}</span>
+                      <span className="text-muted-foreground">Region </span>
+                      <span className="text-foreground">{sandbox.region.toUpperCase()}</span>
                     </div>
                   )}
                   {cpu && (
                     <div>
-                      <span className="text-white/30">CPU </span>
-                      <span className="text-white/50">{cpu} vCPU</span>
+                      <span className="text-muted-foreground">CPU </span>
+                      <span className="text-foreground">{cpu} vCPU</span>
                     </div>
                   )}
                   {memory && (
                     <div>
-                      <span className="text-white/30">Memory </span>
-                      <span className="text-white/50">{memory} GB</span>
+                      <span className="text-muted-foreground">Memory </span>
+                      <span className="text-foreground">{memory} GB</span>
                     </div>
                   )}
                   {disk && (
                     <div>
-                      <span className="text-white/30">Disk </span>
-                      <span className="text-white/50">{disk} GB</span>
+                      <span className="text-muted-foreground">Disk </span>
+                      <span className="text-foreground">{disk} GB</span>
                     </div>
                   )}
                   {sandbox.currentSkillPath && (
                     <div>
-                      <span className="text-white/30">Current Skill </span>
-                      <span className="font-mono text-white/50">{sandbox.currentSkillPath}</span>
+                      <span className="text-muted-foreground">Current Skill </span>
+                      <span className="font-mono text-foreground">{sandbox.currentSkillPath}</span>
                     </div>
                   )}
                   {(liveInfo?.createdAt || sandbox.createdAt) && (
                     <div>
-                      <span className="text-white/30">Created </span>
-                      <span className="text-white/50">{formatTime(liveInfo?.createdAt ?? sandbox.createdAt)}</span>
+                      <span className="text-muted-foreground">Created </span>
+                      <span className="text-foreground">{formatTime(liveInfo?.createdAt ?? sandbox.createdAt)}</span>
                     </div>
                   )}
                   {sandbox.lastHeartbeat && (
                     <div>
-                      <span className="text-white/30">Last Heartbeat </span>
-                      <span className="text-white/50">{formatTime(sandbox.lastHeartbeat)}</span>
+                      <span className="text-muted-foreground">Last Heartbeat </span>
+                      <span className="text-foreground">{formatTime(sandbox.lastHeartbeat)}</span>
                     </div>
                   )}
                 </div>
 
                 {sandbox.installedSkills && sandbox.installedSkills.length > 0 && (
                   <div className="mb-4">
-                    <span className="text-xs text-white/30 block mb-1.5">Installed Skills</span>
+                    <span className="mb-1.5 block text-xs text-muted-foreground">Installed Skills</span>
                     <div className="flex flex-wrap gap-1.5">
                       {sandbox.installedSkills.map((s) => (
-                        <span key={s} className="text-[10px] font-mono px-2 py-0.5 bg-white/5 border border-white/10 text-white/40 rounded-full">
+                        <StatusBadge key={s} tone="neutral" className="font-mono text-[10px]">
                           {s.includes("/") ? s.split("/").pop() : s}
-                        </span>
+                        </StatusBadge>
                       ))}
                     </div>
                   </div>
                 )}
 
-                <div className="flex gap-2">
-                  {isStopped && sandbox?.currentSkillPath && (
-                    <button onClick={handleWakeUp} className="px-4 py-2 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 text-xs font-medium transition-all" aria-label="Resume Last Skill">
-                      Resume Last Skill
-                    </button>
-                  )}
-                  <button onClick={handleDestroy} className="px-4 py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 text-xs font-medium transition-all" aria-label="Destroy">
-                    Destroy
-                  </button>
-                </div>
               </>
             ) : (
-              <div className="text-sm text-white/40">
+              <div className="text-sm text-muted-foreground">
                 No sandbox yet. Try a skill to create one automatically.
               </div>
             )}
-          </div>
+          </Surface>
 
           {/* Chat Sessions */}
           {(dataLoading || sessions.length > 0) && (
-            <div className="border border-white/10 bg-black/40 backdrop-blur-sm p-6 mb-8">
+            <Surface className="mb-8 p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-medium text-white/90">Chat Sessions</h2>
+                <h2 className="text-lg font-medium text-foreground">Chat Sessions</h2>
               </div>
 
               {dataLoading ? (
-                <div className="text-sm text-white/40 flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full border-2 border-white/10 border-t-white/40 animate-spin" />
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin" />
                   Loading sessions...
                 </div>
               ) : sessions.length === 0 ? (
-                <div className="text-sm text-white/40">
+                <div className="text-sm text-muted-foreground">
                   No chat sessions yet. Start chatting with a skill to create one.
                 </div>
               ) : (
@@ -318,15 +374,15 @@ export default function DashboardPage() {
                     {sessions.slice(0, visibleCount).map((session) => (
                       <div
                         key={session._id}
-                        className="flex items-center justify-between px-4 py-3 bg-white/5 border border-white/5 hover:border-white/10 transition-all"
+                        className="flex items-center justify-between rounded-lg bg-white/[0.03] px-4 py-3 shadow-[var(--shadow-border)] transition-all hover:bg-white/[0.05] hover:shadow-[var(--shadow-border-strong)]"
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-1.5 h-1.5 rounded-full bg-blue-400/40 shrink-0" />
+                          <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#0a72ef]" />
                           <div className="min-w-0">
-                            <div className="text-sm text-white/70 truncate">
+                            <div className="truncate text-sm text-foreground">
                               {session.title || "Untitled"}
                             </div>
-                            <div className="flex items-center gap-2 text-xs text-white/30">
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
                               <span className="font-mono">{session.model}</span>
                               <span>&middot;</span>
                               <span>{session.messageCount} messages</span>
@@ -336,76 +392,91 @@ export default function DashboardPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <button
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
                             onClick={() => handleResumeSession(session)}
-                            className="px-3 py-1.5 text-xs text-blue-400/60 hover:text-blue-400 border border-blue-500/20 hover:border-blue-500/40 rounded transition-all"
                           >
+                            <Play className="size-3.5" />
                             Resume
-                          </button>
-                          <button
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
                             onClick={() => handleDeleteSession(session._id)}
-                            className="px-3 py-1.5 text-xs text-red-400/40 hover:text-red-400 border border-red-500/10 hover:border-red-500/30 rounded transition-all"
                           >
+                            <Trash2 className="size-3.5" />
                             Delete
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     ))}
                   </div>
                   {sessions.length > visibleCount && (
-                    <button
+                    <Button
+                      type="button"
+                      variant="outline"
                       onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
-                      className="mt-3 w-full py-2 text-xs text-white/30 hover:text-white/60 border border-white/5 hover:border-white/10 transition-all"
+                      className="mt-3 w-full"
                     >
                       Show more ({sessions.length - visibleCount} remaining)
-                    </button>
+                    </Button>
                   )}
                 </>
               )}
-            </div>
+            </Surface>
           )}
 
           {/* Skill Trial History */}
-          <div className="border border-white/10 bg-black/40 backdrop-blur-sm p-6">
-            <h2 className="text-lg font-medium text-white/90 mb-4">Skill Trials</h2>
+          <Surface className="p-6">
+            <h2 className="mb-4 text-lg font-medium text-foreground">Skill Trials</h2>
 
             {dataLoading ? (
-              <div className="text-sm text-white/40 flex items-center gap-2 py-8">
-                <div className="w-3 h-3 rounded-full border-2 border-white/10 border-t-white/40 animate-spin" />
+              <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" />
                 Loading skill trials...
               </div>
             ) : trialList.length === 0 ? (
               <div className="text-center py-8">
-                <p className="text-sm text-white/40 mb-4">No skills tried yet.</p>
-                <a href="/" className="inline-block px-6 py-3 bg-white text-black text-sm font-medium hover:bg-white/90 transition-all">
+                <p className="mb-4 text-sm text-muted-foreground">No skills tried yet.</p>
+                <Button asChild>
+                  <Link href="/">
                   Try a Skill
-                </a>
+                  </Link>
+                </Button>
               </div>
             ) : (
               <div className="space-y-2">
                 {trialList.map((trial) => (
-                  <div key={trial._id} className="flex items-center justify-between px-4 py-3 bg-white/5 border border-white/5 hover:border-white/10 transition-all">
+                  <div key={trial._id} className="flex items-center justify-between rounded-lg bg-white/[0.03] px-4 py-3 shadow-[var(--shadow-border)] transition-all hover:bg-white/[0.05] hover:shadow-[var(--shadow-border-strong)]">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-1.5 h-1.5 rounded-full bg-white/20 shrink-0" />
+                      <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground" />
                       <div className="min-w-0">
-                        <div className="font-mono text-sm text-white/70 truncate">{trial.skillName}</div>
-                        <div className="text-xs text-white/30">{trial.skillPath}</div>
+                        <div className="truncate font-mono text-sm text-foreground">{trial.skillName}</div>
+                        <div className="text-xs text-muted-foreground">{trial.skillPath}</div>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-xs text-white/25">{formatTime(trial.startedAt)}</span>
-                      <a
-                        href={`/${trial.skillPath}`}
-                        className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 border border-white/10 hover:border-white/20 rounded transition-all"
+                      <span className="text-xs text-muted-foreground">{formatTime(trial.startedAt)}</span>
+                      <Button
+                        asChild
+                        variant="outline"
+                        size="sm"
                       >
+                        <a
+                        href={`/${trial.skillPath}`}
+                        >
                         Try again
-                      </a>
+                        </a>
+                      </Button>
                     </div>
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </Surface>
         </div>
       </div>
     </main>

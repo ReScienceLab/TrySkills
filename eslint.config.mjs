@@ -15,6 +15,7 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "convex/_generated/**",
+    ".agents/**",
   ]),
   // Convex recommended rules (includes no-old-registered-function-syntax,
   // require-args-validator, explicit-table-ids, no-filter-in-query,
@@ -38,7 +39,9 @@ const eslintConfig = defineConfig([
     languageOptions: {
       parser: tsParser,
       parserOptions: {
-        projectService: true,
+        projectService: {
+          allowDefaultProject: ["vitest.config.ts"],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
     },

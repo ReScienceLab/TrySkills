@@ -205,7 +205,6 @@ export function useChat(
   const turnIdRef = useRef(0)
   const sessionIdRef = useRef<string | null>(initialSessionId ?? null)
   const onToolCompleteRef = useRef(onToolComplete)
-  onToolCompleteRef.current = onToolComplete
   const segmentsRef = useRef<Segment[]>([])
   const textOffsetRef = useRef(0)
   const pendingToolCompletionsRef = useRef<Set<string>>(new Set())
@@ -213,6 +212,10 @@ export function useChat(
   const hydratedMessagesRef = useRef<string | null>(
     initialMessages ? `${initialSessionId ?? "new"}:${initialMessages.length}` : null,
   )
+
+  useEffect(() => {
+    onToolCompleteRef.current = onToolComplete
+  }, [onToolComplete])
 
   const createSession = useMutation(api.chatSessions.create)
   const appendMessages = useMutation(api.chatSessions.appendMessages)
@@ -235,12 +238,13 @@ export function useChat(
   }, [])
 
   useEffect(() => {
+    const pendingToolCompletions = pendingToolCompletionsRef.current
     return () => {
       if (toolCompletionFlushRef.current) {
         clearTimeout(toolCompletionFlushRef.current)
         toolCompletionFlushRef.current = null
       }
-      pendingToolCompletionsRef.current.clear()
+      pendingToolCompletions.clear()
     }
   }, [])
 

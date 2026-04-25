@@ -18,7 +18,6 @@ vi.mock("@/lib/providers/check-credit", () => ({
 }))
 
 const mockCreateSession = vi.fn().mockResolvedValue("test-session-id")
-const mockAppendMessages = vi.fn().mockResolvedValue(null)
 
 vi.mock("convex/react", () => ({
   useMutation: () => mockCreateSession,

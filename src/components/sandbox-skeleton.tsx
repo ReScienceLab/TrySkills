@@ -3,52 +3,52 @@
 export function SandboxSkeleton({ skillName }: { skillName: string }) {
   return (
     <div className="animate-fade-in w-full">
-      <div className="border border-white/10 bg-black/60 backdrop-blur-sm rounded-lg overflow-hidden">
+      <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-card)]">
         {/* Header bar */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-white/[0.02]">
+        <div className="flex items-center justify-between bg-white/[0.02] px-4 py-3 shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.08)]">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs font-mono text-white/50">
+            <div className="h-2 w-2 animate-pulse rounded-full bg-[#0a72ef]" />
+            <span className="font-mono text-xs text-muted-foreground">
               {skillName}
             </span>
           </div>
-          <span className="text-[10px] text-white/30 font-mono">
+          <span className="font-mono text-[10px] text-muted-foreground">
             preparing...
           </span>
         </div>
 
         {/* Chat area skeleton */}
-        <div className="p-6 space-y-4 min-h-[320px]">
+        <div className="min-h-[320px] space-y-4 p-6">
           {/* System message */}
           <div className="flex gap-3">
-            <div className="w-6 h-6 rounded-full bg-white/5 shrink-0" />
-            <div className="space-y-2 flex-1">
-              <div className="h-3 bg-white/5 rounded w-3/4 animate-pulse" />
-              <div className="h-3 bg-white/5 rounded w-1/2 animate-pulse" style={{ animationDelay: "100ms" }} />
+            <div className="h-6 w-6 shrink-0 rounded-full bg-white/[0.04]" />
+            <div className="flex-1 space-y-2">
+              <div className="h-3 w-3/4 animate-pulse rounded bg-white/[0.05]" />
+              <div className="h-3 w-1/2 animate-pulse rounded bg-white/[0.05]" style={{ animationDelay: "100ms" }} />
             </div>
           </div>
 
           {/* Thinking indicator */}
           <div className="flex gap-3 mt-6">
-            <div className="w-6 h-6 rounded-full bg-white/5 shrink-0" />
+            <div className="h-6 w-6 shrink-0 rounded-full bg-white/[0.04]" />
             <div className="flex items-center gap-1 py-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-white/20 animate-bounce" style={{ animationDelay: "0ms" }} />
-              <div className="w-1.5 h-1.5 rounded-full bg-white/20 animate-bounce" style={{ animationDelay: "150ms" }} />
-              <div className="w-1.5 h-1.5 rounded-full bg-white/20 animate-bounce" style={{ animationDelay: "300ms" }} />
+              <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground" style={{ animationDelay: "0ms" }} />
+              <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground" style={{ animationDelay: "150ms" }} />
+              <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground" style={{ animationDelay: "300ms" }} />
             </div>
           </div>
         </div>
 
         {/* Input area (disabled) */}
-        <div className="px-4 py-3 border-t border-white/10">
+        <div className="px-4 py-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
           <div className="flex items-center gap-3">
-            <div className="flex-1 h-10 rounded bg-white/[0.03] border border-white/10 flex items-center px-3">
-              <span className="text-xs text-white/20">
+            <div className="flex h-10 flex-1 items-center rounded-[6px] bg-white/[0.03] px-3 shadow-[var(--shadow-border)]">
+              <span className="text-xs text-muted-foreground">
                 Agent is starting up...
               </span>
             </div>
-            <div className="w-10 h-10 rounded bg-white/5 flex items-center justify-center">
-              <svg className="w-4 h-4 text-white/15" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="flex h-10 w-10 items-center justify-center rounded-[6px] bg-white/[0.04] shadow-[var(--shadow-border)]">
+              <svg className="h-4 w-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
               </svg>
             </div>
@@ -59,8 +59,8 @@ export function SandboxSkeleton({ skillName }: { skillName: string }) {
       {/* Status bar below */}
       <div className="mt-3 flex items-center px-1">
         <div className="flex items-center gap-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-          <span className="text-[11px] text-white/30">Setting up environment...</span>
+          <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#0a72ef]" />
+          <span className="text-[11px] text-muted-foreground">Setting up environment...</span>
         </div>
       </div>
     </div>

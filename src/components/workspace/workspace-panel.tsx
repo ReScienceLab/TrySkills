@@ -4,6 +4,7 @@ import { FileTree } from "./file-tree"
 import { FileViewer } from "./file-viewer"
 import type { FileEntry, FileContent } from "@/lib/workspace/types"
 import { formatBytes, isImageFile } from "@/lib/workspace/types"
+import { Button } from "@/components/ui/button"
 import { Folder, RefreshCw, X, ChevronLeft } from "lucide-react"
 
 function flattenFiles(entries: FileEntry[]): FileEntry[] {
@@ -53,36 +54,42 @@ export function WorkspacePanel({
   const latestFile = [...files].sort((a, b) => getModifiedTime(b) - getModifiedTime(a))[0]
 
   return (
-    <div className="flex flex-col h-full bg-[#0c0c0c] border-l border-white/[0.06]">
+    <div className="flex h-full flex-col bg-card shadow-[inset_1px_0_0_0_rgba(255,255,255,0.08)]">
       {/* Header */}
-      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/[0.06] shrink-0">
-        <Folder className="w-4 h-4 text-white/25" />
-        <span className="text-[13px] text-white/50 font-medium flex-1 tracking-tight">Workspace</span>
+      <div className="flex shrink-0 items-center gap-2.5 px-4 py-3 shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.08)]">
+        <Folder className="h-4 w-4 text-muted-foreground" />
+        <span className="flex-1 text-[13px] font-medium text-foreground">Workspace</span>
         {loadingTree && entries.length > 0 && (
-          <div className="w-3 h-3 rounded-full border border-white/10 border-t-white/30 animate-spin" />
+          <div className="h-3 w-3 animate-spin rounded-full border border-white/10 border-t-white/50" />
         )}
-        <button
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
           onClick={onRefresh}
-          className="text-white/20 hover:text-white/50 transition-colors p-1 rounded hover:bg-white/[0.04]"
+          className="text-muted-foreground hover:text-foreground"
           title="Refresh"
         >
-          <RefreshCw className="w-3.5 h-3.5" />
-        </button>
-        <button
+          <RefreshCw className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
           onClick={onClose}
-          className="text-white/20 hover:text-white/50 transition-colors p-1 rounded hover:bg-white/[0.04]"
+          className="text-muted-foreground hover:text-foreground"
           title="Close panel"
         >
-          <X className="w-3.5 h-3.5" />
-        </button>
+          <X className="h-3.5 w-3.5" />
+        </Button>
       </div>
 
       {files.length > 0 && !selectedFile && (
-        <div className="border-b border-white/[0.05] bg-white/[0.018] px-4 py-3">
+        <div className="bg-white/[0.018] px-4 py-3 shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.08)]">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-white/25">Generated outputs</div>
-              <div className="mt-1 text-[12px] text-white/[0.48]">
+              <div className="font-mono text-[11px] font-medium uppercase text-muted-foreground">Generated outputs</div>
+              <div className="mt-1 text-[12px] text-muted-foreground">
                 {files.length} file{files.length === 1 ? "" : "s"}
                 {imageCount > 0 ? ` · ${imageCount} image${imageCount === 1 ? "" : "s"}` : ""}
               </div>
@@ -90,12 +97,12 @@ export function WorkspacePanel({
             {latestFile && (
               <button
                 onClick={() => onSelectFile(latestFile)}
-                className="min-w-0 rounded-lg border border-white/[0.07] bg-black/20 px-3 py-2 text-left transition-colors hover:border-white/[0.14] hover:bg-white/[0.04]"
+                className="min-w-0 rounded-lg bg-white/[0.03] px-3 py-2 text-left shadow-[var(--shadow-border)] transition-colors hover:bg-white/[0.06] hover:shadow-[var(--shadow-border-strong)]"
               >
-                <span className="block text-[10px] uppercase tracking-[0.14em] text-white/[0.22]">Latest</span>
-                <span className="block max-w-[150px] truncate text-[12px] text-white/[0.64]">{latestFile.name}</span>
+                <span className="block font-mono text-[10px] uppercase text-muted-foreground">Latest</span>
+                <span className="block max-w-[150px] truncate text-[12px] text-foreground">{latestFile.name}</span>
                 {latestFile.size != null && (
-                  <span className="block text-[10px] text-white/25">{formatBytes(latestFile.size)}</span>
+                  <span className="block text-[10px] text-muted-foreground">{formatBytes(latestFile.size)}</span>
                 )}
               </button>
             )}
@@ -106,14 +113,14 @@ export function WorkspacePanel({
       {/* Loading indicator for initial load */}
       {loadingTree && entries.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12 gap-3">
-          <div className="w-5 h-5 rounded-full border-2 border-white/10 border-t-white/30 animate-spin" />
-          <span className="text-[11px] text-white/20">Loading workspace...</span>
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/10 border-t-white/50" />
+          <span className="text-[11px] text-muted-foreground">Loading workspace...</span>
         </div>
       )}
 
       {/* Tree error */}
       {treeError && entries.length === 0 && (
-        <div className="px-4 py-6 text-[12px] text-red-400/50">{treeError}</div>
+        <div className="px-4 py-6 text-[12px] text-[#ff8f86]">{treeError}</div>
       )}
 
       {/* Content area: tree + optional file viewer */}
@@ -129,7 +136,7 @@ export function WorkspacePanel({
         <div className="flex flex-col flex-1 min-h-0">
           <button
             onClick={onCloseFile}
-            className="flex items-center gap-2 px-4 py-2 text-[12px] text-white/30 hover:text-white/50 border-b border-white/[0.04] transition-colors shrink-0 hover:bg-white/[0.02]"
+            className="flex shrink-0 items-center gap-2 px-4 py-2 text-[12px] text-muted-foreground shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.08)] transition-colors hover:bg-white/[0.02] hover:text-foreground"
           >
             <ChevronLeft className="w-3 h-3" />
             Back to files

@@ -6,6 +6,35 @@ const messageValidator = v.object({
   content: v.string(),
 })
 
+type ChatSessionMessage = {
+  role: "user" | "assistant" | "system"
+  content: string
+}
+
+function compactRepeatedTurns(messages: ChatSessionMessage[]): ChatSessionMessage[] {
+  const compacted: ChatSessionMessage[] = []
+  for (const message of messages) {
+    compacted.push(message)
+    const n = compacted.length
+    if (n < 4) continue
+    const firstUser = compacted[n - 4]
+    const firstAssistant = compacted[n - 3]
+    const secondUser = compacted[n - 2]
+    const secondAssistant = compacted[n - 1]
+    if (
+      firstUser.role === "user" &&
+      firstAssistant.role === "assistant" &&
+      secondUser.role === "user" &&
+      secondAssistant.role === "assistant" &&
+      firstUser.content === secondUser.content &&
+      firstAssistant.content === secondAssistant.content
+    ) {
+      compacted.splice(n - 2, 2)
+    }
+  }
+  return compacted
+}
+
 export const create = mutation({
   args: {
     skillPath: v.string(),
@@ -43,12 +72,19 @@ export const appendMessages = mutation({
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error("Not authenticated")
 
-    const session = await ctx.db.get(args.sessionId)
+    const session = await ctx.db.get("chatSessions", args.sessionId)
     if (!session || session.tokenIdentifier !== identity.tokenIdentifier) {
       throw new Error("Session not found")
     }
 
-    const updated = [...session.messages, ...args.messages]
+    const duplicateTail =
+      args.messages.length > 0 &&
+      session.messages.length >= args.messages.length &&
+      args.messages.every((message, index) => {
+        const existing = session.messages[session.messages.length - args.messages.length + index]
+        return existing?.role === message.role && existing.content === message.content
+      })
+    const updated = compactRepeatedTurns(duplicateTail ? session.messages : [...session.messages, ...args.messages])
     const patch: Record<string, unknown> = {
       messages: updated,
       messageCount: updated.length,
@@ -57,7 +93,7 @@ export const appendMessages = mutation({
     if (args.title) {
       patch.title = args.title
     }
-    await ctx.db.patch(args.sessionId, patch)
+    await ctx.db.patch("chatSessions", args.sessionId, patch)
     return null
   },
 })
@@ -68,11 +104,12 @@ export const get = query({
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) return null
 
-    const session = await ctx.db.get(args.sessionId)
+    const session = await ctx.db.get("chatSessions", args.sessionId)
     if (!session || session.tokenIdentifier !== identity.tokenIdentifier) {
       return null
     }
-    return session
+    const messages = compactRepeatedTurns(session.messages)
+    return { ...session, messages, messageCount: messages.length }
   },
 })
 
@@ -108,16 +145,19 @@ export const list = query({
       .order("desc")
       .take(100)
 
-    return sessions.map((s) => ({
-      _id: s._id,
-      skillPath: s.skillPath,
-      title: s.title,
-      model: s.model,
-      workspacePath: s.workspacePath,
-      messageCount: s.messageCount,
-      createdAt: s.createdAt,
-      updatedAt: s.updatedAt,
-    }))
+    return sessions.map((s) => {
+      const messages = compactRepeatedTurns(s.messages)
+      return {
+        _id: s._id,
+        skillPath: s.skillPath,
+        title: s.title,
+        model: s.model,
+        workspacePath: s.workspacePath,
+        messageCount: messages.length,
+        createdAt: s.createdAt,
+        updatedAt: s.updatedAt,
+      }
+    })
   },
 })
 
@@ -128,9 +168,9 @@ export const remove = mutation({
     const identity = await ctx.auth.getUserIdentity()
     if (!identity) throw new Error("Not authenticated")
 
-    const session = await ctx.db.get(args.sessionId)
+    const session = await ctx.db.get("chatSessions", args.sessionId)
     if (session && session.tokenIdentifier === identity.tokenIdentifier) {
-      await ctx.db.delete(args.sessionId)
+      await ctx.db.delete("chatSessions", args.sessionId)
     }
     return null
   },
