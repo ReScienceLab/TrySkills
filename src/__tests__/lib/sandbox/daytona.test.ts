@@ -93,6 +93,27 @@ describe("sandbox/daytona", () => {
     expect(session.gatewayBaseUrl).toContain("proxy.daytona.work");
   });
 
+  it("requests unrestricted IPv4 egress when creating sandboxes", async () => {
+    mockCreate
+      .mockRejectedValueOnce(new Error("Snapshot not found"))
+      .mockRejectedValueOnce(new Error("Image fallback failed"))
+      .mockResolvedValueOnce(mockSandbox);
+
+    await createHermesSandbox(
+      testConfig,
+      "test-skill",
+      testSkillSource,
+      () => {},
+    );
+
+    for (const call of mockCreate.mock.calls) {
+      expect(call[0]).toEqual(expect.objectContaining({
+        networkBlockAll: false,
+        networkAllowList: "0.0.0.0/0",
+      }));
+    }
+  });
+
   it("passes userId as label when provided", async () => {
     await createHermesSandbox(
       testConfig,
