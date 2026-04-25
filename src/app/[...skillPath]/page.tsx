@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
-import { Folder, LockKeyhole } from "lucide-react";
+import { Folder, LockKeyhole, Paperclip } from "lucide-react";
 
 async function computeConfigHash(provider: string, model: string, key: string, envVars?: Record<string, string>): Promise<string> {
   const envPart = envVars && Object.keys(envVars).length > 0
@@ -42,30 +42,40 @@ type AppPhase = "config" | "launching" | "running";
 
 const autoLaunchLock = new Map<string, boolean>();
 
-function LaunchWarmupSkeleton() {
+function LaunchWarmupSkeleton({ skillPath }: { skillPath: string }) {
+  const introPrompt = `Use skill_view to look up the /${skillPath} skill, then briefly introduce it - what it does, when to use it, and a quick example.`;
+
   return (
-    <div className="mx-auto max-w-[640px]">
-      <Surface className="p-6">
-        <div className="mb-6 flex items-center gap-3">
-          <Skeleton className="size-8 rounded-[6px]" />
-          <div className="space-y-2">
-            <Skeleton className="h-5 w-48" />
-            <Skeleton className="h-3 w-72 max-w-full" />
-          </div>
-          <Skeleton className="ml-auto h-6 w-20 rounded-full" />
+    <div className="w-full">
+      <div className="mb-6 flex justify-end">
+        <div className="max-w-[85%] rounded-lg rounded-br-[3px] bg-[#111111] px-4 py-2.5 shadow-[var(--shadow-border)]">
+          <p className="m-0 whitespace-pre-wrap text-sm leading-6 text-foreground">
+            {introPrompt}
+          </p>
         </div>
-        <div className="space-y-4">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="flex gap-4">
-              <Skeleton className="size-8 shrink-0 rounded-full" />
-              <div className="flex-1 space-y-2 pb-2">
-                <Skeleton className={index === 0 ? "h-4 w-40" : index === 1 ? "h-4 w-52" : "h-4 w-24"} />
-                {index === 0 && <Skeleton className="h-3 w-64 max-w-full" />}
-              </div>
-            </div>
-          ))}
+      </div>
+
+      <div className="max-w-none space-y-5">
+        <div className="space-y-2.5">
+          <Skeleton className="h-5 w-44 rounded-[4px]" />
+          <Skeleton className="h-4 w-full max-w-[760px] rounded-[4px]" />
+          <Skeleton className="h-4 w-full max-w-[700px] rounded-[4px]" />
+          <Skeleton className="h-4 w-full max-w-[560px] rounded-[4px]" />
         </div>
-      </Surface>
+
+        <div className="space-y-2.5">
+          <Skeleton className="h-5 w-36 rounded-[4px]" />
+          <Skeleton className="h-4 w-full max-w-[820px] rounded-[4px]" />
+          <Skeleton className="h-4 w-full max-w-[720px] rounded-[4px]" />
+        </div>
+
+        <div className="space-y-2.5">
+          <Skeleton className="h-5 w-40 rounded-[4px]" />
+          <Skeleton className="h-8 w-full max-w-[780px] rounded-[6px]" />
+          <Skeleton className="h-4 w-full max-w-[420px] rounded-[4px]" />
+          <Skeleton className="h-8 w-full max-w-[720px] rounded-[6px]" />
+        </div>
+      </div>
     </div>
   );
 }
@@ -74,10 +84,12 @@ function LaunchingSessionShell({
   skillName,
   status,
   children,
+  contentClassName = "flex items-center px-4 py-8",
 }: {
   skillName: string;
   status: string;
   children: ReactNode;
+  contentClassName?: string;
 }) {
   return (
     <div className="relative z-10 flex-1 overflow-hidden bg-background pt-14">
@@ -89,13 +101,15 @@ function LaunchingSessionShell({
             <span className="font-mono text-xs text-muted-foreground">{status}</span>
           </div>
 
-          <div className="flex flex-1 items-center overflow-y-auto bg-background px-4 py-8">
+          <div className={`flex-1 overflow-y-auto bg-background ${contentClassName}`}>
             {children}
           </div>
 
           <div className="shrink-0 bg-background px-4 py-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
             <div className="flex items-end gap-2">
-              <Skeleton className="size-9 shrink-0 rounded-[6px]" />
+              <span className="flex h-11 w-10 shrink-0 items-center justify-center text-muted-foreground">
+                <Paperclip className="size-4" />
+              </span>
               <Skeleton className="h-11 flex-1 rounded-lg" />
               <Button type="button" disabled className="shrink-0">
                 Send
@@ -141,10 +155,10 @@ function LaunchingProgressShell({
   );
 }
 
-function LaunchingWarmupShell({ skillName }: { skillName: string }) {
+function LaunchingWarmupShell({ skillName, skillPath }: { skillName: string; skillPath: string }) {
   return (
-    <LaunchingSessionShell skillName={skillName} status="preparing">
-      <LaunchWarmupSkeleton />
+    <LaunchingSessionShell skillName={skillName} status="preparing" contentClassName="px-4 py-4">
+      <LaunchWarmupSkeleton skillPath={skillPath} />
     </LaunchingSessionShell>
   );
 }
@@ -759,7 +773,7 @@ export default function SkillPage({
           needsWake={needsWake}
         />
       ) : showLaunchWarmup ? (
-        <LaunchingWarmupShell skillName={skillName} />
+        <LaunchingWarmupShell skillName={skillName} skillPath={skillKey} />
       ) : (
         <div className="relative z-10 flex flex-1 items-center justify-center px-6">
           <div className="w-full max-w-[640px]">
