@@ -101,14 +101,6 @@ export function chatStream(
       callbacks.onError(err)
     }
 
-    const markStreamActivity = () => {
-      if (!hadContent || settled || aborted) return
-      clearIdleDoneTimer()
-      idleDoneTimer = setTimeout(() => {
-        finalize({ hadContent }, true)
-      }, idleDoneTimeoutMs)
-    }
-
     try {
       const res = await fetch("/api/hermes", {
         method: "POST",
@@ -141,7 +133,16 @@ export function chatStream(
       let currentEventType = ""
 
       while (!aborted) {
-        const { done, value } = await reader.read()
+        let readResult: ReadableStreamReadResult<Uint8Array>
+        if (hadContent) {
+          const timeout = new Promise<ReadableStreamReadResult<Uint8Array>>((resolve) =>
+            setTimeout(() => resolve({ done: true, value: undefined as unknown as Uint8Array }), idleDoneTimeoutMs),
+          )
+          readResult = await Promise.race([reader.read(), timeout])
+        } else {
+          readResult = await reader.read()
+        }
+        const { done, value } = readResult
         if (done) break
 
         buffer += decoder.decode(value, { stream: true })
@@ -187,14 +188,14 @@ export function chatStream(
             if (currentEventType === "hermes.tool.progress") {
               callbacks.onToolProgress(parsed as ToolProgress)
               currentEventType = ""
-              markStreamActivity()
+
               continue
             }
 
             if (currentEventType === "reasoning") {
               callbacks.onReasoning?.(parsed.text ?? "")
               currentEventType = ""
-              markStreamActivity()
+
               continue
             }
 
@@ -205,7 +206,7 @@ export function chatStream(
                 args: parsed.args,
               })
               currentEventType = ""
-              markStreamActivity()
+
               continue
             }
 
@@ -218,7 +219,7 @@ export function chatStream(
                 is_error: parsed.is_error,
               })
               currentEventType = ""
-              markStreamActivity()
+
               continue
             }
 
@@ -256,7 +257,7 @@ export function chatStream(
                     if (remaining) {
                       hadContent = true
                       callbacks.onDelta(remaining)
-                      markStreamActivity()
+        
                     }
                   } else {
                     callbacks.onReasoning?.(thinkBuffer)
@@ -267,7 +268,7 @@ export function chatStream(
                 thinkDecided = true
                 hadContent = true
                 callbacks.onDelta(rawContent)
-                markStreamActivity()
+  
                 continue
               }
 
@@ -286,7 +287,7 @@ export function chatStream(
                   if (remaining) {
                     hadContent = true
                     callbacks.onDelta(remaining)
-                    markStreamActivity()
+      
                   }
                 } else {
                   callbacks.onReasoning?.(delta.content)
@@ -296,7 +297,7 @@ export function chatStream(
 
               hadContent = true
               callbacks.onDelta(delta.content)
-              markStreamActivity()
+
             }
 
             if (finishReason === "stop") {
