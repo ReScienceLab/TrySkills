@@ -391,11 +391,14 @@ export default function SkillPage({
   };
 
   const hasCompleteConfig = !!(savedConfig?.llmKey && savedConfig?.sandboxKey);
+  const sandboxQueryReady = userSandbox !== undefined;
+  const resumeSessionReady = !resumeSessionId || resumeSession !== undefined;
 
   useEffect(() => {
     if (autoLaunchLock.get(skillKey) || autoLaunchFired.current || userCancelled.current) return;
     if (phase !== "config") return;
-    if (!isSignedIn || keysLoading || !savedConfig) return;
+    if (!isSignedIn || !isAuthenticated || keysLoading || !savedConfig) return;
+    if (!sandboxQueryReady || !resumeSessionReady) return;
     if (!savedConfig.llmKey || !savedConfig.sandboxKey) return;
     const provider = getProvider(savedConfig.providerId);
     if (!provider) return;
@@ -410,7 +413,7 @@ export default function SkillPage({
       envVars: savedConfig.envVars,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSignedIn, keysLoading, savedConfig, phase]);
+  }, [isSignedIn, isAuthenticated, keysLoading, savedConfig, phase, sandboxQueryReady, resumeSessionReady]);
 
   useEffect(() => {
     const cleanup = () => {
