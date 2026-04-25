@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { renderHook } from "@testing-library/react"
+import { act, renderHook } from "@testing-library/react"
 
 vi.mock("@/lib/sandbox/hermes-api", () => ({
   chatStream: vi.fn(),
@@ -47,6 +47,50 @@ describe("useChat", () => {
     expect(mockChatStream).not.toHaveBeenCalled()
     expect(result.current.isStreaming).toBe(false)
     expect(result.current.messages).toHaveLength(0)
+  })
+
+  it("does not clear local messages when a new session hydrates with empty messages", async () => {
+    type Props = {
+      initialSessionId?: string
+      initialMessages?: { role: "user" | "assistant" | "system"; content: string }[]
+    }
+
+    const { result, rerender } = renderHook(
+      (props: Props) =>
+        useChat(
+          "https://8642-abc.daytonaproxy01.net",
+          "claude-3",
+          "test-skill",
+          undefined,
+          undefined,
+          props.initialSessionId,
+          "org/repo/test-skill",
+          props.initialMessages,
+        ),
+      { initialProps: {} },
+    )
+
+    await vi.waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalled()
+    })
+
+    act(() => {
+      result.current.send("Use skill_view to introduce this skill.")
+    })
+
+    expect(result.current.messages).toEqual([
+      { role: "user", content: "Use skill_view to introduce this skill." },
+    ])
+
+    rerender({ initialSessionId: "test-session-id", initialMessages: [] })
+
+    await vi.waitFor(() => {
+      expect(result.current.sessionId).toBe("test-session-id")
+    })
+
+    expect(result.current.messages).toEqual([
+      { role: "user", content: "Use skill_view to introduce this skill." },
+    ])
   })
 
   it("does not init when gatewayBaseUrl is null", () => {

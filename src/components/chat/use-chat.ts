@@ -231,7 +231,10 @@ export function useChat(
 
     const messagesKey = initialMessages ? `${initialSessionId ?? "new"}:${initialMessages.length}` : null
     if (initialMessages && hydratedMessagesRef.current !== messagesKey) {
-      setMessages(initialMessages)
+      setMessages((prev) => {
+        if (initialMessages.length === 0 && prev.length > 0) return prev
+        return initialMessages
+      })
       hydratedMessagesRef.current = messagesKey
     }
   }, [initialSessionId, initialMessages, initialWorkspacePath])
