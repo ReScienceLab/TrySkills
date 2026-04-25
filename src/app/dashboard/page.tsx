@@ -6,7 +6,6 @@ import { SignInButton } from "@clerk/nextjs";
 import { useQuery, useMutation } from "convex/react";
 import { useConvexAuth } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import { GlowMesh } from "@/components/glow-mesh";
 import { SiteHeader } from "@/components/site-header";
 import { destroySandbox } from "@/lib/sandbox/daytona";
 import { useKeyStore } from "@/hooks/use-key-store";
@@ -102,8 +101,7 @@ export default function DashboardPage() {
 
   if (!isLoaded) {
     return (
-      <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
-        <GlowMesh />
+      <main className="relative min-h-screen bg-black flex flex-col overflow-hidden">
         <SiteHeader />
         <div className="flex-1 flex items-center justify-center">
           <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
@@ -114,8 +112,7 @@ export default function DashboardPage() {
 
   if (!isSignedIn) {
     return (
-      <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
-        <GlowMesh />
+      <main className="relative min-h-screen bg-black flex flex-col overflow-hidden">
         <SiteHeader />
         <div className="flex-1 flex items-center justify-center relative z-10 px-6">
           <div className="border border-white/20 bg-black/40 backdrop-blur-sm p-8 text-center max-w-md">
@@ -164,8 +161,7 @@ export default function DashboardPage() {
   const disk = sandbox?.disk;
 
   return (
-    <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
-      <GlowMesh />
+    <main className="relative min-h-screen bg-black flex flex-col overflow-hidden">
       <SiteHeader />
 
       <div className="flex-1 relative z-10 px-6 pt-20 pb-10">

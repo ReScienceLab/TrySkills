@@ -21,7 +21,6 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { ConfigPanel, type LaunchConfig } from "@/components/config-panel";
 import { LaunchProgress, type LaunchMode } from "@/components/launch-progress";
 import { ChatPanel } from "@/components/chat/chat-panel";
-import { GlowMesh } from "@/components/glow-mesh";
 import { SiteHeader } from "@/components/site-header";
 import { resolveSkillPath, fetchSkillContent } from "@/lib/skill/resolver";
 import { createHermesSandbox, destroySandbox, installSkill, type SkillSource } from "@/lib/sandbox/daytona";
@@ -238,7 +237,6 @@ export default function SkillPage({
       } catch (err) {
         const msg = err instanceof Error ? err.message.toLowerCase() : "";
         if (msg.includes("not found")) {
-          console.error("[install] Sandbox not found in Daytona, removing stale record");
           await removeSandboxRecord({ sandboxId: sandbox.sandboxId }).catch(() => {});
           // Fall through to cold create path below
         } else {
@@ -500,8 +498,7 @@ export default function SkillPage({
 
   if (!isValidPath) {
     return (
-      <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
-        <GlowMesh />
+      <main className="relative min-h-screen bg-black flex flex-col overflow-hidden">
         <SiteHeader />
         <div className="flex-1 flex items-center justify-center relative z-10 px-6">
           <div className="flex flex-col items-center animate-fade-in">
@@ -518,8 +515,7 @@ export default function SkillPage({
   const readyToAutoLaunch = isSignedIn && !keysLoading && hasCompleteConfig && !userCancelled.current && !autoLaunchLock.get(skillKey);
 
   return (
-    <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
-      <GlowMesh />
+    <main className="relative min-h-screen bg-black flex flex-col overflow-hidden">
       <SiteHeader breadcrumb={`${owner}/${repo}/${skillName}`} />
 
       {showEnvPrompt && detectedEnvVars.length > 0 && (
@@ -534,7 +530,7 @@ export default function SkillPage({
       )}
 
       {phase === "running" && session ? (
-        <div className={`flex-1 relative z-10 overflow-hidden pt-14 ${workspace.panelOpen ? "lg:pr-[360px]" : ""}`}>
+        <div className={`flex-1 relative z-10 overflow-hidden bg-black pt-14 ${workspace.panelOpen ? "lg:pr-[360px]" : ""}`}>
           {/* Chat column */}
           <div className="flex-1 min-w-0 max-w-4xl mx-auto">
             {resumeSessionId && resumeSession === undefined ? (
