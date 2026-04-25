@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeHighlight from "rehype-highlight"
 import type { FileContent } from "@/lib/workspace/types"
@@ -11,13 +12,29 @@ export function FileViewer({
   loading,
   error,
   onClose,
+  sandboxId,
+  sandboxKey,
 }: {
   filePath: string | null
   content: FileContent | null
   loading: boolean
   error: string | null
   onClose: () => void
+  sandboxId?: string | null
+  sandboxKey?: string | null
 }) {
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    setMediaUrl(null)
+    if (!content || (content.type !== "audio" && content.type !== "video")) return
+    if (!filePath || !sandboxId || !sandboxKey) return
+    const params = new URLSearchParams({ action: "media-url", sandboxId, key: sandboxKey, path: filePath })
+    fetch(`/api/workspace?${params}`)
+      .then((r) => r.json())
+      .then((data) => { if (data.url) setMediaUrl(data.url) })
+      .catch(() => {})
+  }, [content, filePath, sandboxId, sandboxKey])
   if (!filePath) {
     return (
       <div className="flex-1 flex items-center justify-center text-[11px] text-white/15">
@@ -64,13 +81,21 @@ export function FileViewer({
 
         {!loading && !error && content && content.type === "audio" && (
           <div className="p-4">
-            <audio controls src={content.content} className="w-full" />
+            {mediaUrl ? (
+              <audio controls src={mediaUrl} className="w-full" />
+            ) : (
+              <div className="text-[12px] text-white/30 animate-pulse">Loading audio...</div>
+            )}
           </div>
         )}
 
         {!loading && !error && content && content.type === "video" && (
           <div className="p-4">
-            <video controls src={content.content} className="max-w-full rounded border border-white/10" />
+            {mediaUrl ? (
+              <video controls src={mediaUrl} className="max-w-full rounded border border-white/10" />
+            ) : (
+              <div className="text-[12px] text-white/30 animate-pulse">Loading video...</div>
+            )}
           </div>
         )}
 

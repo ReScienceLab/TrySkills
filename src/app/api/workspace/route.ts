@@ -16,7 +16,7 @@ const IGNORED_DIRS = new Set([
 ])
 
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico"])
-const AUDIO_EXTS = new Set([".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a", ".webm"])
+const AUDIO_EXTS = new Set([".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a"])
 const VIDEO_EXTS = new Set([".mp4", ".webm", ".mov", ".avi", ".mkv"])
 
 interface FileEntry {
@@ -241,7 +241,24 @@ export async function GET(request: NextRequest) {
       if (!filePath) {
         return NextResponse.json({ error: "Missing path" }, { status: 400 })
       }
-      const workspaceDir = filePath.substring(0, filePath.lastIndexOf("/")) || "/root"
+      if (!SAFE_PATH_RE.test(filePath)) {
+        return NextResponse.json({ error: "Invalid path characters" }, { status: 400 })
+      }
+      const normalized = normalizePosixPath(filePath)
+      if (!normalized.startsWith(WORKSPACE_PREFIX) || normalized.includes("..")) {
+        return NextResponse.json({ error: "Path must be under workspace" }, { status: 403 })
+      }
+      if (!isAudioFile(normalized) && !isVideoFile(normalized)) {
+        return NextResponse.json({ error: "Not an audio/video file" }, { status: 400 })
+      }
+      // Extract workspace root (e.g. /root/.hermes/workspaces/abc123)
+      const afterPrefix = normalized.slice(WORKSPACE_PREFIX.length)
+      const wsId = afterPrefix.split("/")[0]
+      if (!wsId) {
+        return NextResponse.json({ error: "Invalid workspace path" }, { status: 400 })
+      }
+      const workspaceRoot = WORKSPACE_PREFIX + wsId
+      const relativePath = normalized.slice(workspaceRoot.length + 1)
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const checkResult: any = await sandbox.process.executeCommand(
@@ -249,21 +266,19 @@ export async function GET(request: NextRequest) {
         )
         const checkOutput = (checkResult.result?.output ?? checkResult.output ?? checkResult.result ?? "").toString().trim()
         if (checkOutput !== "running") {
+          // Start file server from workspace root -- no shell interpolation of user input
           await sandbox.process.executeCommand(
-            `cd "${workspaceDir}" && nohup python3 -m http.server ${FILE_SERVER_PORT} --bind 0.0.0.0 > /dev/null 2>&1 &`,
+            ["sh", "-c", `cd '${workspaceRoot}' && nohup python3 -m http.server ${FILE_SERVER_PORT} --bind 0.0.0.0 > /dev/null 2>&1 &`].join(" "),
           )
           await new Promise((r) => setTimeout(r, 1000))
         }
       } catch {
         // Best effort
       }
-      const fileName = filePath.split("/").pop() || ""
-      const relativePath = filePath.startsWith(workspaceDir + "/")
-        ? filePath.slice(workspaceDir.length + 1)
-        : fileName
       const signedPreview = await sandbox.getSignedPreviewUrl(FILE_SERVER_PORT, FILE_SERVER_URL_TTL)
       const mediaUrl = `${signedPreview.url}/${encodeURIComponent(relativePath)}`
-      return NextResponse.json({ url: mediaUrl, fileName, path: filePath })
+      const fileName = normalized.split("/").pop() || ""
+      return NextResponse.json({ url: mediaUrl, fileName, path: normalized })
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 })

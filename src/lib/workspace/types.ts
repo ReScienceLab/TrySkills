@@ -41,7 +41,7 @@ export const IGNORED_DIRS = new Set([
 
 export const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "ico"])
 
-export const AUDIO_EXTS = new Set(["mp3", "wav", "ogg", "flac", "aac", "m4a", "webm"])
+export const AUDIO_EXTS = new Set(["mp3", "wav", "ogg", "flac", "aac", "m4a"])
 
 export const VIDEO_EXTS = new Set(["mp4", "webm", "mov", "avi", "mkv"])
 

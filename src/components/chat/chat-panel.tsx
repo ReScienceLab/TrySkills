@@ -332,7 +332,7 @@ function WorkspaceImage({ src, alt, sandboxId, sandboxKey, workspacePath, varian
   )
 }
 
-const AUDIO_EXTS_SET = new Set(["mp3", "wav", "ogg", "flac", "aac", "m4a", "webm"])
+const AUDIO_EXTS_SET = new Set(["mp3", "wav", "ogg", "flac", "aac", "m4a"])
 const VIDEO_EXTS_SET = new Set(["mp4", "webm", "mov", "avi", "mkv"])
 
 function getMediaType(filename: string): "audio" | "video" | null {
