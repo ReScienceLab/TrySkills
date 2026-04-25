@@ -257,8 +257,9 @@ export async function GET(request: NextRequest) {
       if (!wsId) {
         return NextResponse.json({ error: "Invalid workspace path" }, { status: 400 })
       }
-      const workspaceRoot = WORKSPACE_PREFIX + wsId
-      const relativePath = normalized.slice(workspaceRoot.length + 1)
+      // Build path relative to /root/.hermes/workspaces/ (stable server root)
+      const relativePath = normalized.slice(WORKSPACE_PREFIX.length)
+      const serverRoot = WORKSPACE_PREFIX.replace(/\/$/, "")
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const checkResult: any = await sandbox.process.executeCommand(
@@ -266,9 +267,9 @@ export async function GET(request: NextRequest) {
         )
         const checkOutput = (checkResult.result?.output ?? checkResult.output ?? checkResult.result ?? "").toString().trim()
         if (checkOutput !== "running") {
-          // Start file server from workspace root -- no shell interpolation of user input
+          // Serve from /root/.hermes/workspaces so one server handles all workspaces
           await sandbox.process.executeCommand(
-            ["sh", "-c", `cd '${workspaceRoot}' && nohup python3 -m http.server ${FILE_SERVER_PORT} --bind 0.0.0.0 > /dev/null 2>&1 &`].join(" "),
+            `nohup python3 -m http.server ${FILE_SERVER_PORT} --bind 0.0.0.0 --directory ${serverRoot} > /dev/null 2>&1 &`,
           )
           await new Promise((r) => setTimeout(r, 1000))
         }
