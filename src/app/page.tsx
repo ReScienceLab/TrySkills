@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { SignInButton, useAuth } from "@clerk/nextjs"
 import { Github, NousResearch } from "@lobehub/icons"
 import {
   ArrowLeft,
   ArrowRight,
   BookOpenText,
+  CornerDownLeft,
   Globe2,
   LockKeyhole,
   Search,
@@ -223,6 +224,26 @@ export default function Home() {
     setRepoBranch(undefined)
   }
 
+  const canConfigureLaunch = phase === "tree" && authLoaded && isSignedIn && !treeLoading && !!parsedPath
+  const goToConfigureLaunch = useCallback(() => {
+    if (parsedPath) window.location.href = parsedPath
+  }, [parsedPath])
+
+  useEffect(() => {
+    if (!canConfigureLaunch) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Enter" || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+      const target = event.target as HTMLElement | null
+      if (target?.closest("a, button, input, textarea, select, [contenteditable='true']")) return
+      event.preventDefault()
+      goToConfigureLaunch()
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [canConfigureLaunch, goToConfigureLaunch])
+
   const skillName = parsedPath?.split("/").filter(Boolean).slice(2).join("/") || ""
 
   return (
@@ -355,15 +376,14 @@ export default function Home() {
                 </Button>
               ) : isSignedIn ? (
                 <Button
-                  onClick={() => {
-                    if (parsedPath) window.location.href = parsedPath
-                  }}
+                  onClick={goToConfigureLaunch}
                   disabled={treeLoading || !parsedPath}
                   className="w-full"
                   size="lg"
+                  aria-keyshortcuts="Enter"
                 >
                   Configure & Launch
-                  <ArrowRight className="size-4" />
+                  <CornerDownLeft className="size-4" />
                 </Button>
               ) : (
                 <SignInButton mode="modal" forceRedirectUrl={parsedPath || "/"}>
