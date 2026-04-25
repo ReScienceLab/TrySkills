@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react"
+import { useState, useRef, useEffect, useCallback, useMemo, isValidElement, type ReactNode } from "react"
 import { useChat, type ToolCall, type ChatError } from "./use-chat"
 import { formatUploadedFilesMessage, isPreviewableImageName, type UploadedFile } from "./upload-message"
 import type { ChatMessage } from "@/lib/sandbox/hermes-api"
@@ -32,13 +32,13 @@ import { Button } from "@/components/ui/button"
 import {
   CreditCard, KeyRound, Clock, MailX, AlertTriangle, Globe,
   X, ImageIcon, Paperclip, Upload,
-  Music, Video,
+  Music, Video, Copy, Check,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
 const MAX_UPLOAD_SIZE = 4 * 1024 * 1024
 const CHAT_STREAMDOWN_CONTROLS: MessageResponseProps["controls"] = {
-  code: { copy: true, download: false },
+  code: false,
   table: { copy: true, download: true, fullscreen: true },
   mermaid: { copy: true, download: true, fullscreen: true, panZoom: true },
 }
@@ -386,6 +386,44 @@ function WorkspaceMedia({ src, alt, sandboxId, sandboxKey, workspacePath }: {
 
 type StreamdownComponents = NonNullable<MessageResponseProps["components"]>
 
+function textFromReactNode(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node)
+  if (Array.isArray(node)) return node.map(textFromReactNode).join("")
+  if (isValidElement<{ children?: ReactNode }>(node)) return textFromReactNode(node.props.children)
+  return ""
+}
+
+function ChatCodeBlock({ className, children }: { className?: string; children: ReactNode }) {
+  const [copied, setCopied] = useState(false)
+  const language = className?.match(/language-([^\s]+)/)?.[1]
+  const code = textFromReactNode(children).replace(/\n$/, "")
+
+  const copyCode = async () => {
+    await navigator.clipboard?.writeText(code)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1400)
+  }
+
+  return (
+    <div
+      className="not-prose group/code relative my-3 block overflow-hidden rounded-lg bg-[#050505] shadow-[var(--shadow-card)]"
+      data-language={language || undefined}
+    >
+      <button
+        type="button"
+        aria-label="Copy code"
+        onClick={() => void copyCode()}
+        className="absolute right-2 top-2 z-10 inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-muted-foreground opacity-70 transition-colors hover:bg-white/[0.06] hover:text-foreground group-hover/code:opacity-100"
+      >
+        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
+      <pre className="m-0 overflow-x-auto p-3 pr-12 font-mono text-[13px] leading-relaxed text-[#58a6ff]">
+        <code>{code}</code>
+      </pre>
+    </div>
+  )
+}
+
 function createStreamdownComponents({
   sandboxId,
   sandboxKey,
@@ -398,6 +436,14 @@ function createStreamdownComponents({
   isUser: boolean
 }): StreamdownComponents {
   return {
+    code: ({ className, children, ...props }) => {
+      const { node, ...codeProps } = props
+      void node
+      if (!("data-block" in codeProps)) {
+        return <code className={className} {...codeProps}>{children}</code>
+      }
+      return <ChatCodeBlock className={className}>{children}</ChatCodeBlock>
+    },
     img: (props) => {
       const imgSrc = typeof props.src === "string" ? props.src : undefined
       const imgAlt = typeof props.alt === "string" ? props.alt : undefined
@@ -460,9 +506,10 @@ function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath, isStreamingC
       <Message from="user" className="mb-4">
         <MessageContent className="max-w-[85%] rounded-lg rounded-br-[3px] bg-[#111111] px-4 py-2.5 shadow-[var(--shadow-border)]">
           <MessageResponse
-            className="streamdown-chat prose prose-invert prose-sm max-w-none whitespace-pre-wrap text-foreground [&_code]:text-[#58a6ff] [&_li]:my-0 [&_p]:my-0 [&_p+p]:mt-2 [&_ul]:my-2"
+            className="prose prose-invert prose-sm max-w-none whitespace-pre-wrap text-foreground [&_code]:text-[#58a6ff] [&_li]:my-0 [&_p]:my-0 [&_p+p]:mt-2 [&_ul]:my-2"
             components={streamComponents}
             controls={CHAT_STREAMDOWN_CONTROLS}
+            lineNumbers={false}
             mode="static"
           >
             {msg.content}
@@ -477,9 +524,10 @@ function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath, isStreamingC
       {msg.content && (
         <MessageContent className="w-full max-w-full">
           <MessageResponse
-            className="streamdown-chat prose prose-invert prose-sm max-w-none text-foreground/90 [&_a]:text-[#58a6ff] [&_a:hover]:underline [&_code]:text-[#58a6ff] [&_pre]:rounded-[6px] [&_pre]:bg-[#0a0a0a] [&_pre]:shadow-[var(--shadow-border)]"
+            className="prose prose-invert prose-sm max-w-none text-foreground/90 [&_a]:text-[#58a6ff] [&_a:hover]:underline [&_code]:text-[#58a6ff]"
             components={streamComponents}
             controls={CHAT_STREAMDOWN_CONTROLS}
+            lineNumbers={false}
             mode={isStreamingContent ? "streaming" : "static"}
             parseIncompleteMarkdown={isStreamingContent}
           >
