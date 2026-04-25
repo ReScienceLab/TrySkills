@@ -37,6 +37,11 @@ export default function DashboardPage() {
   const chatSessionsList = useQuery(api.chatSessions.list, isAuthenticated ? {} : "skip");
   const removeSandbox = useMutation(api.sandboxes.remove);
   const removeChatSession = useMutation(api.chatSessions.remove);
+  const dataLoading = isAuthenticated && (
+    sandboxes === undefined ||
+    trials === undefined ||
+    chatSessionsList === undefined
+  );
 
   const STALE_PENDING_MS = 5 * 60 * 1000;
   const sandboxList = sandboxes ?? [];
@@ -183,7 +188,12 @@ export default function DashboardPage() {
               </span>
             </div>
 
-            {isCreating && !isRealSandbox ? (
+            {dataLoading ? (
+              <div className="text-sm text-white/40 flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full border-2 border-white/10 border-t-white/40 animate-spin" />
+                Loading sandbox...
+              </div>
+            ) : isCreating && !isRealSandbox ? (
               <div className="text-sm text-blue-400/60 flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full border-2 border-blue-400/30 border-t-blue-400/70 animate-spin" />
                 Creating sandbox...
@@ -287,13 +297,18 @@ export default function DashboardPage() {
           </div>
 
           {/* Chat Sessions */}
-          {sessions.length > 0 && (
+          {(dataLoading || sessions.length > 0) && (
             <div className="border border-white/10 bg-black/40 backdrop-blur-sm p-6 mb-8">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-medium text-white/90">Chat Sessions</h2>
               </div>
 
-              {sessions.length === 0 ? (
+              {dataLoading ? (
+                <div className="text-sm text-white/40 flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full border-2 border-white/10 border-t-white/40 animate-spin" />
+                  Loading sessions...
+                </div>
+              ) : sessions.length === 0 ? (
                 <div className="text-sm text-white/40">
                   No chat sessions yet. Start chatting with a skill to create one.
                 </div>
@@ -354,7 +369,12 @@ export default function DashboardPage() {
           <div className="border border-white/10 bg-black/40 backdrop-blur-sm p-6">
             <h2 className="text-lg font-medium text-white/90 mb-4">Skill Trials</h2>
 
-            {trialList.length === 0 ? (
+            {dataLoading ? (
+              <div className="text-sm text-white/40 flex items-center gap-2 py-8">
+                <div className="w-3 h-3 rounded-full border-2 border-white/10 border-t-white/40 animate-spin" />
+                Loading skill trials...
+              </div>
+            ) : trialList.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-sm text-white/40 mb-4">No skills tried yet.</p>
                 <a href="/" className="inline-block px-6 py-3 bg-white text-black text-sm font-medium hover:bg-white/90 transition-all">
