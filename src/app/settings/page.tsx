@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
-import { Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { PROVIDERS } from "@/lib/providers/registry";
 import { useKeyStore } from "@/hooks/use-key-store";
 import { ProviderSection } from "@/components/provider-config";
@@ -11,21 +11,52 @@ import { EnvVarsEditor } from "@/components/env-vars-editor";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Surface } from "@/components/product-ui";
+
+function SettingsPageSkeleton() {
+  return (
+    <main className="relative flex min-h-screen flex-col overflow-hidden bg-background">
+      <SiteHeader />
+      <div className="relative z-10 flex flex-1 items-center justify-center px-6 pb-10 pt-20">
+        <div className="w-full max-w-[640px]">
+          <Skeleton className="mb-8 h-8 w-32" />
+          <div className="mb-6">
+            <Skeleton className="mb-3 h-4 w-32" />
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <Surface key={index} className="p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-36" />
+                      <Skeleton className="h-3 w-48" />
+                    </div>
+                    <Skeleton className="h-8 w-24 rounded-[6px]" />
+                  </div>
+                </Surface>
+              ))}
+            </div>
+          </div>
+          <Surface className="mb-4 p-6">
+            <Skeleton className="mb-5 h-5 w-28" />
+            <Skeleton className="h-10 rounded-[6px]" />
+          </Surface>
+          <Surface className="p-6">
+            <Skeleton className="mb-5 h-5 w-44" />
+            <Skeleton className="h-10 rounded-[6px]" />
+          </Surface>
+        </div>
+      </div>
+    </main>
+  );
+}
 
 export default function SettingsPage() {
   const { isSignedIn, isLoaded } = useAuth();
   const { config: savedConfig, loading, save, clear } = useKeyStore();
 
   if (!isLoaded || loading) {
-    return (
-      <main className="relative flex min-h-screen flex-col overflow-hidden bg-background">
-        <SiteHeader />
-        <div className="flex flex-1 items-center justify-center">
-          <Loader2 className="size-8 animate-spin text-muted-foreground" />
-        </div>
-      </main>
-    );
+    return <SettingsPageSkeleton />;
   }
 
   if (!isSignedIn) {

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
-import { Folder, Loader2, LockKeyhole } from "lucide-react";
+import { Folder, LockKeyhole } from "lucide-react";
 
 async function computeConfigHash(provider: string, model: string, key: string, envVars?: Record<string, string>): Promise<string> {
   const envPart = envVars && Object.keys(envVars).length > 0
@@ -35,11 +35,37 @@ import { WorkspacePanel } from "@/components/workspace/workspace-panel";
 import { useWorkspace } from "@/hooks/use-workspace";
 import type { SandboxState, SandboxSession } from "@/lib/sandbox/types";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Surface } from "@/components/product-ui";
+import { SandboxSkeleton } from "@/components/sandbox-skeleton";
 
 type AppPhase = "config" | "launching" | "running";
 
 const autoLaunchLock = new Map<string, boolean>();
+
+function SkillConfigSkeleton() {
+  return (
+    <Surface className="p-6">
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <div className="space-y-2">
+          <Skeleton className="h-3 w-28" />
+          <Skeleton className="h-6 w-56" />
+        </div>
+        <Skeleton className="h-8 w-24 rounded-[6px]" />
+      </div>
+      <div className="space-y-4">
+        <div className="grid gap-2 sm:grid-cols-3">
+          <Skeleton className="h-10 rounded-[6px]" />
+          <Skeleton className="h-10 rounded-[6px]" />
+          <Skeleton className="h-10 rounded-[6px]" />
+        </div>
+        <Skeleton className="h-10 rounded-[6px]" />
+        <Skeleton className="h-10 rounded-[6px]" />
+        <Skeleton className="h-10 rounded-[6px]" />
+      </div>
+    </Surface>
+  );
+}
 
 export default function SkillPage({
   params,
@@ -543,8 +569,8 @@ export default function SkillPage({
           {/* Chat column */}
           <div className="mx-auto min-w-0 max-w-4xl flex-1">
             {isResumeSessionLoading ? (
-              <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center">
-                <div className="text-sm text-muted-foreground">Loading chat session...</div>
+              <div className="px-6 pt-16">
+                <SandboxSkeleton skillName={skillName} />
               </div>
             ) : (
               <ChatPanel
@@ -620,8 +646,8 @@ export default function SkillPage({
         <div className="relative z-10 flex flex-1 items-center justify-center px-6">
           <div className="w-full max-w-[640px]">
           {phase === "config" && !authLoaded && (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="size-8 animate-spin text-muted-foreground" />
+            <div className="py-4">
+              <SkillConfigSkeleton />
             </div>
           )}
 
@@ -641,8 +667,8 @@ export default function SkillPage({
           )}
 
           {phase === "config" && isSignedIn && keysLoading && (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="size-8 animate-spin text-muted-foreground" />
+            <div className="py-4">
+              <SkillConfigSkeleton />
             </div>
           )}
 
@@ -662,8 +688,8 @@ export default function SkillPage({
           )}
 
           {phase === "config" && readyToAutoLaunch && (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="size-8 animate-spin text-muted-foreground" />
+            <div className="py-4">
+              <SandboxSkeleton skillName={skillName} />
             </div>
           )}
 

@@ -98,6 +98,33 @@ function DashboardRowsSkeleton({ rows = 3 }: { rows?: number }) {
   );
 }
 
+function DashboardPageSkeleton() {
+  return (
+    <main className="relative flex min-h-screen flex-col overflow-hidden bg-background">
+      <SiteHeader />
+      <div className="relative z-10 flex-1 px-6 pb-10 pt-20">
+        <div className="mx-auto max-w-4xl">
+          <Skeleton className="mb-8 h-8 w-40" />
+          <Surface className="mb-8 p-6">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <Skeleton className="size-7 rounded-full" />
+                <Skeleton className="h-6 w-36" />
+              </div>
+              <Skeleton className="h-6 w-16 rounded-full" />
+            </div>
+            <SandboxDetailsSkeleton />
+          </Surface>
+          <Surface className="p-6">
+            <Skeleton className="mb-4 h-6 w-36" />
+            <DashboardRowsSkeleton rows={3} />
+          </Surface>
+        </div>
+      </div>
+    </main>
+  );
+}
+
 export default function DashboardPage() {
   const { isSignedIn, isLoaded } = useAuth();
   const { isAuthenticated } = useConvexAuth();
@@ -181,14 +208,7 @@ export default function DashboardPage() {
   };
 
   if (!isLoaded) {
-    return (
-      <main className="relative flex min-h-screen flex-col overflow-hidden bg-background">
-        <SiteHeader />
-        <div className="flex flex-1 items-center justify-center">
-          <Loader2 className="size-8 animate-spin text-muted-foreground" />
-        </div>
-      </main>
-    );
+    return <DashboardPageSkeleton />;
   }
 
   if (!isSignedIn) {

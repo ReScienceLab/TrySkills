@@ -61,7 +61,7 @@ export function WorkspacePanel({
         <Folder className="h-4 w-4 text-muted-foreground" />
         <span className="flex-1 text-[13px] font-medium text-foreground">Workspace</span>
         {loadingTree && entries.length > 0 && (
-          <div className="h-3 w-3 animate-spin rounded-full border border-white/10 border-t-white/50" />
+          <Skeleton className="h-3 w-10 rounded-full" />
         )}
         <Button
           type="button"
