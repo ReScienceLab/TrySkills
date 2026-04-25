@@ -8,51 +8,56 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { StatusBadge, Surface } from "@/components/product-ui"
 import type { DiscoveredSkill } from "@/lib/skill/discovery"
 
-function SkillCard({ skill, onClick }: { skill: DiscoveredSkill; onClick: () => void }) {
+function SkillRow({ skill, index, owner, repo, onClick }: { skill: DiscoveredSkill; index: number; owner: string; repo: string; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="group text-left"
+      className="group grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 px-3 py-4 text-left transition-colors hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:grid-cols-[3rem_minmax(0,1.05fr)_minmax(12rem,1fr)_auto] sm:px-4"
     >
-      <Surface className="h-full p-4 transition-shadow group-hover:shadow-[var(--shadow-card-hover)]">
-        <div className="flex h-full items-start gap-3">
+      <span className="font-mono text-xs text-muted-foreground tabular-nums">
+        {index.toString().padStart(2, "0")}
+      </span>
+      <span className="flex min-w-0 items-center gap-3">
+        <span className="flex size-5 shrink-0 items-center justify-center">
           {skill.icon ? (
-            <span className="mt-0.5 shrink-0 text-lg">{skill.icon}</span>
+            <span className="text-base leading-none">{skill.icon}</span>
           ) : (
-            <span className="mt-1 size-2 shrink-0 rounded-full bg-[#58a6ff]" />
+            <span className="size-2 rounded-full bg-[#58a6ff]" />
           )}
-          <div className="min-w-0 flex-1">
-            <h3 className="truncate text-sm font-medium text-foreground transition-colors">
-              {skill.name}
-            </h3>
-            {skill.description && (
-              <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-                {skill.description}
-              </p>
-            )}
-            <span className="mt-3 block truncate font-mono text-[11px] text-muted-foreground">
-              {skill.skillName}
-            </span>
-          </div>
-          <ArrowRight className="mt-0.5 size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-        </div>
-      </Surface>
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium text-foreground">
+            {skill.name}
+          </span>
+          <span className="mt-1 block truncate font-mono text-[11px] text-muted-foreground">
+            {owner}/{repo}/{skill.skillName}
+          </span>
+        </span>
+      </span>
+      <span className="hidden min-w-0 text-sm leading-6 text-muted-foreground sm:block">
+        <span className="line-clamp-2">{skill.description || "No description provided."}</span>
+      </span>
+      <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
     </button>
   )
 }
 
-function SkeletonCard() {
+function SkeletonRow({ index }: { index: number }) {
   return (
-    <Surface className="p-4">
-      <div className="flex items-start gap-3">
-        <Skeleton className="size-5 shrink-0 rounded-[6px]" />
-        <div className="flex-1 space-y-2">
-          <Skeleton className="h-4 w-2/3" />
-          <Skeleton className="h-3 w-full" />
-          <Skeleton className="h-3 w-1/2" />
+    <div className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 px-3 py-4 sm:grid-cols-[3rem_minmax(0,1.05fr)_minmax(12rem,1fr)_auto] sm:px-4">
+      <span className="font-mono text-xs text-muted-foreground/60 tabular-nums">
+        {index.toString().padStart(2, "0")}
+      </span>
+      <div className="flex items-center gap-3">
+        <Skeleton className="size-5 shrink-0 rounded-full" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-3 w-56 max-w-full" />
         </div>
       </div>
-    </Surface>
+      <Skeleton className="hidden h-4 w-full sm:block" />
+      <Skeleton className="size-4" />
+    </div>
   )
 }
 
@@ -91,10 +96,18 @@ export function SkillPicker({
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <SkeletonCard key={i} />
-          ))}
+        <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-border)]">
+          <div className="hidden grid-cols-[3rem_minmax(0,1.05fr)_minmax(12rem,1fr)_auto] gap-3 px-4 py-3 font-mono text-[11px] uppercase text-muted-foreground shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.08)] sm:grid">
+            <span>#</span>
+            <span>Skill</span>
+            <span>Description</span>
+            <span />
+          </div>
+          <div className="divide-y divide-white/[0.08]">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonRow key={i} index={i + 1} />
+            ))}
+          </div>
         </div>
       ) : error ? (
         <Surface className="bg-[rgba(255,91,79,0.08)] px-4 py-3">
@@ -109,14 +122,25 @@ export function SkillPicker({
           </p>
         </Surface>
       ) : skills ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {skills.map((skill) => (
-            <SkillCard
-              key={skill.skillPath}
-              skill={skill}
-              onClick={() => onSelect(skill)}
-            />
-          ))}
+        <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-border)]">
+          <div className="hidden grid-cols-[3rem_minmax(0,1.05fr)_minmax(12rem,1fr)_auto] gap-3 px-4 py-3 font-mono text-[11px] uppercase text-muted-foreground shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.08)] sm:grid">
+            <span>#</span>
+            <span>Skill</span>
+            <span>Description</span>
+            <span />
+          </div>
+          <div className="divide-y divide-white/[0.08]">
+            {skills.map((skill, index) => (
+              <SkillRow
+                key={skill.skillPath}
+                skill={skill}
+                index={index + 1}
+                owner={owner}
+                repo={repo}
+                onClick={() => onSelect(skill)}
+              />
+            ))}
+          </div>
         </div>
       ) : null}
 
