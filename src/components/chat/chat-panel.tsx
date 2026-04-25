@@ -804,7 +804,7 @@ export function ChatPanel({
 
   return (
     <div
-      className="flex flex-col h-[calc(100vh-56px)] w-full relative"
+      className="flex flex-col h-[calc(100vh-56px)] w-full relative bg-black"
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -821,7 +821,7 @@ export function ChatPanel({
       )}
 
       {/* TopBar */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 shrink-0" aria-label={`Skill ${skillName} active for ${formatTime(elapsed)}`}>
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 bg-black shrink-0" aria-label={`Skill ${skillName} active for ${formatTime(elapsed)}`}>
         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" aria-hidden="true" />
         <span className="text-sm text-white/70 font-mono">{skillName}</span>
         <span className="text-xs text-white/30 font-mono">{formatTime(elapsed)}</span>
@@ -847,7 +847,7 @@ export function ChatPanel({
       {creditWarning && <CreditWarningBanner message={creditWarning} />}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="flex-1 overflow-y-auto bg-black px-4 py-4">
         {segments.length > 0 ? (
           <>
             {/* Previous messages; skip last if it's the assistant message mirrored by segments */}
@@ -899,7 +899,7 @@ export function ChatPanel({
       </div>
 
       {/* Input */}
-      <div className="shrink-0 border-t border-white/10 px-4 py-3">
+      <div className="shrink-0 border-t border-white/10 bg-black px-4 py-3">
         {/* Attachment tray */}
         {pendingFiles.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">

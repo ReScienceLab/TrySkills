@@ -208,11 +208,62 @@ export function useChat(
   onToolCompleteRef.current = onToolComplete
   const segmentsRef = useRef<Segment[]>([])
   const textOffsetRef = useRef(0)
+  const pendingToolCompletionsRef = useRef<Set<string>>(new Set())
+  const toolCompletionFlushRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hydratedMessagesRef = useRef<string | null>(
+    initialMessages ? `${initialSessionId ?? "new"}:${initialMessages.length}` : null,
+  )
 
   const createSession = useMutation(api.chatSessions.create)
   const appendMessages = useMutation(api.chatSessions.appendMessages)
 
   const thinkingRef = useRef("")
+  const workspacePathRef = useRef<string | null>(initialWorkspacePath ?? null)
+
+  const scheduleToolComplete = useCallback((toolName?: string) => {
+    if (!toolName) return
+    pendingToolCompletionsRef.current.add(toolName)
+    if (toolCompletionFlushRef.current) return
+    toolCompletionFlushRef.current = setTimeout(() => {
+      toolCompletionFlushRef.current = null
+      const names = Array.from(pendingToolCompletionsRef.current)
+      pendingToolCompletionsRef.current.clear()
+      for (const name of names) {
+        onToolCompleteRef.current?.(name)
+      }
+    }, 0)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (toolCompletionFlushRef.current) {
+        clearTimeout(toolCompletionFlushRef.current)
+        toolCompletionFlushRef.current = null
+      }
+      pendingToolCompletionsRef.current.clear()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (initialSessionId && sessionIdRef.current !== initialSessionId) {
+      sessionIdRef.current = initialSessionId
+      setSessionId(initialSessionId)
+    }
+
+    if (initialWorkspacePath && workspacePathRef.current !== initialWorkspacePath) {
+      workspacePathRef.current = initialWorkspacePath
+      setWorkspacePath(initialWorkspacePath)
+    }
+
+    const messagesKey = initialMessages ? `${initialSessionId ?? "new"}:${initialMessages.length}` : null
+    if (initialMessages && hydratedMessagesRef.current !== messagesKey) {
+      setMessages((prev) => {
+        if (initialMessages.length === 0 && prev.length > 0) return prev
+        return initialMessages
+      })
+      hydratedMessagesRef.current = messagesKey
+    }
+  }, [initialSessionId, initialMessages, initialWorkspacePath])
 
   const handleError = useCallback(
     (err: Error) => {
@@ -220,7 +271,7 @@ export function useChat(
       setIsThinking(false)
       setToolCalls((prev) => {
         for (const t of prev.filter((tc) => tc.status === "running")) {
-          onToolCompleteRef.current?.(t.name)
+          scheduleToolComplete(t.name)
         }
         return prev.map((t) => ({ ...t, status: "done" as const }))
       })
@@ -231,7 +282,7 @@ export function useChat(
       ))
       setError(classifyError(err, providerId))
     },
-    [providerId],
+    [providerId, scheduleToolComplete],
   )
 
   const handleDone = useCallback(
@@ -271,8 +322,6 @@ export function useChat(
     },
     [appendMessages],
   )
-
-  const workspacePathRef = useRef<string | null>(initialWorkspacePath ?? null)
 
   const stream = useCallback(
     (allMessages: ChatMessage[]) => {
@@ -336,7 +385,7 @@ export function useChat(
             setToolCalls((prev) => {
               const running = prev.filter((t) => t.status === "running")
               for (const t of running) {
-                onToolCompleteRef.current?.(t.name)
+                scheduleToolComplete(t.name)
               }
               const existing = prev.find((t) => t.name === tool.tool && t.status === "running")
               if (existing) return prev
@@ -362,7 +411,7 @@ export function useChat(
             setToolCalls((prev) => {
               const running = prev.filter((t) => t.status === "running")
               for (const t of running) {
-                onToolCompleteRef.current?.(t.name)
+                scheduleToolComplete(t.name)
               }
               return [
                 ...prev.map((t) => t.status === "running" ? { ...t, status: "done" as const } : t),
@@ -412,7 +461,7 @@ export function useChat(
                 duration: tool.duration,
                 isError: tool.is_error,
               }
-              onToolCompleteRef.current?.(updated[realIdx].name)
+              scheduleToolComplete(updated[realIdx].name)
               return updated
             })
             // Update matching tool segment, or append done segment if no match
@@ -446,7 +495,7 @@ export function useChat(
             setIsThinking(false)
             setToolCalls((prev) => {
               for (const t of prev.filter((tc) => tc.status === "running")) {
-                onToolCompleteRef.current?.(t.name)
+                scheduleToolComplete(t.name)
               }
               return prev.map((t) => ({ ...t, status: "done" as const }))
             })
@@ -464,7 +513,7 @@ export function useChat(
       )
       cancelRef.current = cancel
     },
-    [gatewayBaseUrl, model, handleDone, handleError, saveToSession],
+    [gatewayBaseUrl, model, handleDone, handleError, saveToSession, scheduleToolComplete],
   )
 
   const send = useCallback(
@@ -489,7 +538,7 @@ export function useChat(
     setIsThinking(false)
     setToolCalls((prev) => {
       for (const t of prev.filter((tc) => tc.status === "running")) {
-        onToolCompleteRef.current?.(t.name)
+        scheduleToolComplete(t.name)
       }
       return prev.map((t) => ({ ...t, status: "done" as const }))
     })
@@ -501,7 +550,7 @@ export function useChat(
         ? prev.slice(0, -1)
         : prev,
     )
-  }, [])
+  }, [scheduleToolComplete])
 
   // Pre-flight credit check (OpenRouter only, blocks auto-init until done)
   useEffect(() => {

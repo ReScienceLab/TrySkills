@@ -29,6 +29,7 @@ export function useWorkspace(
 
   const lastRefreshRef = useRef(0)
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const toolRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hasLoadedRef = useRef(false)
 
   const refreshTree = useCallback(async () => {
@@ -77,10 +78,21 @@ export function useWorkspace(
   }, [])
 
   const onToolComplete = useCallback((toolName: string) => {
-    if (FILE_MODIFYING_TOOLS.has(toolName)) {
+    if (!FILE_MODIFYING_TOOLS.has(toolName) || toolRefreshTimerRef.current) return
+    toolRefreshTimerRef.current = setTimeout(() => {
+      toolRefreshTimerRef.current = null
       void refreshTree()
-    }
+    }, 0)
   }, [refreshTree])
+
+  useEffect(() => {
+    return () => {
+      if (toolRefreshTimerRef.current) {
+        clearTimeout(toolRefreshTimerRef.current)
+        toolRefreshTimerRef.current = null
+      }
+    }
+  }, [])
 
   // Initial load
   useEffect(() => {

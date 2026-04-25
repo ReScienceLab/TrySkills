@@ -7,7 +7,6 @@ import { PROVIDERS, type Provider } from "@/lib/providers/registry";
 import { useKeyStore } from "@/hooks/use-key-store";
 import { ProviderSection } from "@/components/provider-config";
 import { EnvVarsEditor } from "@/components/env-vars-editor";
-import { GlowMesh } from "@/components/glow-mesh";
 import { SiteHeader } from "@/components/site-header";
 
 export default function SettingsPage() {
@@ -16,8 +15,7 @@ export default function SettingsPage() {
 
   if (!isLoaded || loading) {
     return (
-      <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
-        <GlowMesh />
+      <main className="relative min-h-screen bg-black flex flex-col overflow-hidden">
         <SiteHeader />
         <div className="flex-1 flex items-center justify-center">
           <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
@@ -28,8 +26,7 @@ export default function SettingsPage() {
 
   if (!isSignedIn) {
     return (
-      <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
-        <GlowMesh />
+      <main className="relative min-h-screen bg-black flex flex-col overflow-hidden">
         <SiteHeader />
         <div className="flex-1 flex items-center justify-center relative z-10 px-6">
           <div className="border border-white/20 bg-black/40 backdrop-blur-sm p-8 text-center max-w-md">
@@ -113,8 +110,7 @@ function SettingsForm({
   };
 
   return (
-    <main className="relative min-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
-      <GlowMesh />
+    <main className="relative min-h-screen bg-black flex flex-col overflow-hidden">
       <SiteHeader />
 
       <div className="flex-1 flex items-center justify-center relative z-10 px-6 pt-20 pb-10">
