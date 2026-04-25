@@ -40,6 +40,14 @@ function getCommandOutput(result: CommandResult): string {
     .trim();
 }
 
+function cleanCommandOutput(output: string): string {
+  return output
+    .replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "")
+    .replace(/\r/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 async function discoverSkillsOnDisk(sandbox: DaytonaSandbox): Promise<string[]> {
   try {
     const result = await sandbox.process.executeCommand(
@@ -227,12 +235,12 @@ async function npxSkillsInstall(
   // npx skills CLI matches by canonical skill name (leaf segment only)
   const leafName = skill.split("/").pop() || skill;
 
-  const cmd = `npx -y skills add ${owner}/${repo} --skill "${leafName}" --agent universal -g -y --copy 2>&1`;
+  const cmd = `NO_COLOR=1 CI=1 npx -y skills add ${owner}/${repo} --skill "${leafName}" --agent universal -g -y --copy --full-depth 2>&1`;
   const result = await sandbox.process.executeCommand(cmd);
   if (result.exitCode !== 0) {
-    const output = getCommandOutput(result);
+    const output = cleanCommandOutput(getCommandOutput(result));
     throw new Error(
-      `npx skills add failed (exit ${result.exitCode}): ${output.slice(0, 200)}`,
+      `npx skills add failed (exit ${result.exitCode}): ${output.slice(0, 500)}`,
     );
   }
   log("npx skills add succeeded");
