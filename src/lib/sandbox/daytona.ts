@@ -15,6 +15,14 @@ const SIGNED_URL_TTL_SECONDS = 3600;
 const SIGNED_URL_FRESH_MS = 50 * 60 * 1000;
 const COLD_RESOURCES = { cpu: 2, memory: 4, disk: 10 };
 const HERMES_HOME = "/root/.hermes";
+const DAYTONA_NETWORK_ALLOW_LIST =
+  process.env.DAYTONA_NETWORK_ALLOW_LIST?.trim() || "0.0.0.0/0";
+const DAYTONA_NETWORK_SETTINGS = {
+  public: true,
+  networkBlockAll: false,
+  // Daytona only accepts IPv4 CIDR allow lists; org tier policy may still cap egress.
+  networkAllowList: DAYTONA_NETWORK_ALLOW_LIST,
+};
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getCommandOutput(result: any): string {
@@ -271,8 +279,7 @@ export async function createHermesSandbox(
         autoStopInterval: AUTO_STOP_MINUTES,
         autoArchiveInterval: AUTO_ARCHIVE_MINUTES,
         autoDeleteInterval: AUTO_DELETE_MINUTES,
-        public: true,
-        networkBlockAll: false,
+        ...DAYTONA_NETWORK_SETTINGS,
         labels,
         envVars: {
           [providerMapping.envVar]: config.llmApiKey,
@@ -303,8 +310,7 @@ export async function createHermesSandbox(
           autoStopInterval: AUTO_STOP_MINUTES,
           autoArchiveInterval: AUTO_ARCHIVE_MINUTES,
           autoDeleteInterval: AUTO_DELETE_MINUTES,
-          public: true,
-          networkBlockAll: false,
+          ...DAYTONA_NETWORK_SETTINGS,
           labels,
           resources: COLD_RESOURCES,
           envVars: {
@@ -330,8 +336,7 @@ export async function createHermesSandbox(
           autoStopInterval: AUTO_STOP_MINUTES,
           autoArchiveInterval: AUTO_ARCHIVE_MINUTES,
           autoDeleteInterval: AUTO_DELETE_MINUTES,
-          public: true,
-          networkBlockAll: false,
+          ...DAYTONA_NETWORK_SETTINGS,
           labels,
           envVars: {
             [providerMapping.envVar]: config.llmApiKey,
