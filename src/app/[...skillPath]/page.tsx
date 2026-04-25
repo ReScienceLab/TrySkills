@@ -515,6 +515,8 @@ export default function SkillPage({
 
   const needsOnboarding = isSignedIn && !keysLoading && !hasCompleteConfig && !userCancelled.current;
   const readyToAutoLaunch = isSignedIn && !keysLoading && hasCompleteConfig && !userCancelled.current && !autoLaunchLock.get(skillKey);
+  const isResumeSessionLoading = !!resumeSessionId && (!isAuthenticated || resumeSession === undefined);
+  const verifiedResumeSessionId = resumeSession ? resumeSessionId : undefined;
 
   return (
     <main className="relative min-h-screen bg-black flex flex-col overflow-hidden">
@@ -535,36 +537,42 @@ export default function SkillPage({
         <div className={`flex-1 relative z-10 overflow-hidden bg-black pt-14 ${workspace.panelOpen ? "lg:pr-[360px]" : ""}`}>
           {/* Chat column */}
           <div className="flex-1 min-w-0 max-w-4xl mx-auto">
-            <ChatPanel
-              gatewayBaseUrl={session.gatewayBaseUrl || session.gatewayUrl}
-              model={savedConfig?.model || "anthropic/claude-sonnet-4"}
-              skillName={skillName}
-              skillPath={skillKey}
-              startedAt={session.startedAt}
-              providerId={savedConfig?.providerId}
-              apiKey={savedConfig?.llmKey}
-              initialSessionId={resumeSessionId}
-              initialMessages={resumeSession?.messages}
-              sandboxId={session.sandboxId}
-              sandboxKey={savedConfig?.sandboxKey}
-              initialWorkspacePath={resumeSession?.workspacePath}
-              onStop={handleStop}
-              onTryAnother={handleTryAnother}
-              onToolComplete={workspace.onToolComplete}
-              onWorkspacePathChange={handleWorkspacePathChange}
-              onStreamingChange={handleStreamingChange}
-              onSessionError={async () => {
-                if (session?.sandboxId && launchConfigRef.current) {
-                  destroySandbox(launchConfigRef.current.sandboxKey, session.sandboxId).catch(() => {});
-                  await removeSandboxRecord({ sandboxId: session.sandboxId }).catch(() => {});
-                }
-                setSession(null);
-                sessionRef.current = null;
-                autoLaunchFired.current = false;
-                autoLaunchLock.delete(skillKey);
-                setPhase("config");
-              }}
-            />
+            {isResumeSessionLoading ? (
+              <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center">
+                <div className="text-sm text-white/55">Loading chat session...</div>
+              </div>
+            ) : (
+              <ChatPanel
+                gatewayBaseUrl={session.gatewayBaseUrl || session.gatewayUrl}
+                model={savedConfig?.model || "anthropic/claude-sonnet-4"}
+                skillName={skillName}
+                skillPath={skillKey}
+                startedAt={session.startedAt}
+                providerId={savedConfig?.providerId}
+                apiKey={savedConfig?.llmKey}
+                initialSessionId={verifiedResumeSessionId}
+                initialMessages={resumeSession?.messages}
+                sandboxId={session.sandboxId}
+                sandboxKey={savedConfig?.sandboxKey}
+                initialWorkspacePath={resumeSession?.workspacePath}
+                onStop={handleStop}
+                onTryAnother={handleTryAnother}
+                onToolComplete={workspace.onToolComplete}
+                onWorkspacePathChange={handleWorkspacePathChange}
+                onStreamingChange={handleStreamingChange}
+                onSessionError={async () => {
+                  if (session?.sandboxId && launchConfigRef.current) {
+                    destroySandbox(launchConfigRef.current.sandboxKey, session.sandboxId).catch(() => {});
+                    await removeSandboxRecord({ sandboxId: session.sandboxId }).catch(() => {});
+                  }
+                  setSession(null);
+                  sessionRef.current = null;
+                  autoLaunchFired.current = false;
+                  autoLaunchLock.delete(skillKey);
+                  setPhase("config");
+                }}
+              />
+            )}
           </div>
 
           {/* Workspace panel */}
