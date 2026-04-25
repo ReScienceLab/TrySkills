@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useCallback, use } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, use, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
@@ -37,33 +37,138 @@ import type { SandboxState, SandboxSession } from "@/lib/sandbox/types";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Surface } from "@/components/product-ui";
-import { SandboxSkeleton } from "@/components/sandbox-skeleton";
 
 type AppPhase = "config" | "launching" | "running";
 
 const autoLaunchLock = new Map<string, boolean>();
 
-function SkillConfigSkeleton() {
+function LaunchWarmupSkeleton() {
   return (
-    <Surface className="p-6">
-      <div className="mb-6 flex items-center justify-between gap-3">
-        <div className="space-y-2">
-          <Skeleton className="h-3 w-28" />
-          <Skeleton className="h-6 w-56" />
+    <div className="mx-auto max-w-[640px]">
+      <Surface className="p-6">
+        <div className="mb-6 flex items-center gap-3">
+          <Skeleton className="size-8 rounded-[6px]" />
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-3 w-72 max-w-full" />
+          </div>
+          <Skeleton className="ml-auto h-6 w-20 rounded-full" />
         </div>
-        <Skeleton className="h-8 w-24 rounded-[6px]" />
-      </div>
-      <div className="space-y-4">
-        <div className="grid gap-2 sm:grid-cols-3">
-          <Skeleton className="h-10 rounded-[6px]" />
-          <Skeleton className="h-10 rounded-[6px]" />
-          <Skeleton className="h-10 rounded-[6px]" />
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="flex gap-4">
+              <Skeleton className="size-8 shrink-0 rounded-full" />
+              <div className="flex-1 space-y-2 pb-2">
+                <Skeleton className={index === 0 ? "h-4 w-40" : index === 1 ? "h-4 w-52" : "h-4 w-24"} />
+                {index === 0 && <Skeleton className="h-3 w-64 max-w-full" />}
+              </div>
+            </div>
+          ))}
         </div>
-        <Skeleton className="h-10 rounded-[6px]" />
-        <Skeleton className="h-10 rounded-[6px]" />
-        <Skeleton className="h-10 rounded-[6px]" />
+      </Surface>
+    </div>
+  );
+}
+
+function LaunchingSessionShell({
+  skillName,
+  status,
+  children,
+}: {
+  skillName: string;
+  status: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="relative z-10 flex-1 overflow-hidden bg-background pt-14">
+      <div className="mx-auto min-w-0 max-w-4xl flex-1">
+        <div className="relative flex h-[calc(100vh-56px)] w-full flex-col bg-background">
+          <div className="flex shrink-0 items-center gap-3 bg-background px-4 py-3 shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.08)]">
+            <div className="h-2 w-2 rounded-full bg-[#0a72ef]" aria-hidden="true" />
+            <span className="font-mono text-sm text-foreground">{skillName}</span>
+            <span className="font-mono text-xs text-muted-foreground">{status}</span>
+          </div>
+
+          <div className="flex flex-1 items-center overflow-y-auto bg-background px-4 py-8">
+            {children}
+          </div>
+
+          <div className="shrink-0 bg-background px-4 py-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
+            <div className="flex items-end gap-2">
+              <Skeleton className="size-9 shrink-0 rounded-[6px]" />
+              <Skeleton className="h-11 flex-1 rounded-lg" />
+              <Button type="button" disabled className="shrink-0">
+                Send
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
-    </Surface>
+    </div>
+  );
+}
+
+function LaunchingProgressShell({
+  skillName,
+  state,
+  error,
+  onRetry,
+  onCancel,
+  mode,
+  needsWake,
+}: {
+  skillName: string;
+  state: SandboxState;
+  error?: string;
+  onRetry: () => void;
+  onCancel: () => void;
+  mode: LaunchMode;
+  needsWake: boolean;
+}) {
+  return (
+    <LaunchingSessionShell skillName={skillName} status="launching">
+      <div className="mx-auto w-full max-w-[640px]">
+        <LaunchProgress
+          state={state}
+          error={error}
+          onRetry={onRetry}
+          onCancel={onCancel}
+          mode={mode}
+          needsWake={needsWake}
+        />
+      </div>
+    </LaunchingSessionShell>
+  );
+}
+
+function LaunchingWarmupShell({ skillName }: { skillName: string }) {
+  return (
+    <LaunchingSessionShell skillName={skillName} status="preparing">
+      <LaunchWarmupSkeleton />
+    </LaunchingSessionShell>
+  );
+}
+
+function ResumeSessionShell({ skillName }: { skillName: string }) {
+  return (
+    <LaunchingSessionShell skillName={skillName} status="resuming">
+      <div className="mx-auto w-full max-w-[640px] space-y-4">
+        <div className="flex gap-3">
+          <Skeleton className="size-8 shrink-0 rounded-full" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-4 w-full max-w-[560px]" />
+            <Skeleton className="h-4 w-full max-w-[420px]" />
+          </div>
+        </div>
+        <div className="flex gap-3">
+          <Skeleton className="size-8 shrink-0 rounded-full" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-4 w-full max-w-[500px]" />
+            <Skeleton className="h-4 w-full max-w-[360px]" />
+          </div>
+        </div>
+      </div>
+    </LaunchingSessionShell>
   );
 }
 
@@ -548,6 +653,11 @@ export default function SkillPage({
   const readyToAutoLaunch = isSignedIn && !keysLoading && hasCompleteConfig && !userCancelled;
   const isResumeSessionLoading = !!resumeSessionId && (!isAuthenticated || resumeSession === undefined);
   const verifiedResumeSessionId = resumeSession ? resumeSessionId : undefined;
+  const showLaunchWarmup = phase === "config" && (
+    !authLoaded ||
+    (isSignedIn && keysLoading) ||
+    readyToAutoLaunch
+  );
 
   return (
     <main className="relative flex min-h-screen flex-col overflow-hidden bg-background">
@@ -564,46 +674,42 @@ export default function SkillPage({
         />
       )}
 
-      {phase === "running" && session ? (
+      {phase === "running" && session && isResumeSessionLoading ? (
+        <ResumeSessionShell skillName={skillName} />
+      ) : phase === "running" && session ? (
         <div className={`relative z-10 flex-1 overflow-hidden bg-background pt-14 ${workspace.panelOpen ? "lg:pr-[360px]" : ""}`}>
           {/* Chat column */}
           <div className="mx-auto min-w-0 max-w-4xl flex-1">
-            {isResumeSessionLoading ? (
-              <div className="px-6 pt-16">
-                <SandboxSkeleton skillName={skillName} />
-              </div>
-            ) : (
-              <ChatPanel
-                gatewayBaseUrl={session.gatewayBaseUrl || session.gatewayUrl}
-                model={savedConfig?.model || "anthropic/claude-sonnet-4"}
-                skillName={skillName}
-                skillPath={skillKey}
-                startedAt={session.startedAt}
-                providerId={savedConfig?.providerId}
-                apiKey={savedConfig?.llmKey}
-                initialSessionId={verifiedResumeSessionId}
-                initialMessages={resumeSession?.messages}
-                sandboxId={session.sandboxId}
-                sandboxKey={savedConfig?.sandboxKey}
-                initialWorkspacePath={resumeSession?.workspacePath}
-                onStop={handleStop}
-                onTryAnother={handleTryAnother}
-                onToolComplete={workspace.onToolComplete}
-                onWorkspacePathChange={handleWorkspacePathChange}
-                onStreamingChange={handleStreamingChange}
-                onSessionError={async () => {
-                  if (session?.sandboxId && launchConfigRef.current) {
-                    destroySandbox(launchConfigRef.current.sandboxKey, session.sandboxId).catch(() => {});
-                    await removeSandboxRecord({ sandboxId: session.sandboxId }).catch(() => {});
-                  }
-                  setSession(null);
-                  sessionRef.current = null;
-                  autoLaunchFired.current = false;
-                  autoLaunchLock.delete(skillKey);
-                  setPhase("config");
-                }}
-              />
-            )}
+            <ChatPanel
+              gatewayBaseUrl={session.gatewayBaseUrl || session.gatewayUrl}
+              model={savedConfig?.model || "anthropic/claude-sonnet-4"}
+              skillName={skillName}
+              skillPath={skillKey}
+              startedAt={session.startedAt}
+              providerId={savedConfig?.providerId}
+              apiKey={savedConfig?.llmKey}
+              initialSessionId={verifiedResumeSessionId}
+              initialMessages={resumeSession?.messages}
+              sandboxId={session.sandboxId}
+              sandboxKey={savedConfig?.sandboxKey}
+              initialWorkspacePath={resumeSession?.workspacePath}
+              onStop={handleStop}
+              onTryAnother={handleTryAnother}
+              onToolComplete={workspace.onToolComplete}
+              onWorkspacePathChange={handleWorkspacePathChange}
+              onStreamingChange={handleStreamingChange}
+              onSessionError={async () => {
+                if (session?.sandboxId && launchConfigRef.current) {
+                  destroySandbox(launchConfigRef.current.sandboxKey, session.sandboxId).catch(() => {});
+                  await removeSandboxRecord({ sandboxId: session.sandboxId }).catch(() => {});
+                }
+                setSession(null);
+                sessionRef.current = null;
+                autoLaunchFired.current = false;
+                autoLaunchLock.delete(skillKey);
+                setPhase("config");
+              }}
+            />
           </div>
 
           {/* Workspace panel */}
@@ -642,15 +748,21 @@ export default function SkillPage({
             </Button>
           )}
         </div>
+      ) : phase === "launching" ? (
+        <LaunchingProgressShell
+          skillName={skillName}
+          state={sandboxState}
+          error={sandboxError}
+          onRetry={handleRetryLaunch}
+          onCancel={handleCancel}
+          mode={launchMode}
+          needsWake={needsWake}
+        />
+      ) : showLaunchWarmup ? (
+        <LaunchingWarmupShell skillName={skillName} />
       ) : (
         <div className="relative z-10 flex flex-1 items-center justify-center px-6">
           <div className="w-full max-w-[640px]">
-          {phase === "config" && !authLoaded && (
-            <div className="py-4">
-              <SkillConfigSkeleton />
-            </div>
-          )}
-
           {phase === "config" && authLoaded && !isSignedIn && (
             <div className="animate-fade-in">
               <Surface className="p-8 text-center">
@@ -663,12 +775,6 @@ export default function SkillPage({
                   <Button>Sign in with GitHub</Button>
                 </SignInButton>
               </Surface>
-            </div>
-          )}
-
-          {phase === "config" && isSignedIn && keysLoading && (
-            <div className="py-4">
-              <SkillConfigSkeleton />
             </div>
           )}
 
@@ -685,25 +791,6 @@ export default function SkillPage({
               onLaunch={handleLaunch}
               onBack={() => { window.location.assign("/"); }}
             />
-          )}
-
-          {phase === "config" && readyToAutoLaunch && (
-            <div className="py-4">
-              <SandboxSkeleton skillName={skillName} />
-            </div>
-          )}
-
-          {phase === "launching" && (
-            <div className="space-y-6">
-              <LaunchProgress
-                state={sandboxState}
-                error={sandboxError}
-                onRetry={handleRetryLaunch}
-                onCancel={handleCancel}
-                mode={launchMode}
-                needsWake={needsWake}
-              />
-            </div>
           )}
         </div>
       </div>
