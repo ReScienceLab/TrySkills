@@ -587,6 +587,10 @@ export function ChatPanel({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const autoIntroSent = useRef(false)
+  const autoIntroPrompt = useMemo(
+    () => `Use skill_view to look up the /${skillPath} skill, then briefly introduce it - what it does, when to use it, and a quick example.`,
+    [skillPath],
+  )
 
   const mdComponents = useMemo(() => ({
     img: (props: React.ComponentProps<"img">) => {
@@ -617,8 +621,8 @@ export function ChatPanel({
   useEffect(() => {
     if (autoIntroSent.current || initialSessionId || initialMessages?.length || messages.length > 0 || !sessionId) return
     autoIntroSent.current = true
-    send(`Use skill_view to look up the /${skillPath} skill, then briefly introduce it - what it does, when to use it, and a quick example.`)
-  }, [sessionId, initialSessionId, initialMessages, messages.length, skillPath, send])
+    send(autoIntroPrompt)
+  }, [sessionId, initialSessionId, initialMessages, messages.length, autoIntroPrompt, send])
 
   // Propagate workspace path to parent for workspace panel
   useEffect(() => {
@@ -804,6 +808,7 @@ export function ChatPanel({
 
   const uploadReady = !!(sandboxId && sandboxKey && workspacePath)
   const canSend = ((input.trim() && true) || (pendingFiles.length > 0 && uploadReady)) && !isStreaming && !isUploading
+  const shouldShowOptimisticAutoIntro = !initialSessionId && !initialMessages?.length && messages.length === 0
 
   return (
     <div
@@ -883,6 +888,14 @@ export function ChatPanel({
           </>
         ) : (
           <>
+            {shouldShowOptimisticAutoIntro && (
+              <MessageBubble
+                msg={{ role: "user", content: autoIntroPrompt }}
+                sandboxId={sandboxId}
+                sandboxKey={sandboxKey}
+                workspacePath={workspacePath}
+              />
+            )}
             {messages.map((msg, i) => (
               <MessageBubble key={i} msg={msg} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
             ))}

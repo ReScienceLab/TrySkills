@@ -5,7 +5,6 @@ import { SignInButton, useAuth } from "@clerk/nextjs"
 import { Github, NousResearch } from "@lobehub/icons"
 import {
   ArrowLeft,
-  ArrowRight,
   BookOpenText,
   CornerDownLeft,
   Globe2,
@@ -293,7 +292,7 @@ export default function Home() {
                   </div>
                   <Button type="submit" size="lg" className="sm:w-auto">
                     Configure
-                    <ArrowRight className="size-4" />
+                    <CornerDownLeft className="size-4" />
                   </Button>
                 </div>
               </Surface>
