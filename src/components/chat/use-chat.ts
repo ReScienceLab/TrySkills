@@ -298,7 +298,7 @@ export function useChat(
         ? [
             {
               role: "system" as const,
-              content: `Use the directory ${wsDir} as your working directory for all file operations in this session. Create files, save outputs, and write results there. Create the directory first if it does not exist.\nWhen you create image files (PNG, SVG, JPG, etc.), display them inline using markdown image syntax: ![description](filename). Use relative filenames, not absolute paths or MEDIA: prefixes.`,
+              content: `Use the directory ${wsDir} as your working directory for all file operations in this session. Create files, save outputs, and write results there. Create the directory first if it does not exist.\nWhen you create media files (images, audio, video), display them inline using markdown syntax: ![description](filename) for images, [description](filename.mp3) for audio, [description](filename.mp4) for video. Use relative filenames, not absolute paths or MEDIA: prefixes.`,
             },
             ...allMessages,
           ]

@@ -62,6 +62,18 @@ export function FileViewer({
           </div>
         )}
 
+        {!loading && !error && content && content.type === "audio" && (
+          <div className="p-4">
+            <audio controls src={content.content} className="w-full" />
+          </div>
+        )}
+
+        {!loading && !error && content && content.type === "video" && (
+          <div className="p-4">
+            <video controls src={content.content} className="max-w-full rounded border border-white/10" />
+          </div>
+        )}
+
         {!loading && !error && content && content.type === "text" && isMarkdownFile(fileName) && (
           <div className="px-4 py-3 prose prose-invert prose-sm max-w-none text-white/70 [&_pre]:bg-white/[0.03] [&_pre]:border [&_pre]:border-white/[0.06] [&_pre]:rounded [&_code]:text-emerald-400/70 text-[12px] leading-relaxed">
             <ReactMarkdown rehypePlugins={[rehypeHighlight]}>

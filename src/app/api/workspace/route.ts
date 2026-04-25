@@ -7,6 +7,8 @@ const MAX_ENTRIES = 500
 const MAX_FILE_SIZE = 512 * 1024
 const MAX_UPLOAD_SIZE = 4 * 1024 * 1024 // 4MB (Vercel Functions body limit is 4.5MB)
 const MAX_IMAGE_READ_SIZE = 2 * 1024 * 1024 // 2MB max for image reads
+const FILE_SERVER_PORT = 9090
+const FILE_SERVER_URL_TTL = 3600
 
 const IGNORED_DIRS = new Set([
   "node_modules", ".git", ".next", ".turbo", ".cache",
@@ -14,6 +16,8 @@ const IGNORED_DIRS = new Set([
 ])
 
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico"])
+const AUDIO_EXTS = new Set([".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a", ".webm"])
+const VIDEO_EXTS = new Set([".mp4", ".webm", ".mov", ".avi", ".mkv"])
 
 interface FileEntry {
   name: string
@@ -35,6 +39,18 @@ function isImageFile(name: string): boolean {
   return IMAGE_EXTS.has(name.slice(dot).toLowerCase())
 }
 
+function isAudioFile(name: string): boolean {
+  const dot = name.lastIndexOf(".")
+  if (dot < 0) return false
+  return AUDIO_EXTS.has(name.slice(dot).toLowerCase())
+}
+
+function isVideoFile(name: string): boolean {
+  const dot = name.lastIndexOf(".")
+  if (dot < 0) return false
+  return VIDEO_EXTS.has(name.slice(dot).toLowerCase())
+}
+
 function getMimeType(name: string): string {
   const dot = name.lastIndexOf(".")
   if (dot < 0) return "application/octet-stream"
@@ -43,6 +59,10 @@ function getMimeType(name: string): string {
     ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
     ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml",
     ".ico": "image/x-icon",
+    ".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg",
+    ".flac": "audio/flac", ".aac": "audio/aac", ".m4a": "audio/mp4",
+    ".mp4": "video/mp4", ".mov": "video/quicktime", ".avi": "video/x-msvideo",
+    ".mkv": "video/x-matroska",
   }
   return map[ext] || "application/octet-stream"
 }
@@ -190,6 +210,16 @@ export async function GET(request: NextRequest) {
         })
       }
 
+      if (isAudioFile(filePath) || isVideoFile(filePath)) {
+        const mediaType = isAudioFile(filePath) ? "audio" : "video"
+        return NextResponse.json({
+          type: mediaType,
+          path: filePath,
+          content: "",
+          needsDirectUrl: true,
+        })
+      }
+
       const buffer = await sandbox.fs.downloadFile(filePath)
       const content = buffer.toString("utf8")
       if (content.length > MAX_FILE_SIZE) {
@@ -205,6 +235,35 @@ export async function GET(request: NextRequest) {
         path: filePath,
         content,
       })
+    }
+
+    if (action === "media-url") {
+      if (!filePath) {
+        return NextResponse.json({ error: "Missing path" }, { status: 400 })
+      }
+      const workspaceDir = filePath.substring(0, filePath.lastIndexOf("/")) || "/root"
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const checkResult: any = await sandbox.process.executeCommand(
+          `curl -sf http://localhost:${FILE_SERVER_PORT}/ >/dev/null 2>&1 && echo "running" || echo "stopped"`,
+        )
+        const checkOutput = (checkResult.result?.output ?? checkResult.output ?? checkResult.result ?? "").toString().trim()
+        if (checkOutput !== "running") {
+          await sandbox.process.executeCommand(
+            `cd "${workspaceDir}" && nohup python3 -m http.server ${FILE_SERVER_PORT} --bind 0.0.0.0 > /dev/null 2>&1 &`,
+          )
+          await new Promise((r) => setTimeout(r, 1000))
+        }
+      } catch {
+        // Best effort
+      }
+      const fileName = filePath.split("/").pop() || ""
+      const relativePath = filePath.startsWith(workspaceDir + "/")
+        ? filePath.slice(workspaceDir.length + 1)
+        : fileName
+      const signedPreview = await sandbox.getSignedPreviewUrl(FILE_SERVER_PORT, FILE_SERVER_URL_TTL)
+      const mediaUrl = `${signedPreview.url}/${encodeURIComponent(relativePath)}`
+      return NextResponse.json({ url: mediaUrl, fileName, path: filePath })
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 })
