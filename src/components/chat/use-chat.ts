@@ -346,10 +346,13 @@ export function useChat(
               ]
             })
             setIsThinking(false)
-            // Push tool segment for progress events too
+            // Push tool segment for progress events; finalize prior running tools
             const segs = segmentsRef.current
             const alreadyTracked = segs.some((s) => s.type === "tool" && s.tool.name === tool.tool && s.tool.status === "running")
             if (!alreadyTracked) {
+              for (const s of segs) {
+                if (s.type === "tool" && s.tool.status === "running") s.tool = { ...s.tool, status: "done" }
+              }
               textOffsetRef.current = currentContentRef.current.length
               segs.push({ type: "tool", tool: { name: tool.tool, emoji: tool.emoji, status: "running" } })
               setSegments([...segs])
@@ -372,7 +375,10 @@ export function useChat(
               ]
             })
             setIsThinking(false)
-            // Push tool segment; subsequent text tokens create a new text segment
+            // Finalize prior running tool segments, then push new one
+            for (const s of segmentsRef.current) {
+              if (s.type === "tool" && s.tool.status === "running") s.tool = { ...s.tool, status: "done" }
+            }
             textOffsetRef.current = currentContentRef.current.length
             const tc: ToolCall = { name: tool.name, status: "running", preview: tool.preview, args: tool.args }
             segmentsRef.current.push({ type: "tool", tool: tc })
@@ -409,8 +415,9 @@ export function useChat(
               onToolCompleteRef.current?.(updated[realIdx].name)
               return updated
             })
-            // Update matching tool segment
+            // Update matching tool segment, or append done segment if no match
             const segs = segmentsRef.current
+            let matched = false
             for (let i = segs.length - 1; i >= 0; i--) {
               const s = segs[i]
               if (s.type === "tool" && s.tool.status === "running" && (!tool.name || s.tool.name === tool.name)) {
@@ -422,8 +429,16 @@ export function useChat(
                   duration: tool.duration,
                   isError: tool.is_error,
                 }
+                matched = true
                 break
               }
+            }
+            if (!matched) {
+              textOffsetRef.current = currentContentRef.current.length
+              segs.push({
+                type: "tool",
+                tool: { name: tool.name, status: "done", preview: tool.preview, args: tool.args, duration: tool.duration, isError: tool.is_error },
+              })
             }
             setSegments([...segs])
           },
@@ -478,11 +493,9 @@ export function useChat(
       }
       return prev.map((t) => ({ ...t, status: "done" as const }))
     })
-    setSegments((prev) => prev.map((s) =>
-      s.type === "tool" && s.tool.status === "running"
-        ? { ...s, tool: { ...s.tool, status: "done" as const } }
-        : s
-    ))
+    setSegments([])
+    segmentsRef.current = []
+    textOffsetRef.current = 0
     setMessages((prev) =>
       prev.length > 0 && prev[prev.length - 1]?.role === "assistant"
         ? prev.slice(0, -1)
