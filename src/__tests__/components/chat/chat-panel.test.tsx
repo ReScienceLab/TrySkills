@@ -74,6 +74,61 @@ describe("ChatPanel", () => {
     })
   })
 
+  it("shows and sends the automatic intro for an empty resumed session", async () => {
+    const send = vi.fn()
+    mocks.useChat.mockReturnValue({
+      ...defaultChatState,
+      sessionId: "session-123",
+      send,
+    })
+
+    const { container } = render(
+      <ChatPanel
+        {...defaultProps}
+        initialSessionId="session-123"
+        initialMessages={[]}
+      />,
+    )
+
+    expect(container.textContent).toContain(
+      "Use skill_view to look up the /obra/superpowers/brainstorming skill",
+    )
+    await waitFor(() => {
+      expect(send).toHaveBeenCalledWith(
+        "Use skill_view to look up the /obra/superpowers/brainstorming skill, then briefly introduce it - what it does, when to use it, and a quick example.",
+      )
+    })
+  })
+
+  it("does not send the automatic intro for a resumed session with messages", async () => {
+    const send = vi.fn()
+    const initialMessages = [
+      { role: "user" as const, content: "Existing user message" },
+    ]
+    mocks.useChat.mockReturnValue({
+      ...defaultChatState,
+      messages: initialMessages,
+      sessionId: "session-123",
+      send,
+    })
+
+    const { container } = render(
+      <ChatPanel
+        {...defaultProps}
+        initialSessionId="session-123"
+        initialMessages={initialMessages}
+      />,
+    )
+
+    expect(container.textContent).toContain("Existing user message")
+    expect(container.textContent).not.toContain(
+      "Use skill_view to look up the /obra/superpowers/brainstorming skill",
+    )
+    await waitFor(() => {
+      expect(send).not.toHaveBeenCalled()
+    })
+  })
+
   it("focuses the message input when chat is ready", async () => {
     const { container } = render(<ChatPanel {...defaultProps} />)
 

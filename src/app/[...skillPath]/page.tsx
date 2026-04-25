@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
-import { Folder, LockKeyhole, Paperclip } from "lucide-react";
+import { Folder, LockKeyhole, Paperclip, X } from "lucide-react";
 
 async function computeConfigHash(provider: string, model: string, key: string, envVars?: Record<string, string>): Promise<string> {
   const envPart = envVars && Object.keys(envVars).length > 0
@@ -85,11 +85,13 @@ function LaunchingSessionShell({
   status,
   children,
   contentClassName = "flex items-center px-4 py-8",
+  action,
 }: {
   skillName: string;
   status: string;
   children: ReactNode;
   contentClassName?: string;
+  action?: ReactNode;
 }) {
   return (
     <div className="relative z-10 flex-1 overflow-hidden bg-background pt-14">
@@ -99,6 +101,7 @@ function LaunchingSessionShell({
             <div className="h-2 w-2 rounded-full bg-[#0a72ef]" aria-hidden="true" />
             <span className="font-mono text-sm text-foreground">{skillName}</span>
             <span className="font-mono text-xs text-muted-foreground">{status}</span>
+            {action && <div className="ml-auto">{action}</div>}
           </div>
 
           <div className={`flex-1 overflow-y-auto bg-background ${contentClassName}`}>
@@ -155,9 +158,38 @@ function LaunchingProgressShell({
   );
 }
 
-function LaunchingWarmupShell({ skillName, skillPath }: { skillName: string; skillPath: string }) {
+function getLaunchStatus(state: SandboxState, mode: LaunchMode, needsWake: boolean) {
+  if (state === "creating") return "creating sandbox";
+  if (state === "installing") return "installing runtime";
+  if (state === "configuring") return "configuring";
+  if (state === "uploading") return mode === "hotswap" && !needsWake ? "installing skill" : "uploading skill";
+  if (state === "starting") return needsWake ? "waking sandbox" : "starting agent";
+  return "preparing";
+}
+
+function LaunchingWarmupShell({
+  skillName,
+  skillPath,
+  status = "preparing",
+  onCancel,
+}: {
+  skillName: string;
+  skillPath: string;
+  status?: string;
+  onCancel?: () => void;
+}) {
   return (
-    <LaunchingSessionShell skillName={skillName} status="preparing" contentClassName="px-4 py-4">
+    <LaunchingSessionShell
+      skillName={skillName}
+      status={status}
+      contentClassName="px-4 py-4"
+      action={onCancel ? (
+        <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+          <X className="size-4" />
+          Cancel
+        </Button>
+      ) : undefined}
+    >
       <LaunchWarmupSkeleton skillPath={skillPath} />
     </LaunchingSessionShell>
   );
@@ -762,6 +794,13 @@ export default function SkillPage({
             </Button>
           )}
         </div>
+      ) : phase === "launching" && sandboxState !== "error" ? (
+        <LaunchingWarmupShell
+          skillName={skillName}
+          skillPath={skillKey}
+          status={getLaunchStatus(sandboxState, launchMode, needsWake)}
+          onCancel={handleCancel}
+        />
       ) : phase === "launching" ? (
         <LaunchingProgressShell
           skillName={skillName}

@@ -618,11 +618,13 @@ export function ChatPanel({
   const dragCounterRef = useRef(0)
   const uploadingRef = useRef(false)
 
+  const hasInitialMessages = (initialMessages?.length ?? 0) > 0
+
   useEffect(() => {
-    if (autoIntroSent.current || initialSessionId || initialMessages?.length || messages.length > 0 || !sessionId) return
+    if (autoIntroSent.current || hasInitialMessages || messages.length > 0 || !sessionId) return
     autoIntroSent.current = true
     send(autoIntroPrompt)
-  }, [sessionId, initialSessionId, initialMessages, messages.length, autoIntroPrompt, send])
+  }, [sessionId, hasInitialMessages, messages.length, autoIntroPrompt, send])
 
   // Propagate workspace path to parent for workspace panel
   useEffect(() => {
@@ -826,7 +828,7 @@ export function ChatPanel({
 
   const uploadReady = !!(sandboxId && sandboxKey && workspacePath)
   const canSend = ((input.trim() && true) || (pendingFiles.length > 0 && uploadReady)) && !isStreaming && !isUploading
-  const shouldShowOptimisticAutoIntro = !initialSessionId && !initialMessages?.length && messages.length === 0
+  const shouldShowOptimisticAutoIntro = !hasInitialMessages && messages.length === 0
 
   return (
     <div
