@@ -392,13 +392,12 @@ export default function SkillPage({
 
   const hasCompleteConfig = !!(savedConfig?.llmKey && savedConfig?.sandboxKey);
   const sandboxQueryReady = userSandbox !== undefined;
-  const resumeSessionReady = !resumeSessionId || resumeSession !== undefined;
 
   useEffect(() => {
     if (autoLaunchLock.get(skillKey) || autoLaunchFired.current || userCancelled.current) return;
     if (phase !== "config") return;
     if (!isSignedIn || !isAuthenticated || keysLoading || !savedConfig) return;
-    if (!sandboxQueryReady || !resumeSessionReady) return;
+    if (!sandboxQueryReady) return;
     if (!savedConfig.llmKey || !savedConfig.sandboxKey) return;
     const provider = getProvider(savedConfig.providerId);
     if (!provider) return;
@@ -413,7 +412,7 @@ export default function SkillPage({
       envVars: savedConfig.envVars,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSignedIn, isAuthenticated, keysLoading, savedConfig, phase, sandboxQueryReady, resumeSessionReady]);
+  }, [isSignedIn, isAuthenticated, keysLoading, savedConfig, phase, sandboxQueryReady]);
 
   useEffect(() => {
     const cleanup = () => {
@@ -536,42 +535,36 @@ export default function SkillPage({
         <div className={`flex-1 relative z-10 overflow-hidden bg-black pt-14 ${workspace.panelOpen ? "lg:pr-[360px]" : ""}`}>
           {/* Chat column */}
           <div className="flex-1 min-w-0 max-w-4xl mx-auto">
-            {resumeSessionId && resumeSession === undefined ? (
-              <div className="flex items-center justify-center py-20">
-                <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
-              </div>
-            ) : (
-              <ChatPanel
-                gatewayBaseUrl={session.gatewayBaseUrl || session.gatewayUrl}
-                model={savedConfig?.model || "anthropic/claude-sonnet-4"}
-                skillName={skillName}
-                skillPath={skillKey}
-                startedAt={session.startedAt}
-                providerId={savedConfig?.providerId}
-                apiKey={savedConfig?.llmKey}
-                initialSessionId={resumeSession ? resumeSessionId : undefined}
-                initialMessages={resumeSession?.messages}
-                sandboxId={session.sandboxId}
-                sandboxKey={savedConfig?.sandboxKey}
-                initialWorkspacePath={resumeSession?.workspacePath}
-                onStop={handleStop}
-                onTryAnother={handleTryAnother}
-                onToolComplete={workspace.onToolComplete}
-                onWorkspacePathChange={handleWorkspacePathChange}
-                onStreamingChange={handleStreamingChange}
-                onSessionError={async () => {
-                  if (session?.sandboxId && launchConfigRef.current) {
-                    destroySandbox(launchConfigRef.current.sandboxKey, session.sandboxId).catch(() => {});
-                    await removeSandboxRecord({ sandboxId: session.sandboxId }).catch(() => {});
-                  }
-                  setSession(null);
-                  sessionRef.current = null;
-                  autoLaunchFired.current = false;
-                  autoLaunchLock.delete(skillKey);
-                  setPhase("config");
-                }}
-              />
-            )}
+            <ChatPanel
+              gatewayBaseUrl={session.gatewayBaseUrl || session.gatewayUrl}
+              model={savedConfig?.model || "anthropic/claude-sonnet-4"}
+              skillName={skillName}
+              skillPath={skillKey}
+              startedAt={session.startedAt}
+              providerId={savedConfig?.providerId}
+              apiKey={savedConfig?.llmKey}
+              initialSessionId={resumeSessionId}
+              initialMessages={resumeSession?.messages}
+              sandboxId={session.sandboxId}
+              sandboxKey={savedConfig?.sandboxKey}
+              initialWorkspacePath={resumeSession?.workspacePath}
+              onStop={handleStop}
+              onTryAnother={handleTryAnother}
+              onToolComplete={workspace.onToolComplete}
+              onWorkspacePathChange={handleWorkspacePathChange}
+              onStreamingChange={handleStreamingChange}
+              onSessionError={async () => {
+                if (session?.sandboxId && launchConfigRef.current) {
+                  destroySandbox(launchConfigRef.current.sandboxKey, session.sandboxId).catch(() => {});
+                  await removeSandboxRecord({ sandboxId: session.sandboxId }).catch(() => {});
+                }
+                setSession(null);
+                sessionRef.current = null;
+                autoLaunchFired.current = false;
+                autoLaunchLock.delete(skillKey);
+                setPhase("config");
+              }}
+            />
           </div>
 
           {/* Workspace panel */}

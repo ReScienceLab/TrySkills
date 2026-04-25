@@ -208,11 +208,33 @@ export function useChat(
   onToolCompleteRef.current = onToolComplete
   const segmentsRef = useRef<Segment[]>([])
   const textOffsetRef = useRef(0)
+  const hydratedMessagesRef = useRef<string | null>(
+    initialMessages ? `${initialSessionId ?? "new"}:${initialMessages.length}` : null,
+  )
 
   const createSession = useMutation(api.chatSessions.create)
   const appendMessages = useMutation(api.chatSessions.appendMessages)
 
   const thinkingRef = useRef("")
+  const workspacePathRef = useRef<string | null>(initialWorkspacePath ?? null)
+
+  useEffect(() => {
+    if (initialSessionId && sessionIdRef.current !== initialSessionId) {
+      sessionIdRef.current = initialSessionId
+      setSessionId(initialSessionId)
+    }
+
+    if (initialWorkspacePath && workspacePathRef.current !== initialWorkspacePath) {
+      workspacePathRef.current = initialWorkspacePath
+      setWorkspacePath(initialWorkspacePath)
+    }
+
+    const messagesKey = initialMessages ? `${initialSessionId ?? "new"}:${initialMessages.length}` : null
+    if (initialMessages && hydratedMessagesRef.current !== messagesKey) {
+      setMessages(initialMessages)
+      hydratedMessagesRef.current = messagesKey
+    }
+  }, [initialSessionId, initialMessages, initialWorkspacePath])
 
   const handleError = useCallback(
     (err: Error) => {
@@ -271,8 +293,6 @@ export function useChat(
     },
     [appendMessages],
   )
-
-  const workspacePathRef = useRef<string | null>(initialWorkspacePath ?? null)
 
   const stream = useCallback(
     (allMessages: ChatMessage[]) => {
