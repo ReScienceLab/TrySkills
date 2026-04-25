@@ -431,7 +431,7 @@ export function ChatPanel({
   onWorkspacePathChange?: (path: string) => void
   onStreamingChange?: (streaming: boolean) => void
 }) {
-  const { messages, toolCalls, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, workspacePath, thinkingText, isThinking, send, cancel } = useChat(
+  const { messages, toolCalls, segments, isStreaming, error, creditWarning, sessionFailed, isProviderError, sessionId, workspacePath, thinkingText, isThinking, send, cancel } = useChat(
     gatewayBaseUrl,
     model,
     skillName,
@@ -452,6 +452,18 @@ export function ChatPanel({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const autoIntroSent = useRef(false)
+
+  const mdComponents = useMemo(() => ({
+    img: (props: React.ComponentProps<"img">) => (
+      <WorkspaceImage
+        src={typeof props.src === "string" ? props.src : undefined}
+        alt={typeof props.alt === "string" ? props.alt : undefined}
+        sandboxId={sandboxId}
+        sandboxKey={sandboxKey}
+        workspacePath={workspacePath}
+      />
+    ),
+  }), [sandboxId, sandboxKey, workspacePath])
 
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [isUploading, setIsUploading] = useState(false)
@@ -698,20 +710,43 @@ export function ChatPanel({
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        {messages.map((msg, i) => (
-          <MessageBubble key={i} msg={msg} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
-        ))}
+        {segments.length > 0 ? (
+          <>
+            {/* Previous messages; skip last if it's the assistant message mirrored by segments */}
+            {(messages[messages.length - 1]?.role === "assistant" ? messages.slice(0, -1) : messages).map((msg, i) => (
+              <MessageBubble key={i} msg={msg} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
+            ))}
+            {/* Interleaved segments for current assistant turn */}
+            {segments.map((seg, i) =>
+              seg.type === "text" ? (
+                seg.content.trim() ? (
+                  <div key={`seg-text-${i}`} className="mb-4">
+                    <div className="prose prose-invert prose-sm max-w-none text-white/85 [&_pre]:bg-white/5 [&_pre]:border [&_pre]:border-white/10 [&_pre]:rounded [&_code]:text-emerald-400/80 [&_a]:text-blue-400 [&_a:hover]:underline">
+                      <ReactMarkdown
+                        rehypePlugins={[rehypeHighlight]}
+                        components={mdComponents}
+                      >
+                        {seg.content}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                ) : null
+              ) : (
+                <ToolCard key={`seg-tool-${i}`} tool={seg.tool} />
+              )
+            )}
+          </>
+        ) : (
+          <>
+            {messages.map((msg, i) => (
+              <MessageBubble key={i} msg={msg} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
+            ))}
+          </>
+        )}
         {(thinkingText || isThinking) && (
           <ThinkingCard text={thinkingText} isLive={isThinking} />
         )}
-        {toolCalls.length > 0 && (
-          <div className="mb-2">
-            {toolCalls.map((tc, i) => (
-              <ToolCard key={`${tc.name}-${i}`} tool={tc} />
-            ))}
-          </div>
-        )}
-        {isStreaming && !thinkingText && !isThinking && toolCalls.length === 0 && messages[messages.length - 1]?.role !== "assistant" && (
+        {isStreaming && !thinkingText && !isThinking && segments.length === 0 && toolCalls.length === 0 && messages[messages.length - 1]?.role !== "assistant" && (
           <ThinkingDots />
         )}
         {error && (
