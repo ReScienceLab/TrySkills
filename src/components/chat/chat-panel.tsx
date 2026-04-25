@@ -147,6 +147,9 @@ function WorkspaceImage({ src, alt, sandboxId, sandboxKey, workspacePath, varian
   const isExternalUrl = src?.startsWith("http://") || src?.startsWith("https://")
   const resolvedSrc = (() => {
     if (!src || isExternalUrl) return null
+    if (src.startsWith("/") && workspacePath && !src.startsWith(workspacePath)) {
+      return normalizeImagePath(`${workspacePath}${src}`)
+    }
     if (src.startsWith("/")) return normalizeImagePath(src)
     if (workspacePath) return normalizeImagePath(`${workspacePath}/${src}`)
     return null
@@ -292,6 +295,9 @@ function WorkspaceMedia({ src, alt, sandboxId, sandboxKey, workspacePath }: {
   const isExternalUrl = src?.startsWith("http://") || src?.startsWith("https://")
   const resolvedSrc = (() => {
     if (!src || isExternalUrl) return null
+    if (src.startsWith("/") && workspacePath && !src.startsWith(workspacePath)) {
+      return normalizeImagePath(`${workspacePath}${src}`)
+    }
     if (src.startsWith("/")) return normalizeImagePath(src)
     if (workspacePath) return normalizeImagePath(`${workspacePath}/${src}`)
     return null
@@ -488,6 +494,19 @@ function createStreamdownComponents({
   }
 }
 
+const MEDIA_EXT_RE = /\.(png|jpe?g|gif|webp|svg|ico|mp3|wav|ogg|flac|aac|m4a|mp4|webm|mov|avi|mkv)$/i
+
+function prefixBareMediaPaths(md: string): string {
+  return md.replace(
+    /(!?\[([^\]]*)\])\(([^)]+)\)/g,
+    (_match, prefix, _alt, url) => {
+      if (/^(https?:|\/|\.\/|\.\.\/)/.test(url)) return _match
+      if (MEDIA_EXT_RE.test(url)) return `${prefix}(./${url})`
+      return _match
+    },
+  )
+}
+
 function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath, isStreamingContent = false }: {
   msg: ChatMessage
   sandboxId?: string | null
@@ -501,6 +520,8 @@ function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath, isStreamingC
     [sandboxId, sandboxKey, workspacePath, isUser],
   )
 
+  const content = useMemo(() => prefixBareMediaPaths(msg.content), [msg.content])
+
   if (isUser) {
     return (
       <Message from="user" className="mb-4">
@@ -512,7 +533,7 @@ function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath, isStreamingC
             lineNumbers={false}
             mode="static"
           >
-            {msg.content}
+            {content}
           </MessageResponse>
         </MessageContent>
       </Message>
@@ -531,7 +552,7 @@ function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath, isStreamingC
             mode={isStreamingContent ? "streaming" : "static"}
             parseIncompleteMarkdown={isStreamingContent}
           >
-            {msg.content}
+            {content}
           </MessageResponse>
         </MessageContent>
       )}

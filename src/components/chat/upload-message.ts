@@ -18,8 +18,8 @@ export function formatUploadedFilesMessage(text: string, files: UploadedFile[]):
   if (!files.length) return trimmed
 
   const fileLines = files.map((file) => {
-    if (file.isImage) return `![${file.filename}](${file.filename})`
-    return `- \`${file.filename}\``
+    if (file.isImage) return `![${file.filename}](./${file.filename})`
+    return `- [${file.filename}](./${file.filename})`
   })
   const attachmentBlock = ["Attached files:", "", ...fileLines].join("\n")
 
