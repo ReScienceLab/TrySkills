@@ -670,8 +670,8 @@ export function ChatPanel({
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {segments.length > 0 ? (
           <>
-            {/* Previous messages (all except last assistant which is in segments) */}
-            {messages.slice(0, -1).map((msg, i) => (
+            {/* Previous messages; skip last if it's the assistant message mirrored by segments */}
+            {(messages[messages.length - 1]?.role === "assistant" ? messages.slice(0, -1) : messages).map((msg, i) => (
               <MessageBubble key={i} msg={msg} sandboxId={sandboxId} sandboxKey={sandboxKey} workspacePath={workspacePath} />
             ))}
             {/* Interleaved segments for current assistant turn */}

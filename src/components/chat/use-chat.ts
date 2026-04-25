@@ -224,6 +224,11 @@ export function useChat(
         }
         return prev.map((t) => ({ ...t, status: "done" as const }))
       })
+      setSegments((prev) => prev.map((s) =>
+        s.type === "tool" && s.tool.status === "running"
+          ? { ...s, tool: { ...s.tool, status: "done" as const } }
+          : s
+      ))
       setError(classifyError(err, providerId))
     },
     [providerId],
@@ -233,6 +238,11 @@ export function useChat(
     async (meta: StreamDoneMeta) => {
       setIsStreaming(false)
       setToolCalls((prev) => prev.map((t) => ({ ...t, status: "done" as const })))
+      setSegments((prev) => prev.map((s) =>
+        s.type === "tool" && s.tool.status === "running"
+          ? { ...s, tool: { ...s.tool, status: "done" as const } }
+          : s
+      ))
       if (!meta.hadContent) {
         const currentTurn = turnIdRef.current
         setError({ type: "empty_response", message: "Diagnosing..." })
@@ -412,7 +422,6 @@ export function useChat(
                   duration: tool.duration,
                   isError: tool.is_error,
                 }
-                onToolCompleteRef.current?.(s.tool.name)
                 break
               }
             }
@@ -469,6 +478,11 @@ export function useChat(
       }
       return prev.map((t) => ({ ...t, status: "done" as const }))
     })
+    setSegments((prev) => prev.map((s) =>
+      s.type === "tool" && s.tool.status === "running"
+        ? { ...s, tool: { ...s.tool, status: "done" as const } }
+        : s
+    ))
     setMessages((prev) =>
       prev.length > 0 && prev[prev.length - 1]?.role === "assistant"
         ? prev.slice(0, -1)
