@@ -4,11 +4,11 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeHighlight from "rehype-highlight"
 import { useChat, type ToolCall, type ChatError } from "./use-chat"
+import { formatUploadedFilesMessage, isPreviewableImageName, type UploadedFile } from "./upload-message"
 import type { ChatMessage } from "@/lib/sandbox/hermes-api"
 import {
   CreditCard, KeyRound, Clock, MailX, AlertTriangle, Globe,
   ChevronRight, Lightbulb, X, Check, ImageIcon, Paperclip, Upload,
-  BookOpen, FilePen, FileSearch, Terminal, FolderOpen, Wrench,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
@@ -194,16 +194,19 @@ function normalizeImagePath(p: string): string {
   return "/" + resolved.join("/")
 }
 
-function WorkspaceImage({ src, alt, sandboxId, sandboxKey, workspacePath }: {
+function WorkspaceImage({ src, alt, sandboxId, sandboxKey, workspacePath, variant = "artifact", allowExternal = true }: {
   src?: string
   alt?: string
   sandboxId?: string | null
   sandboxKey?: string | null
   workspacePath?: string | null
+  variant?: "artifact" | "attachment"
+  allowExternal?: boolean
 }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const isAttachment = variant === "attachment"
 
   const isExternalUrl = src?.startsWith("http://") || src?.startsWith("https://")
   const resolvedSrc = (() => {
@@ -217,6 +220,7 @@ function WorkspaceImage({ src, alt, sandboxId, sandboxKey, workspacePath }: {
 
   useEffect(() => {
     if (!isWorkspacePath || !sandboxId || !sandboxKey || !resolvedSrc) return
+    let cancelled = false
     const params = new URLSearchParams({
       action: "read", sandboxId, key: sandboxKey, path: resolvedSrc, maxSize: String(MAX_INLINE_IMAGE_SIZE),
     })
@@ -226,16 +230,23 @@ function WorkspaceImage({ src, alt, sandboxId, sandboxKey, workspacePath }: {
         return r.json()
       })
       .then((data) => {
+        if (cancelled) return
         if (data.error) { setError(data.error); return }
         if (data.type !== "image") { setError("Not an image"); return }
         setDataUrl(data.content)
       })
-      .catch(() => setError("Failed to load"))
+      .catch(() => {
+        if (!cancelled) setError("Failed to load")
+      })
+    return () => { cancelled = true }
   }, [resolvedSrc, sandboxId, sandboxKey, isWorkspacePath])
 
-  if (isExternalUrl) {
+  if (isExternalUrl && allowExternal) {
     // eslint-disable-next-line @next/next/no-img-element
     return <img src={src} alt={alt || ""} loading="lazy" className="max-w-full rounded" />
+  }
+  if (isExternalUrl) {
+    return <span className="text-white/30 text-xs">[external image: {alt || src}]</span>
   }
   if (!isWorkspacePath) {
     if (src) return <span className="text-white/30 text-xs">[image: {alt || src}]</span>
@@ -246,6 +257,25 @@ function WorkspaceImage({ src, alt, sandboxId, sandboxKey, workspacePath }: {
     await navigator.clipboard?.writeText(`![${alt || fileName}](${src || resolvedSrc || fileName})`)
     setCopied(true)
     setTimeout(() => setCopied(false), 1400)
+  }
+
+  if (isAttachment) {
+    return (
+      <span className="not-prose my-2 block overflow-hidden rounded-lg border border-white/[0.08] bg-black/20">
+        {error ? (
+          <span className="block px-3 py-4 text-center text-[12px] text-red-200/75">
+            {error}
+          </span>
+        ) : dataUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={dataUrl} alt={alt || ""} className="max-h-[360px] max-w-full object-contain" />
+        ) : (
+          <span className="flex h-28 items-center justify-center text-[12px] text-white/[0.42] animate-pulse">
+            Loading image...
+          </span>
+        )}
+      </span>
+    )
   }
 
   return (
@@ -307,6 +337,7 @@ function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath }: {
   sandboxKey?: string | null
   workspacePath?: string | null
 }) {
+  const isUser = msg.role === "user"
   const mdComponents = useMemo(() => ({
     img: (props: React.ComponentProps<"img">) => (
       <WorkspaceImage
@@ -315,15 +346,21 @@ function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath }: {
         sandboxId={sandboxId}
         sandboxKey={sandboxKey}
         workspacePath={workspacePath}
+        variant={isUser ? "attachment" : "artifact"}
+        allowExternal={!isUser}
       />
     ),
-  }), [sandboxId, sandboxKey, workspacePath])
+  }), [sandboxId, sandboxKey, workspacePath, isUser])
 
-  if (msg.role === "user") {
+  if (isUser) {
     return (
       <div className="flex justify-end mb-4">
         <div className="max-w-[85%] bg-white/10 rounded-2xl rounded-br-sm px-4 py-2.5">
-          <p className="text-sm text-white/90 whitespace-pre-wrap">{msg.content}</p>
+          <div className="prose prose-invert prose-sm max-w-none text-white/90 whitespace-pre-wrap [&_p]:my-0 [&_p+p]:mt-2 [&_ul]:my-2 [&_li]:my-0 [&_code]:text-emerald-300/90">
+            <ReactMarkdown components={mdComponents}>
+              {msg.content}
+            </ReactMarkdown>
+          </div>
         </div>
       </div>
     )
@@ -456,7 +493,10 @@ export function ChatPanel({
       }, 1000)
     }
     const stop = () => { if (timer) { clearInterval(timer); timer = null } }
-    const onVisibility = () => { document.hidden ? stop() : start() }
+    const onVisibility = () => {
+      if (document.hidden) stop()
+      else start()
+    }
     start()
     document.addEventListener("visibilitychange", onVisibility)
     return () => { stop(); document.removeEventListener("visibilitychange", onVisibility) }
@@ -527,7 +567,7 @@ export function ChatPanel({
     }
   }, [addFiles])
 
-  const uploadFiles = useCallback(async (): Promise<string[]> => {
+  const uploadFiles = useCallback(async (): Promise<UploadedFile[]> => {
     if (!pendingFiles.length) return []
     if (uploadingRef.current) return []
     if (!sandboxId || !sandboxKey || !workspacePath) {
@@ -538,7 +578,7 @@ export function ChatPanel({
     setIsUploading(true)
     setUploadError(null)
     const snapshot = [...pendingFiles]
-    const uploaded: string[] = []
+    const uploaded: UploadedFile[] = []
     try {
       for (const file of snapshot) {
         const fd = new FormData()
@@ -553,7 +593,13 @@ export function ChatPanel({
           throw new Error(data.error || `Upload failed: ${res.status}`)
         }
         const data = await res.json()
-        uploaded.push(data.filename)
+        const filename = typeof data.filename === "string" ? data.filename : file.name
+        uploaded.push({
+          filename,
+          path: typeof data.path === "string" ? data.path : filename,
+          size: typeof data.size === "number" ? data.size : file.size,
+          isImage: isPreviewableImageName(filename),
+        })
       }
       setPendingFiles([])
       return uploaded
@@ -581,11 +627,7 @@ export function ChatPanel({
       try {
         const uploaded = await uploadFiles()
         if (uploaded.length) {
-          if (!msgText) {
-            msgText = `I've uploaded ${uploaded.length} file(s): ${uploaded.join(", ")}`
-          } else {
-            msgText = `${msgText}\n\n[Attached files: ${uploaded.join(", ")}]`
-          }
+          msgText = formatUploadedFilesMessage(msgText, uploaded)
         }
       } catch {
         return
