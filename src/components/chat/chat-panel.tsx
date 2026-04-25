@@ -37,6 +37,11 @@ import {
 import type { LucideIcon } from "lucide-react"
 
 const MAX_UPLOAD_SIZE = 4 * 1024 * 1024
+const CHAT_STREAMDOWN_CONTROLS: MessageResponseProps["controls"] = {
+  code: { copy: true, download: false },
+  table: { copy: true, download: true, fullscreen: true },
+  mermaid: { copy: true, download: true, fullscreen: true, panZoom: true },
+}
 
 const ERROR_ICONS: Record<string, LucideIcon> = {
   credit_error: CreditCard,
@@ -455,8 +460,9 @@ function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath, isStreamingC
       <Message from="user" className="mb-4">
         <MessageContent className="max-w-[85%] rounded-lg rounded-br-[3px] bg-[#111111] px-4 py-2.5 shadow-[var(--shadow-border)]">
           <MessageResponse
-            className="prose prose-invert prose-sm max-w-none whitespace-pre-wrap text-foreground [&_code]:text-[#58a6ff] [&_li]:my-0 [&_p]:my-0 [&_p+p]:mt-2 [&_ul]:my-2"
+            className="streamdown-chat prose prose-invert prose-sm max-w-none whitespace-pre-wrap text-foreground [&_code]:text-[#58a6ff] [&_li]:my-0 [&_p]:my-0 [&_p+p]:mt-2 [&_ul]:my-2"
             components={streamComponents}
+            controls={CHAT_STREAMDOWN_CONTROLS}
             mode="static"
           >
             {msg.content}
@@ -471,8 +477,9 @@ function MessageBubble({ msg, sandboxId, sandboxKey, workspacePath, isStreamingC
       {msg.content && (
         <MessageContent className="w-full max-w-full">
           <MessageResponse
-            className="prose prose-invert prose-sm max-w-none text-foreground/90 [&_a]:text-[#58a6ff] [&_a:hover]:underline [&_code]:text-[#58a6ff] [&_pre]:rounded-[6px] [&_pre]:bg-[#0a0a0a] [&_pre]:shadow-[var(--shadow-border)]"
+            className="streamdown-chat prose prose-invert prose-sm max-w-none text-foreground/90 [&_a]:text-[#58a6ff] [&_a:hover]:underline [&_code]:text-[#58a6ff] [&_pre]:rounded-[6px] [&_pre]:bg-[#0a0a0a] [&_pre]:shadow-[var(--shadow-border)]"
             components={streamComponents}
+            controls={CHAT_STREAMDOWN_CONTROLS}
             mode={isStreamingContent ? "streaming" : "static"}
             parseIncompleteMarkdown={isStreamingContent}
           >
