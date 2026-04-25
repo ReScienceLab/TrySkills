@@ -1,4 +1,4 @@
-import { cleanup, render, waitFor } from "@testing-library/react"
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
@@ -166,5 +166,22 @@ describe("ChatPanel", () => {
       expect(input).not.toBeNull()
       expect(document.activeElement).toBe(input)
     })
+  })
+
+  it("uses the top Stop button to cancel an active stream in place", () => {
+    const cancel = vi.fn()
+    const onStop = vi.fn()
+    mocks.useChat.mockReturnValue({
+      ...defaultChatState,
+      isStreaming: true,
+      cancel,
+    })
+
+    const { getByRole } = render(<ChatPanel {...defaultProps} onStop={onStop} />)
+
+    fireEvent.click(getByRole("button", { name: "Stop" }))
+
+    expect(cancel).toHaveBeenCalledTimes(1)
+    expect(onStop).not.toHaveBeenCalled()
   })
 })

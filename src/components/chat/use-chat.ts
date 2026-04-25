@@ -199,6 +199,7 @@ export function useChat(
   const cancelRef = useRef<(() => void) | null>(null)
   const initRef = useRef(false)
   const currentContentRef = useRef("")
+  const currentUserMessageRef = useRef<ChatMessage | null>(null)
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const preflightDoneRef = useRef(false)
   const preflightFailedRef = useRef(false)
@@ -344,6 +345,7 @@ export function useChat(
       textOffsetRef.current = 0
 
       const lastUserMsg = allMessages[allMessages.length - 1]
+      currentUserMessageRef.current = lastUserMsg ?? null
 
       // Prepend workspace system message on every request
       const wsDir = workspacePathRef.current
@@ -497,6 +499,7 @@ export function useChat(
           },
           onDone: async (meta) => {
             setIsThinking(false)
+            cancelRef.current = null
             setToolCalls((prev) => {
               for (const t of prev.filter((tc) => tc.status === "running")) {
                 scheduleToolComplete(t.name)
@@ -510,6 +513,7 @@ export function useChat(
                 { role: "assistant", content: currentContentRef.current },
               )
             }
+            currentUserMessageRef.current = null
           },
           onError: handleError,
         },
@@ -534,6 +538,15 @@ export function useChat(
   const cancel = useCallback(() => {
     cancelRef.current?.()
     cancelRef.current = null
+    const hasAssistantContent = currentContentRef.current.trim().length > 0
+    const userMsg = currentUserMessageRef.current
+    if (hasAssistantContent && userMsg) {
+      void saveToSession(
+        userMsg,
+        { role: "assistant", content: currentContentRef.current },
+      )
+    }
+    currentUserMessageRef.current = null
     if (retryTimerRef.current) {
       clearTimeout(retryTimerRef.current)
       retryTimerRef.current = null
@@ -550,11 +563,11 @@ export function useChat(
     segmentsRef.current = []
     textOffsetRef.current = 0
     setMessages((prev) =>
-      prev.length > 0 && prev[prev.length - 1]?.role === "assistant"
+      !hasAssistantContent && prev.length > 0 && prev[prev.length - 1]?.role === "assistant"
         ? prev.slice(0, -1)
         : prev,
     )
-  }, [scheduleToolComplete])
+  }, [saveToSession, scheduleToolComplete])
 
   // Pre-flight credit check (OpenRouter only, blocks auto-init until done)
   useEffect(() => {
