@@ -227,6 +227,12 @@ export default function SkillPage({
   const { skillPath } = resolvedParams;
   const searchParams = useSearchParams();
   const resumeSessionId = searchParams.get("session") ?? undefined;
+  // Freeze at mount: was the page opened WITH a ?session= URL param?
+  // Any new ?session= that appears mid-stream (via history.replaceState from
+  // ChatPanel after the Convex session is created) must NOT flip us into
+  // the ResumeSessionShell, or the ChatPanel would unmount and the auto-intro
+  // prompt would be re-sent on remount. See /tmp/e2e-* reports.
+  const [isGenuineResume] = useState<boolean>(() => !!resumeSessionId);
   const { isSignedIn, isLoaded: authLoaded, userId } = useAuth();
   const { isAuthenticated } = useConvexAuth();
   const { config: savedConfig, loading: keysLoading, save: saveConfig } = useKeyStore();
@@ -697,7 +703,7 @@ export default function SkillPage({
 
   const needsOnboarding = isSignedIn && !keysLoading && !hasCompleteConfig && !userCancelled;
   const readyToAutoLaunch = isSignedIn && !keysLoading && hasCompleteConfig && !userCancelled;
-  const isResumeSessionLoading = !!resumeSessionId && (!isAuthenticated || resumeSession === undefined);
+  const isResumeSessionLoading = isGenuineResume && (!isAuthenticated || resumeSession === undefined);
   const verifiedResumeSessionId = resumeSession ? resumeSessionId : undefined;
   const showLaunchWarmup = phase === "config" && (
     !authLoaded ||

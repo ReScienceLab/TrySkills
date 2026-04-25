@@ -620,9 +620,22 @@ export function ChatPanel({
 
   const hasInitialMessages = (initialMessages?.length ?? 0) > 0
 
+  // Auto-intro guard: keyed by sessionId in sessionStorage so it survives
+  // any mid-stream remount (e.g. Next's useSearchParams re-running after the
+  // URL ?session= is synced) and prevents the prompt from being sent twice.
   useEffect(() => {
     if (autoIntroSent.current || hasInitialMessages || messages.length > 0 || !sessionId) return
+    const storageKey = `tryskills:auto-intro-sent:${sessionId}`
+    try {
+      if (typeof window !== "undefined" && window.sessionStorage.getItem(storageKey)) {
+        autoIntroSent.current = true
+        return
+      }
+    } catch {}
     autoIntroSent.current = true
+    try {
+      if (typeof window !== "undefined") window.sessionStorage.setItem(storageKey, "1")
+    } catch {}
     send(autoIntroPrompt)
   }, [sessionId, hasInitialMessages, messages.length, autoIntroPrompt, send])
 

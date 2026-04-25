@@ -46,6 +46,7 @@ describe("ChatPanel", () => {
     vi.clearAllMocks()
     Element.prototype.scrollIntoView = vi.fn()
     mocks.useChat.mockReturnValue({ ...defaultChatState })
+    if (typeof window !== "undefined") window.sessionStorage.clear()
   })
 
   it("shows the automatic intro prompt before the Convex session is ready", () => {
@@ -127,6 +128,34 @@ describe("ChatPanel", () => {
     await waitFor(() => {
       expect(send).not.toHaveBeenCalled()
     })
+  })
+
+  it("does not resend the automatic intro if ChatPanel remounts for the same session id", async () => {
+    const send = vi.fn()
+    mocks.useChat.mockReturnValue({
+      ...defaultChatState,
+      sessionId: "session-abc",
+      send,
+    })
+
+    const first = render(<ChatPanel {...defaultProps} />)
+
+    await waitFor(() => {
+      expect(send).toHaveBeenCalledTimes(1)
+    })
+
+    first.unmount()
+
+    mocks.useChat.mockReturnValue({
+      ...defaultChatState,
+      sessionId: "session-abc",
+      send,
+    })
+    render(<ChatPanel {...defaultProps} />)
+
+    // Give any pending effects a tick.
+    await new Promise((r) => setTimeout(r, 20))
+    expect(send).toHaveBeenCalledTimes(1)
   })
 
   it("focuses the message input when chat is ready", async () => {
