@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { SignInButton, useAuth } from "@clerk/nextjs"
 import { Github, NousResearch } from "@lobehub/icons"
 import {
@@ -104,6 +104,7 @@ export default function Home() {
   const [repoLoading, setRepoLoading] = useState(false)
   const [repoError, setRepoError] = useState<string | null>(null)
   const [repoBranch, setRepoBranch] = useState<string | undefined>(undefined)
+  const urlInputRef = useRef<HTMLInputElement>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -243,6 +244,14 @@ export default function Home() {
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [canConfigureLaunch, goToConfigureLaunch])
 
+  useEffect(() => {
+    if (phase !== "input") return
+    const frame = window.requestAnimationFrame(() => {
+      urlInputRef.current?.focus({ preventScroll: true })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [phase])
+
   const skillName = parsedPath?.split("/").filter(Boolean).slice(2).join("/") || ""
 
   return (
@@ -283,6 +292,7 @@ export default function Home() {
                     <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       id="skill-url-input"
+                      ref={urlInputRef}
                       type="text"
                       value={url}
                       onChange={(e) => setUrl(e.target.value)}

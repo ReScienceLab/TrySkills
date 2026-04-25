@@ -1,5 +1,5 @@
-import { render, waitFor } from "@testing-library/react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { cleanup, render, waitFor } from "@testing-library/react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   useChat: vi.fn(),
@@ -38,6 +38,10 @@ const defaultProps = {
 }
 
 describe("ChatPanel", () => {
+  afterEach(() => {
+    cleanup()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     Element.prototype.scrollIntoView = vi.fn()
@@ -67,6 +71,16 @@ describe("ChatPanel", () => {
       expect(send).toHaveBeenCalledWith(
         "Use skill_view to look up the /obra/superpowers/brainstorming skill, then briefly introduce it - what it does, when to use it, and a quick example.",
       )
+    })
+  })
+
+  it("focuses the message input when chat is ready", async () => {
+    const { container } = render(<ChatPanel {...defaultProps} />)
+
+    await waitFor(() => {
+      const input = container.querySelector<HTMLTextAreaElement>("#chat-message-input")
+      expect(input).not.toBeNull()
+      expect(document.activeElement).toBe(input)
     })
   })
 })

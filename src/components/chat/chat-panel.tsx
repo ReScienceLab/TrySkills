@@ -663,6 +663,24 @@ export function ChatPanel({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, isStreaming])
 
+  useEffect(() => {
+    if (isStreaming || isUploading) return
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    const activeElement = document.activeElement as HTMLElement | null
+    const composerHasFocus = activeElement?.closest("[data-chat-composer='true']")
+    if (activeElement && activeElement !== document.body && activeElement !== textarea && !composerHasFocus) return
+
+    const frame = window.requestAnimationFrame(() => {
+      if (!textarea.disabled) {
+        textarea.focus({ preventScroll: true })
+      }
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [isStreaming, isUploading])
+
   const addFiles = useCallback((files: FileList | File[]) => {
     if (uploadingRef.current) return
     const arr = Array.from(files)
@@ -955,7 +973,7 @@ export function ChatPanel({
           <div className="mb-2 text-[11px] text-[#ff8f86]">{uploadError}</div>
         )}
 
-        <div className="flex items-end gap-2">
+        <div className="flex items-end gap-2" data-chat-composer="true">
           {/* Clip button */}
           <input
             ref={fileInputRef}
